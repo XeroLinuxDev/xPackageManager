@@ -1,0 +1,15 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file alias="qml/main.qml">../qml/main.qml</file>
+        <file alias="qml/test.qml">../qml/test.qml</file>
+        <file alias="qml/views/InstalledView.qml">../qml/views/InstalledView.qml</file>
+        <file alias="qml/views/UpdatesView.qml">../qml/views/UpdatesView.qml</file>
+        <file alias="qml/views/FlatpakView.qml">../qml/views/FlatpakView.qml</file>
+        <file alias="qml/views/SettingsView.qml">../qml/views/SettingsView.qml</file>
+        <file alias="qml/components/PackageCard.qml">../qml/components/PackageCard.qml</file>
+        <file alias="qml/components/PackageInfoPane.qml">../qml/components/PackageInfoPane.qml</file>
+        <file alias="qml/components/SearchBar.qml">../qml/components/SearchBar.qml</file>
+        <file alias="qml/components/ProgressDialog.qml">../qml/components/ProgressDialog.qml</file>
+    </qresource>
+</RCC>

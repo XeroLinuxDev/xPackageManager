@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1793D1"/>
+      <stop offset="100%" style="stop-color:#0d5c8a"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded rectangle -->
+  <rect x="4" y="4" width="40" height="40" rx="8" ry="8" fill="url(#bg)"/>
+  <!-- X letter -->
+  <text x="24" y="33" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle">X</text>
+  <!-- Package box hint -->
+  <rect x="10" y="36" width="28" height="4" rx="1" fill="rgba(255,255,255,0.3)"/>
+</svg>

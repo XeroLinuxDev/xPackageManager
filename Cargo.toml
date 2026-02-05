@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/xpm-core",
+    "crates/xpm-alpm",
+    "crates/xpm-flatpak",
+    "crates/xpm-service",
+    "crates/xpm-ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+authors = ["xPackageManager Contributors"]
+repository = "https://github.com/example/xpackagemanager"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+async-trait = "0.1"
+
+# UI Framework - Slint
+slint = "1.9"
+
+# Package manager backends
+alpm = "5.0"
+libflatpak = "0.7"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Internal crates
+xpm-core = { path = "crates/xpm-core" }
+xpm-alpm = { path = "crates/xpm-alpm" }
+xpm-flatpak = { path = "crates/xpm-flatpak" }
+xpm-service = { path = "crates/xpm-service" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

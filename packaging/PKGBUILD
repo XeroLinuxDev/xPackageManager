@@ -1,0 +1,65 @@
+# Maintainer: Your Name <your.email@example.com>
+pkgname=xpackagemanager
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A modern package manager for Arch Linux supporting pacman and Flatpak"
+arch=('x86_64')
+url="https://github.com/example/xpackagemanager"
+license=('GPL-3.0-or-later')
+depends=(
+    'pacman'
+    'flatpak'
+    'polkit'
+    'fontconfig'
+    'freetype2'
+)
+makedepends=(
+    'rust'
+    'cargo'
+    'cmake'
+)
+provides=('xpackagemanager')
+conflicts=('xpackagemanager-git')
+source=()
+sha256sums=()
+
+build() {
+    cd "$srcdir/.."
+
+    # Build release binary
+    cargo build --release --bin xpackagemanager
+}
+
+package() {
+    cd "$srcdir/.."
+
+    # Install binary
+    install -Dm755 "target/release/xpackagemanager" "$pkgdir/usr/bin/xpackagemanager"
+
+    # Install desktop file
+    install -Dm644 "packaging/xpackagemanager.desktop" "$pkgdir/usr/share/applications/xpackagemanager.desktop"
+
+    # Install icon
+    install -Dm644 "packaging/xpackagemanager.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/xpackagemanager.svg"
+
+    # Install MIME type for .pkg.tar.zst files
+    install -Dm644 "packaging/x-alpm-package.xml" "$pkgdir/usr/share/mime/packages/x-alpm-package.xml"
+
+    # Install polkit policy
+    install -Dm644 "packaging/org.xpackagemanager.policy" "$pkgdir/usr/share/polkit-1/actions/org.xpackagemanager.policy"
+}
+
+post_install() {
+    # Update MIME database
+    update-mime-database /usr/share/mime &>/dev/null || true
+    # Update desktop database
+    update-desktop-database -q || true
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    post_install
+}

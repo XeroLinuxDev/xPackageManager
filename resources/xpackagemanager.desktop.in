@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=xPackageManager
+Comment=Modern package manager for Arch Linux
+Exec=xpm-ui
+Icon=system-software-install
+Terminal=false
+Type=Application
+Categories=System;PackageManager;
+Keywords=package;pacman;flatpak;install;update;
+StartupNotify=true

@@ -1,0 +1,15 @@
+[package]
+name = "xpm-alpm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pacman/libalpm backend for xPackageManager"
+
+[dependencies]
+xpm-core.workspace = true
+alpm.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono = { version = "0.4", features = ["serde"] }

@@ -1,0 +1,28 @@
+[package]
+name = "xpm-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Slint UI frontend for xPackageManager"
+build = "build.rs"
+
+[[bin]]
+name = "xpackagemanager"
+path = "src/main.rs"
+
+[dependencies]
+xpm-core.workspace = true
+xpm-service.workspace = true
+xpm-alpm.workspace = true
+xpm-flatpak.workspace = true
+slint.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+open = "5.0"
+serde_json = "1.0"
+flate2 = "1.0"
+libc = "0.2"
+
+[build-dependencies]
+slint-build = "1.9"
