@@ -11,23 +11,6 @@ A modern package manager for Arch Linux supporting pacman (via libalpm) and Flat
 - **Rust Backend**: Safe, fast, and concurrent package management operations
 - **System Maintenance**: Orphan detection, cache cleanup, and database synchronization
 
-## Project Structure
-
-```
-xPackageManager/
-├── crates/
-│   ├── xpm-core/        # Core types & traits
-│   ├── xpm-alpm/        # Pacman backend (libalpm)
-│   ├── xpm-flatpak/     # Flatpak backend
-│   ├── xpm-service/     # Business logic orchestration
-│   └── xpm-ui/          # Qt 6 frontend (CXX-Qt)
-├── qml/                 # QML UI files
-│   ├── views/           # View components
-│   └── components/      # Reusable components
-├── cpp/                 # C++ bootstrap (optional)
-└── resources/           # Qt resources
-```
-
 ## Building
 
 ### Prerequisites
