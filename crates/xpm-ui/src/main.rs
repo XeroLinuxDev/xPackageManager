@@ -95,12 +95,7 @@ enum UiMessage {
     SetStatus(String),
     SetProgress(i32),
     SetProgressText(String),
-    ShowTerminal(String),
-    TerminalOutput(String),
-    TerminalDone(bool),
     SetTerminalIsUpgrade(bool),
-    HideTerminal,
-    SetExternalTerminal(bool),
     ShowProgressPopup(String),
     OperationProgress(i32, String),
     ProgressOutput(String),
@@ -162,6 +157,9 @@ struct FwupdDetectedData {
     summary: String,
     updatable: bool,
     flags: String,
+    device_id: String,
+    #[allow(dead_code)]
+    has_pending_update: bool,
 }
 
 #[derive(Clone)]
@@ -580,6 +578,10 @@ struct AppConfig {
     distro_warning_dismissed: bool,
     #[serde(default = "default_font_scale")]
     font_scale: f32,
+    #[serde(default)]
+    notify_on_updates: bool,
+    #[serde(default)]
+    auto_clean_cache: bool,
 }
 
 fn default_parallel_downloads() -> u32 { 5 }
@@ -594,6 +596,8 @@ impl Default for AppConfig {
             aur_pill_dismissed: false,
             distro_warning_dismissed: false,
             font_scale: 1.0,
+            notify_on_updates: false,
+            auto_clean_cache: false,
         }
     }
 }
@@ -634,6 +638,8 @@ fn build_config(window: &MainWindow) -> AppConfig {
         aur_pill_dismissed: window.get_aur_pill_dismissed(),
         distro_warning_dismissed: window.get_distro_warning_dismissed(),
         font_scale: window.global::<Cat>().get_font_scale(),
+        notify_on_updates: window.get_setting_notify_on_updates(),
+        auto_clean_cache: window.get_setting_auto_clean_cache(),
     }
 }
 
@@ -760,55 +766,95 @@ fn strip_ansi(input: &str) -> String {
     result
 }
 
+// Stream-based terminal processor. Replaces vt100 to avoid the cell-grid wrapping
+// issue where pacman pads output to terminal width and vt100 joins wrapped rows without \n.
+// Lines are committed on \n; bare \r clears the current line (progress overwrites);
+// \r\n is treated as a newline without clearing.
+struct TermStream {
+    lines: Vec<String>,
+    current: String,
+    pending_cr: bool,
+    in_csi: bool,
+    in_osc: bool,
+}
 
+impl TermStream {
+    fn new() -> Self {
+        Self { lines: Vec::new(), current: String::new(), pending_cr: false, in_csi: false, in_osc: false }
+    }
 
-/// Merge new_text into buffer with proper VT100 carriage-return semantics:
-/// - bare \r  → overwrite current line from the start (pacman progress bars)
-/// - \r\n     → regular newline (Windows line ending, no overwrite)
-/// - \n       → commit current line, start new line
-fn apply_terminal_text(buffer: &str, new_text: &str) -> String {
-    let (prefix, current_line) = match buffer.rfind('\n') {
-        Some(pos) => (&buffer[..pos + 1], &buffer[pos + 1..]),
-        None => ("", buffer),
-    };
+    fn process(&mut self, bytes: &[u8]) {
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
 
-    let mut line = current_line.to_string();
-    let mut result = String::with_capacity(buffer.len() + new_text.len());
-    result.push_str(prefix);
-
-    let chars: Vec<char> = new_text.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    while i < len {
-        match chars[i] {
-            '\r' if i + 1 < len && chars[i + 1] == '\n' => {
-                // \r\n = Windows newline - commit line, no overwrite
-                result.push_str(&line);
-                result.push('\n');
-                line.clear();
-                i += 2;
-            }
-            '\r' => {
-                // bare \r = carriage return - overwrite current line
-                line.clear();
+            if self.in_csi {
+                if (0x40..=0x7e).contains(&b) { self.in_csi = false; }
                 i += 1;
+                continue;
             }
-            '\n' => {
-                result.push_str(&line);
-                result.push('\n');
-                line.clear();
+            if self.in_osc {
+                if b == 0x07 || b == 0x1b { self.in_osc = false; }
                 i += 1;
+                continue;
             }
-            c => {
-                line.push(c);
-                i += 1;
+
+            if self.pending_cr {
+                self.pending_cr = false;
+                if b == 0x0a {
+                    // \r\n — CRLF: commit line without clearing
+                    self.lines.push(std::mem::take(&mut self.current));
+                    i += 1;
+                    continue;
+                }
+                // bare \r: carriage return — clear and restart current line
+                self.current.clear();
+            }
+
+            match b {
+                0x1b => {
+                    i += 1;
+                    if i < bytes.len() {
+                        match bytes[i] {
+                            b'[' => { self.in_csi = true; i += 1; }
+                            b']' => { self.in_osc = true; i += 1; }
+                            b'(' | b')' | b'*' | b'+' => { i += 2; }
+                            _ => { i += 1; }
+                        }
+                    }
+                }
+                0x0d => { self.pending_cr = true; i += 1; }
+                0x0a => { self.lines.push(std::mem::take(&mut self.current)); i += 1; }
+                0x08 => { self.current.pop(); i += 1; }
+                0x00..=0x07 | 0x0b | 0x0c | 0x0e..=0x1a | 0x1c..=0x1f | 0x7f => { i += 1; }
+                _ => {
+                    let char_len = match b {
+                        0x00..=0x7f => 1usize,
+                        0xc0..=0xdf => 2,
+                        0xe0..=0xef => 3,
+                        0xf0..=0xf7 => 4,
+                        _ => 1,
+                    };
+                    let end = (i + char_len).min(bytes.len());
+                    if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
+                        self.current.push_str(s);
+                    }
+                    i += (end - i).max(1);
+                }
             }
         }
     }
 
-    result.push_str(&line);
-    result
+    fn render(&self) -> String {
+        let mut parts: Vec<&str> = self.lines.iter().map(String::as_str).collect();
+        if !self.current.is_empty() {
+            parts.push(self.current.as_str());
+        }
+        while parts.last().map(|s| s.trim().is_empty()).unwrap_or(false) {
+            parts.pop();
+        }
+        if parts.is_empty() { String::new() } else { format!("{}\n", parts.join("\n")) }
+    }
 }
 
 // ── Dependency tree helpers ───────────────────────────────────────────────
@@ -1202,155 +1248,16 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
     (dep_nodes, reqby_nodes, root_version)
 }
 
-// ─── External terminal support ────────────────────────────────────────────────
-
-fn detect_terminal() -> Option<String> {
-    // KDE preferred terminal via kreadconfig5
-    if let Ok(out) = std::process::Command::new("kreadconfig5")
-        .args(["--file", "kdeglobals", "--group", "General", "--key", "TerminalApplication"])
-        .output()
-    {
-        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !s.is_empty() {
-            if std::process::Command::new("which").arg(&s)
-                .status().map(|st| st.success()).unwrap_or(false)
-            {
-                return Some(s);
-            }
-        }
-    }
-    for t in &["konsole", "alacritty", "kitty", "wezterm", "xterm", "gnome-terminal"] {
-        if std::process::Command::new("which").arg(t)
-            .status().map(|st| st.success()).unwrap_or(false)
-        {
-            return Some(t.to_string());
-        }
-    }
-    None
-}
-
-/// Returns (program, args) to launch `script` in the given terminal,
-/// keeping the window open after the script exits so the user can read output.
-/// Returns `(program, args)` to run `script` in the given terminal emulator.
-/// Script is responsible for all output and the final "press Enter" prompt.
-fn terminal_command(terminal: &str, script: &str) -> (String, Vec<String>) {
-    match terminal {
-        "konsole" => ("konsole".into(), vec![
-            "-e".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-        "xterm" => ("xterm".into(), vec![
-            "-e".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-        "gnome-terminal" => ("gnome-terminal".into(), vec![
-            "--".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-        "alacritty" => ("alacritty".into(), vec![
-            "-e".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-        "kitty" => ("kitty".into(), vec![
-            "sh".into(), "-c".into(), script.into(),
-        ]),
-        "wezterm" => ("wezterm".into(), vec![
-            "start".into(), "--".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-        other => (other.into(), vec![
-            "-e".into(), "sh".into(), "-c".into(), script.into(),
-        ]),
-    }
-}
-
-fn run_in_external_terminal(
-    tx: &mpsc::Sender<UiMessage>,
-    title: &str,
-    cmd: &str,
-    args: &[String],
-    terminal: &str,
-    pid_holder: &Arc<Mutex<Option<u32>>>,
-    conflict_ctx: &Arc<Mutex<Option<(String, Vec<String>, i32)>>>,
-) {
-    let pacman_cmd: String = std::iter::once(cmd)
-        .chain(args.iter().map(|s| s.as_str()))
-        .map(|a| format!("'{}'", a.replace('\'', "'\\''")))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let result_file = format!("/tmp/xpm-result-{}.txt", unsafe { libc::getpid() });
-    let _ = std::fs::remove_file(&result_file);
-
-    // Capture exit code BEFORE any echo so $? isn't clobbered.
-    let script = format!(
-        r#"{cmd}
-_xpm_exit=$?
-echo $_xpm_exit > '{rf}'
-echo ''
-if [ $_xpm_exit -eq 0 ]; then
-    echo '╔════════════════════════════════════════════╗'
-    echo '║                                            ║'
-    echo '║  ✔  Operation completed successfully.      ║'
-    echo '║                                            ║'
-    echo '╚════════════════════════════════════════════╝'
-else
-    echo '╔════════════════════════════════════════════╗'
-    echo '║                                            ║'
-    echo '║  ✘  Operation finished with errors.        ║'
-    echo '║                                            ║'
-    echo '╚════════════════════════════════════════════╝'
-fi
-echo ''
-echo '  Press Enter to close...'
-read"#,
-        cmd = pacman_cmd,
-        rf  = result_file,
-    );
-    let (prog, t_args) = terminal_command(terminal, &script);
-    let t_args_str: Vec<&str> = t_args.iter().map(|s| s.as_str()).collect();
-
-    let child = match std::process::Command::new(&prog)
-        .args(&t_args_str)
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            let _ = tx.send(UiMessage::ProgressOutput(format!("Failed to launch {}: {}\n", prog, e)));
-            let _ = tx.send(UiMessage::OperationDone(false));
-            return;
-        }
-    };
-
-    *pid_holder.lock().unwrap() = Some(child.id());
-
-    let tx2 = tx.clone();
-    let result_file2 = result_file.clone();
-    let _conflict_ctx2 = conflict_ctx.clone();
-    let _title2 = title.to_string();
-
-    thread::spawn(move || {
-        // waitpid via std — Child::wait() blocks until terminal closes
-        let mut child = child;
-        let _ = child.wait();
-
-        let success = std::fs::read_to_string(&result_file2)
-            .ok()
-            .and_then(|s| s.trim().parse::<i32>().ok())
-            .map(|code| code == 0)
-            .unwrap_or(false);
-
-        let _ = std::fs::remove_file(&result_file2);
-        // Do NOT clear conflict_ctx here — the OperationDone handler on the main
-        // thread reads it to flip Install/Remove buttons. Next operation overwrites it.
-        let _ = tx2.send(UiMessage::OperationDone(success));
-    });
-}
-
-// ─── End external terminal support ────────────────────────────────────────────
-
 fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
     use std::os::unix::io::FromRawFd;
 
     let mut master: libc::c_int = 0;
     let mut slave: libc::c_int = 0;
 
-    let ret = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()) };
+    // Without explicit winsize, ws_col=0 causes pacman/flatpak to pad progress bars
+    // with excessive whitespace or behave incorrectly.
+    let winsize = libc::winsize { ws_col: 80, ws_row: 40, ws_xpixel: 0, ws_ypixel: 0 };
+    let ret = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), &winsize) };
     if ret != 0 {
         return Err("openpty failed".to_string());
     }
@@ -1517,25 +1424,7 @@ fn handle_pty_prompt(cleaned: &str, always_input: bool, tx: &mpsc::Sender<UiMess
     }
 }
 
-/// Build the text sent to the output panel: committed lines + current in-progress line.
-fn build_display(log: &str, current_line: &str) -> String {
-    let t = current_line.trim();
-    if t.is_empty() { log.to_string() } else { format!("{}{}\n", log, t) }
-}
 
-/// Reconstruct a display line from saved label (text before first \r) + current acc.
-/// Pacman's overwrite pattern: "pkg name\r<spaces>\r[##] 45%\r\n" — without this,
-/// the committed line loses the package name entirely.
-fn reconstruct_line(label: &Option<String>, acc: &[char]) -> String {
-    let progress: String = acc.iter().collect::<String>().trim().to_string();
-    match label {
-        Some(lbl) if !progress.is_empty() => format!("{:<52}  {}", lbl, progress),
-        Some(lbl) if !lbl.is_empty() => lbl.clone(),
-        _ => progress,
-    }
-}
-
-// ─── End shared PTY reader helpers ────────────────────────────────────────────
 
 fn run_in_terminal(
     tx: &mpsc::Sender<UiMessage>,
@@ -1591,7 +1480,7 @@ fn run_in_terminal_impl(
 
     let tx_reader = tx.clone();
     let master_fd_reader = master_fd;
-    let total_packages: usize = 1; // unknown for generic commands; % parser degrades gracefully
+    let total_packages: usize = 1;
     let done_flag = Arc::new(AtomicBool::new(false));
     let done_flag_reader = done_flag.clone();
 
@@ -1600,18 +1489,11 @@ fn run_in_terminal_impl(
         let mut file = unsafe { std::fs::File::from_raw_fd(master_fd_reader) };
         let mut buf = [0u8; 4096];
         let mut current_percent: i32 = 0;
-        // Chronological log — each committed line appended; sent as ProgressOutput.
-        let mut log_output = String::new();
         let mut output_dirty = false;
         let mut last_output_flush = std::time::Instant::now() - std::time::Duration::from_millis(100);
         const OUTPUT_FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(80);
-        const MAX_OUTPUT_LINES: usize = 500;
-        let _op_start = std::time::Instant::now();
         let mut first_error_line: Option<String> = None;
-        let mut line_acc: Vec<char> = Vec::new();
-        let mut write_pos: usize = 0;
-        // Text before the first \r on a line — saved so progress-bar overwriting doesn't lose pkg name.
-        let mut line_label: Option<String> = None;
+        let mut stream = TermStream::new();
 
         loop {
             let ready = unsafe {
@@ -1624,8 +1506,7 @@ fn run_in_terminal_impl(
 
             if ready == 0 {
                 if output_dirty && now.duration_since(last_output_flush) >= OUTPUT_FLUSH_INTERVAL {
-                    let current = reconstruct_line(&line_label, &line_acc);
-                    let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+                    let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
                     output_dirty = false;
                     last_output_flush = now;
                 }
@@ -1638,76 +1519,25 @@ fn run_in_terminal_impl(
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&buf[..n]);
                     let cleaned = strip_ansi(&text);
-                    if cleaned.is_empty() { continue; }
-
                     let force_flush = handle_pty_prompt(&cleaned, always_input, &tx_reader);
 
-                    let chars: Vec<char> = cleaned.chars().collect();
-                    let mut i = 0;
-                    while i < chars.len() {
-                        match chars[i] {
-                            '\r' if i + 1 < chars.len() && chars[i + 1] == '\n' => {
-                                let trimmed = reconstruct_line(&line_label, &line_acc);
-                                if !trimmed.is_empty() {
-                                    let lower = trimmed.to_lowercase();
-                                    let level = classify_log_level(&lower);
-                                    if level == 1 && first_error_line.is_none() { first_error_line = Some(trimmed.clone()); }
-                                    let _ = tx_reader.send(UiMessage::ProgressLogLine(trimmed.clone(), level));
-                                    log_output.push_str(&trimmed); log_output.push('\n');
-                                    if let Some((label, new_pct)) = detect_phase(&lower, &trimmed, total_packages) {
-                                        if new_pct > current_percent { current_percent = new_pct; }
-                                        let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
-                                    }
-                                }
-                                line_acc.clear(); write_pos = 0; line_label = None; output_dirty = true; i += 2;
-                            }
-                            '\r' => {
-                                if line_label.is_none() {
-                                    let s: String = line_acc.iter().collect::<String>().trim().to_string();
-                                    // Only save preamble for install-style lines (no `[` = no bar yet).
-                                    // Download lines already carry the full bar on first write — skip them.
-                                    if !s.is_empty() && !s.contains('[') { line_label = Some(s); }
-                                }
-                                write_pos = 0; output_dirty = true; i += 1;
-                            }
-                            '\n' => {
-                                let trimmed = reconstruct_line(&line_label, &line_acc);
-                                if !trimmed.is_empty() {
-                                    let lower = trimmed.to_lowercase();
-                                    let level = classify_log_level(&lower);
-                                    if level == 1 && first_error_line.is_none() { first_error_line = Some(trimmed.clone()); }
-                                    let _ = tx_reader.send(UiMessage::ProgressLogLine(trimmed.clone(), level));
-                                    log_output.push_str(&trimmed); log_output.push('\n');
-                                    if let Some((label, new_pct)) = detect_phase(&lower, &trimmed, total_packages) {
-                                        if new_pct > current_percent { current_percent = new_pct; }
-                                        let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
-                                    }
-                                }
-                                line_acc.clear(); write_pos = 0; line_label = None; output_dirty = true; i += 1;
-                            }
-                            c => {
-                                if write_pos < line_acc.len() {
-                                    line_acc[write_pos] = c;
-                                } else {
-                                    line_acc.push(c);
-                                }
-                                write_pos += 1;
-                                output_dirty = true; i += 1;
-                            }
+                    stream.process(&buf[..n]);
+
+                    for line in cleaned.lines() {
+                        let lower = line.to_lowercase();
+                        let level = classify_log_level(&lower);
+                        if level == 1 && first_error_line.is_none() { first_error_line = Some(line.to_string()); }
+                        let _ = tx_reader.send(UiMessage::ProgressLogLine(line.to_string(), level));
+                        if let Some((label, new_pct)) = detect_phase(&lower, line, total_packages) {
+                            if new_pct > current_percent { current_percent = new_pct; }
+                            let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
                         }
                     }
 
-                    // Trim log to MAX_OUTPUT_LINES
-                    let lc = log_output.split('\n').count();
-                    if lc > MAX_OUTPUT_LINES {
-                        let skip = lc - MAX_OUTPUT_LINES;
-                        let start = log_output.split('\n').take(skip).map(|l| l.len() + 1).sum::<usize>();
-                        log_output.drain(..start.min(log_output.len()));
-                    }
+                    output_dirty = true;
 
                     if force_flush || now.duration_since(last_output_flush) >= OUTPUT_FLUSH_INTERVAL {
-                        let current = reconstruct_line(&line_label, &line_acc);
-                        let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+                        let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
                         output_dirty = false;
                         last_output_flush = now;
                     }
@@ -1715,8 +1545,7 @@ fn run_in_terminal_impl(
                 Err(_) => break,
             }
         }
-        let current = reconstruct_line(&line_label, &line_acc);
-        let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+        let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
         if let Some(err) = first_error_line {
             let _ = tx_reader.send(UiMessage::ProgressErrorSummary(err));
         }
@@ -1834,22 +1663,7 @@ fn run_managed_operation(
 
     let (cmd, args) = build_pacman_command(action, names, backend);
 
-    // Flatpak always uses PTY (interactive -y flag handles prompts; no pkexec).
-    // Native pacman ops try external terminal first for real output.
-    let use_external = backend != 1 && detect_terminal().is_some();
-
-    if use_external {
-        let terminal = detect_terminal().unwrap();
-        let stage = format!("Running in {}...", terminal);
-        let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
-        let _ = tx.send(UiMessage::OperationProgress(0, stage));
-        let _ = tx.send(UiMessage::SetExternalTerminal(true));
-        run_in_external_terminal(tx, title, &cmd, &args, &terminal, pid_holder, conflict_ctx);
-        return;
-    }
-
     let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
-    let _ = tx.send(UiMessage::SetExternalTerminal(false));
 
     let args_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
@@ -1883,16 +1697,11 @@ fn run_managed_operation(
         let mut file = unsafe { std::fs::File::from_raw_fd(master_fd_reader) };
         let mut buf = [0u8; 4096];
         let mut current_percent: i32 = 0;
-        let mut log_output = String::new();
         let mut output_dirty = false;
         let mut last_output_flush = std::time::Instant::now() - std::time::Duration::from_millis(100);
         const OUTPUT_FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(80);
-        const MAX_OUTPUT_LINES: usize = 500;
-        let _op_start = std::time::Instant::now();
         let mut first_error_line: Option<String> = None;
-        let mut line_acc: Vec<char> = Vec::new();
-        let mut write_pos: usize = 0;
-        let mut line_label: Option<String> = None;
+        let mut stream = TermStream::new();
 
         loop {
             let ready = unsafe {
@@ -1905,8 +1714,7 @@ fn run_managed_operation(
 
             if ready == 0 {
                 if output_dirty && now.duration_since(last_output_flush) >= OUTPUT_FLUSH_INTERVAL {
-                    let current = reconstruct_line(&line_label, &line_acc);
-                    let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+                    let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
                     output_dirty = false;
                     last_output_flush = now;
                 }
@@ -1919,8 +1727,8 @@ fn run_managed_operation(
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&buf[..n]);
                     let cleaned = strip_ansi(&text);
-                    if cleaned.is_empty() { continue; }
 
+                    // Accumulate for conflict detection
                     {
                         let mut ob = output_buffer_r.lock().unwrap();
                         if ob.len() < 65536 { ob.push_str(&cleaned); }
@@ -1933,71 +1741,23 @@ fn run_managed_operation(
 
                     let force_flush = handle_pty_prompt(&cleaned, false, &tx_reader);
 
-                    let chars: Vec<char> = cleaned.chars().collect();
-                    let mut i = 0;
-                    while i < chars.len() {
-                        match chars[i] {
-                            '\r' if i + 1 < chars.len() && chars[i + 1] == '\n' => {
-                                let trimmed = reconstruct_line(&line_label, &line_acc);
-                                if !trimmed.is_empty() {
-                                    let lower = trimmed.to_lowercase();
-                                    let level = classify_log_level(&lower);
-                                    if level == 1 && first_error_line.is_none() { first_error_line = Some(trimmed.clone()); }
-                                    let _ = tx_reader.send(UiMessage::ProgressLogLine(trimmed.clone(), level));
-                                    log_output.push_str(&trimmed); log_output.push('\n');
-                                    if let Some((label, new_pct)) = detect_phase(&lower, &trimmed, total_packages) {
-                                        if new_pct > current_percent { current_percent = new_pct; }
-                                        let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
-                                    }
-                                }
-                                line_acc.clear(); write_pos = 0; line_label = None; output_dirty = true; i += 2;
-                            }
-                            '\r' => {
-                                if line_label.is_none() {
-                                    let s: String = line_acc.iter().collect::<String>().trim().to_string();
-                                    // Only save preamble for install-style lines (no `[` = no bar yet).
-                                    // Download lines carry the full bar on first write — skip them.
-                                    if !s.is_empty() && !s.contains('[') { line_label = Some(s); }
-                                }
-                                write_pos = 0; output_dirty = true; i += 1;
-                            }
-                            '\n' => {
-                                let trimmed = reconstruct_line(&line_label, &line_acc);
-                                if !trimmed.is_empty() {
-                                    let lower = trimmed.to_lowercase();
-                                    let level = classify_log_level(&lower);
-                                    if level == 1 && first_error_line.is_none() { first_error_line = Some(trimmed.clone()); }
-                                    let _ = tx_reader.send(UiMessage::ProgressLogLine(trimmed.clone(), level));
-                                    log_output.push_str(&trimmed); log_output.push('\n');
-                                    if let Some((label, new_pct)) = detect_phase(&lower, &trimmed, total_packages) {
-                                        if new_pct > current_percent { current_percent = new_pct; }
-                                        let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
-                                    }
-                                }
-                                line_acc.clear(); write_pos = 0; line_label = None; output_dirty = true; i += 1;
-                            }
-                            c => {
-                                if write_pos < line_acc.len() {
-                                    line_acc[write_pos] = c;
-                                } else {
-                                    line_acc.push(c);
-                                }
-                                write_pos += 1;
-                                output_dirty = true; i += 1;
-                            }
+                    stream.process(&buf[..n]);
+
+                    for line in cleaned.lines() {
+                        let lower = line.to_lowercase();
+                        let level = classify_log_level(&lower);
+                        if level == 1 && first_error_line.is_none() { first_error_line = Some(line.to_string()); }
+                        let _ = tx_reader.send(UiMessage::ProgressLogLine(line.to_string(), level));
+                        if let Some((label, new_pct)) = detect_phase(&lower, line, total_packages) {
+                            if new_pct > current_percent { current_percent = new_pct; }
+                            let _ = tx_reader.send(UiMessage::OperationProgress(current_percent, label.to_string()));
                         }
                     }
 
-                    let lc = log_output.split('\n').count();
-                    if lc > MAX_OUTPUT_LINES {
-                        let skip = lc - MAX_OUTPUT_LINES;
-                        let start = log_output.split('\n').take(skip).map(|l| l.len() + 1).sum::<usize>();
-                        log_output.drain(..start.min(log_output.len()));
-                    }
+                    output_dirty = true;
 
                     if force_flush || now.duration_since(last_output_flush) >= OUTPUT_FLUSH_INTERVAL {
-                        let current = reconstruct_line(&line_label, &line_acc);
-                        let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+                        let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
                         output_dirty = false;
                         last_output_flush = now;
                     }
@@ -2005,8 +1765,7 @@ fn run_managed_operation(
                 Err(_) => break,
             }
         }
-        let current = reconstruct_line(&line_label, &line_acc);
-        let _ = tx_reader.send(UiMessage::ProgressOutput(build_display(&log_output, &current)));
+        let _ = tx_reader.send(UiMessage::ProgressOutput(stream.render()));
         if let Some(err) = first_error_line {
             let _ = tx_reader.send(UiMessage::ProgressErrorSummary(err));
         }
@@ -2214,6 +1973,7 @@ fn update_selection_in_models(window: &MainWindow, name: &str, backend: i32, sel
 /// Given the last line of terminal output containing a prompt like `[Y/n]` or `(yes/no)`,
 /// return the default answer string (the uppercase / first option).
 /// Returns None if no recognisable prompt is found.
+#[allow(dead_code)]
 fn detect_prompt_default(line: &str) -> Option<String> {
     // Look for [...] bracket patterns last on the line: [Y/n], [y/N], [Y/N], [yes/no] etc.
     let line = line.trim_end_matches(|c: char| c == ' ' || c == ':');
@@ -2850,8 +2610,6 @@ fn main() {
     let window_weak = window.as_weak();
     let rx_clone = rx.clone();
     let tx_timer = tx.clone();
-    let mut pending_terminal = String::new();
-    let mut last_term_flush = std::time::Instant::now();
     let full_installed_timer = full_installed.clone();
     let full_installed_flatpaks_timer = full_installed_flatpaks.clone();
     let full_installed_grouped_timer = full_installed_grouped.clone();
@@ -2861,10 +2619,11 @@ fn main() {
     let flatpak_ids_timer = flatpak_installed_ids.clone();
     let flatpak_store_timer = flatpak_app_store.clone();
     let log_model_timer = log_model.clone();
+    let notified_updates = Rc::new(std::cell::Cell::new(false));
 
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
         if let Some(window) = window_weak.upgrade() {
-            let mut flush_now = false;
+            let _flush_now = false;
 
             while let Ok(msg) = rx_clone.borrow_mut().try_recv() {
                 match msg {
@@ -2889,6 +2648,22 @@ fn main() {
                         *full_installed_grouped_timer.borrow_mut() = grouped.clone();
                         window.set_installed_grouped(ModelRc::new(VecModel::from(grouped)));
                         window.set_loading(false);
+                        // Desktop notification on first load
+                        let update_count = window.get_stats().update_count;
+                        let fp_count = window.get_flatpak_update_count();
+                        if !notified_updates.get()
+                            && window.get_setting_notify_on_updates()
+                            && (update_count > 0 || fp_count > 0)
+                        {
+                            notified_updates.set(true);
+                            let total = (update_count + fp_count) as u32;
+                            thread::spawn(move || {
+                                let msg = format!("{} update{} available", total, if total == 1 { "" } else { "s" });
+                                let _ = std::process::Command::new("notify-send")
+                                    .args(["--app-name=xpm", "--icon=system-software-update", "xPackageManager", &msg])
+                                    .status();
+                            });
+                        }
                     }
                     UiMessage::SearchResults(results) => {
                         let installed: Vec<PackageData> = results.iter().filter(|p| p.installed).cloned().collect();
@@ -2912,92 +2687,8 @@ fn main() {
                     UiMessage::SetProgressText(text) => {
                         window.set_progress_text(SharedString::from(&text));
                     }
-                    UiMessage::ShowTerminal(title) => {
-                        window.set_terminal_title(SharedString::from(&title));
-                        window.set_terminal_output(SharedString::from(""));
-                        window.set_terminal_done(false);
-                        window.set_terminal_success(false);
-                        window.set_terminal_show_password(false);
-                        window.set_show_terminal(true);
-                        window.set_terminal_focus_pending(true);
-                        pending_terminal.clear();
-                    }
-                    UiMessage::TerminalOutput(text) => {
-                        pending_terminal.push_str(&text);
-                        // cap the accumulation buffer at 512 KB so we don't grow without bound
-                        if pending_terminal.len() > 524288 {
-                            let cut = pending_terminal.len() - 262144;
-                            pending_terminal.drain(..cut);
-                        }
-                    }
-                    UiMessage::TerminalDone(success) => {
-                        flush_now = true;
-                        window.set_terminal_done(true);
-                        window.set_terminal_success(success);
-                        if success {
-                            // Optimistic instant removal
-                            if let Some((action, names, backend)) = conflict_ctx_timer.lock().unwrap().clone() {
-                                let is_remove = action == "remove" || action == "bulk-remove";
-                                if is_remove && !names.is_empty() {
-                                    let name_set: std::collections::HashSet<&str> =
-                                        names.iter().map(|s| s.as_str()).collect();
-                                    if backend == 1 {
-                                        // Filter installed_flatpaks (the Installed tab in view 10)
-                                        let current: Vec<PackageData> = window.get_installed_flatpaks()
-                                            .iter()
-                                            .filter(|p| !name_set.contains(p.name.as_str()))
-                                            .collect();
-                                        window.set_installed_flatpaks(ModelRc::new(VecModel::from(current)));
-                                    } else {
-                                        {
-                                            let mut inst = full_installed_timer.borrow_mut();
-                                            inst.retain(|p| !name_set.contains(p.name.as_str()));
-                                        }
-                                        let ps = page_size as usize;
-                                        let inst = full_installed_timer.borrow();
-                                        let total = ((inst.len() + ps - 1) / ps).max(1) as i32;
-                                        let page: Vec<PackageData> = inst.iter().take(ps).cloned().collect();
-                                        drop(inst);
-                                        window.set_installed_packages(ModelRc::new(VecModel::from(page)));
-                                        window.set_current_page(0);
-                                        window.set_total_pages(total);
-                                    }
-                                }
-                            }
-                            let tx = tx_timer.clone();
-                            let search_query = window.get_search_text().to_string();
-                            let ids_ref = flatpak_ids_timer.clone();
-                            let store_ref = flatpak_store_timer.clone();
-                            thread::spawn(move || {
-                                let rt = tokio::runtime::Runtime::new().expect("Runtime");
-                                rt.block_on(async {
-                                    // Refresh flatpak installed ids first - used by search + browse
-                                    let new_ids = tokio::task::spawn_blocking(get_flatpak_installed_ids).await.unwrap_or_default();
-                                    *ids_ref.lock().unwrap() = new_ids;
-                                    // Run load + search concurrently
-                                    let store_join = store_ref.clone();
-                                    let ids_join = ids_ref.clone();
-                                    tokio::join!(
-                                        load_packages_async(&tx, false),
-                                        async {
-                                            if !search_query.is_empty() {
-                                                search_packages_async(&tx, &search_query, store_join, ids_join).await;
-                                            }
-                                        }
-                                    );
-                                    let pkgs = tokio::task::spawn_blocking(load_installed_flatpaks).await.unwrap_or_default();
-                                    let _ = tx.send(UiMessage::InstalledFlatpaksLoaded(pkgs));
-                                });
-                            });
-                        }
-                    }
                     UiMessage::SetTerminalIsUpgrade(val) => {
                         window.set_terminal_is_upgrade(val);
-                    }
-                    UiMessage::HideTerminal => {
-                        window.set_show_terminal(false);
-                        window.set_show_progress_popup(false);
-                        window.set_terminal_is_upgrade(false);
                     }
                     UiMessage::ShowProgressPopup(title) => {
                         window.set_progress_popup_title(SharedString::from(&title));
@@ -3021,10 +2712,6 @@ fn main() {
                         *log_model_timer.borrow_mut() = Some(new_log);
                         window.set_progress_popup_external(false);
                         window.set_show_progress_popup(true);
-                        window.set_show_terminal(false);
-                    }
-                    UiMessage::SetExternalTerminal(ext) => {
-                        window.set_progress_popup_external(ext);
                     }
                     UiMessage::ProgressOutput(text) => {
                         window.set_progress_popup_output(SharedString::from(&text));
@@ -3165,6 +2852,19 @@ fn main() {
                         // actually changed on the system, so preserve the current UI state
                         // (especially the updates list which load_packages_async(false) would clear).
                         if success {
+                            // Auto-clean cache after successful upgrade
+                            if window.get_setting_auto_clean_cache() {
+                                if let Some((ref action, _, _)) = *conflict_ctx_timer.lock().unwrap() {
+                                    if action == "update-all" || action == "force-update-all" {
+                                        let keep = window.get_setting_clean_keep_versions();
+                                        thread::spawn(move || {
+                                            let _ = std::process::Command::new("pkexec")
+                                                .args(["paccache", "-rk", &keep.to_string()])
+                                                .status();
+                                        });
+                                    }
+                                }
+                            }
                         let tx = tx_timer.clone();
                             let search_query = window.get_search_text().to_string();
                             let ids_ref = flatpak_ids_timer.clone();
@@ -3369,6 +3069,19 @@ fn main() {
                         let count = ui_devices.len() as i32;
                         window.set_firmware_devices(ModelRc::new(VecModel::from(ui_devices)));
                         window.set_firmware_update_count(count);
+                        // Mark has_pending_update on all-devices list
+                        let update_names: std::collections::HashSet<String> = devices.iter()
+                            .map(|d| d.name.clone())
+                            .collect();
+                        let all_model = window.get_firmware_all_devices();
+                        let updated: Vec<FwupdDetected> = (0..all_model.row_count())
+                            .filter_map(|i| all_model.row_data(i))
+                            .map(|mut dev| {
+                                dev.has_pending_update = update_names.contains(dev.name.as_str());
+                                dev
+                            })
+                            .collect();
+                        window.set_firmware_all_devices(ModelRc::new(VecModel::from(updated)));
                         window.set_firmware_loading(false);
                         window.set_firmware_checked(true);
                     }
@@ -3387,6 +3100,8 @@ fn main() {
                             summary: SharedString::from(&d.summary),
                             updatable: d.updatable,
                             flags: SharedString::from(&d.flags),
+                            device_id: SharedString::from(&d.device_id),
+                            has_pending_update: false,
                         }).collect();
                         window.set_firmware_all_devices(ModelRc::new(VecModel::from(ui_devs)));
                         window.set_firmware_detected_count(count);
@@ -3401,27 +3116,6 @@ fn main() {
                 }
             }
 
-            if !pending_terminal.is_empty()
-                && (flush_now || last_term_flush.elapsed() >= std::time::Duration::from_millis(50))
-                {
-                    let text = std::mem::take(&mut pending_terminal);
-                    let current = window.get_terminal_output().to_string();
-                    let combined = apply_terminal_text(&current, &text);
-                    // Keep last 500 lines rather than a fixed byte limit
-                    const MAX_TERM_LINES: usize = 500;
-                    let trimmed = {
-                        let lc = combined.split('\n').count();
-                        if lc > MAX_TERM_LINES {
-                            let skip = lc - MAX_TERM_LINES;
-                            let start = combined.split('\n').take(skip).map(|l| l.len() + 1).sum::<usize>();
-                            combined[start.min(combined.len())..].to_string()
-                        } else {
-                            combined
-                        }
-                    };
-                    window.set_terminal_output(SharedString::from(&trimmed));
-                    last_term_flush = std::time::Instant::now();
-                }
         }
     });
 
@@ -3635,6 +3329,108 @@ fn main() {
         });
     });
 
+    // HoldPkg read/save callbacks
+    let window_weak_hpr = window.as_weak();
+    window.on_read_holdpkg(move || {
+        if let Some(w) = window_weak_hpr.upgrade() {
+            let content = std::fs::read_to_string("/etc/pacman.conf").unwrap_or_default();
+            let mut active = false;
+            let mut value = String::new();
+            for line in content.lines() {
+                let trimmed = line.trim();
+                let stripped = trimmed.strip_prefix('#').unwrap_or(trimmed).trim();
+                if let Some(rest) = stripped.strip_prefix("HoldPkg") {
+                    let v = rest.trim_start_matches(|c: char| c == ' ' || c == '=').trim().to_string();
+                    if !trimmed.starts_with('#') { active = true; }
+                    if !v.is_empty() { value = v; }
+                    break;
+                }
+            }
+            w.set_holdpkg_active(active);
+            w.set_holdpkg_value(SharedString::from(value.as_str()));
+            w.set_holdpkg_edit_text(SharedString::from(w.get_holdpkg_value().as_str()));
+        }
+    });
+
+    window.on_save_holdpkg(move |active, value| {
+        let value = value.to_string();
+        thread::spawn(move || {
+            let line = if active {
+                format!("HoldPkg = {}", value.trim())
+            } else {
+                format!("#HoldPkg = {}", value.trim())
+            };
+            let script = format!(
+                "grep -q 'HoldPkg' /etc/pacman.conf \
+                 && sed -i 's|^#*[[:space:]]*HoldPkg.*|{}|' /etc/pacman.conf \
+                 || echo '{}' >> /etc/pacman.conf",
+                line, line
+            );
+            let _ = std::process::Command::new("pkexec")
+                .args(["bash", "-c", &script])
+                .status();
+        });
+    });
+
+    // Flatpak remotes callbacks
+    let window_weak_fr = window.as_weak();
+    window.on_load_flatpak_remotes(move || {
+        if let Some(w) = window_weak_fr.upgrade() {
+            w.set_flatpak_mgr_remotes_loading(true);
+            let weak = w.as_weak();
+            thread::spawn(move || {
+                let output = std::process::Command::new("flatpak")
+                    .args(["remote-list", "--columns=name,url"])
+                    .output()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                    .unwrap_or_default();
+                let remotes: Vec<FlatpakRemote> = output.lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .map(|l| {
+                        let mut parts = l.splitn(2, '\t');
+                        let name = parts.next().unwrap_or("").trim().to_string();
+                        let url = parts.next().unwrap_or("").trim().to_string();
+                        FlatpakRemote { name: SharedString::from(name.as_str()), url: SharedString::from(url.as_str()) }
+                    })
+                    .collect();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak.upgrade() {
+                        w.set_flatpak_mgr_remotes(ModelRc::new(VecModel::from(remotes)));
+                        w.set_flatpak_mgr_remotes_loading(false);
+                    }
+                });
+            });
+        }
+    });
+
+    window.on_add_flatpak_remote(move |name, url| {
+        let name = name.to_string();
+        let url = url.to_string();
+        thread::spawn(move || {
+            let _ = std::process::Command::new("flatpak")
+                .args(["remote-add", "--if-not-exists", &name, &url])
+                .status();
+        });
+    });
+
+    window.on_remove_flatpak_remote({
+        let window_weak_rfr = window.as_weak();
+        move |name| {
+            let name = name.to_string();
+            let weak = window_weak_rfr.clone();
+            thread::spawn(move || {
+                let _ = std::process::Command::new("flatpak")
+                    .args(["remote-delete", "--force", &name])
+                    .status();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak.upgrade() {
+                        w.invoke_load_flatpak_remotes();
+                    }
+                });
+            });
+        }
+    });
+
     // Write ParallelDownloads to /etc/pacman.conf via pkexec
     window.on_set_parallel_downloads(move |n| {
         let val = n as u32;
@@ -3846,6 +3642,7 @@ fn main() {
                 #[serde(rename = "Plugin", default)]    plugin: String,
                 #[serde(rename = "Summary", default)]   summary: String,
                 #[serde(rename = "Flags", default)]     flags: Vec<String>,
+                #[serde(rename = "DeviceId", default)]  device_id: String,
             }
 
             // Flags that are worth displaying to the user
@@ -3861,21 +3658,25 @@ fn main() {
                 Ok(out) => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     serde_json::from_str::<Root>(&stdout)
-                        .map(|r| r.devices.into_iter().map(|d| {
+                        .map(|r| r.devices.into_iter().filter_map(|d| {
                             let updatable = d.flags.iter().any(|f| f == "updatable" || f == "updatable-hidden");
+                            if !updatable { return None; }
                             let display_flags: Vec<&str> = d.flags.iter()
-                                .filter(|f| !SKIP_FLAGS.contains(&f.as_str()))
+                                .filter(|f| !SKIP_FLAGS.contains(&f.as_str())
+                                    && *f != "updatable" && *f != "updatable-hidden")
                                 .map(|f| f.as_str())
                                 .collect();
-                            FwupdDetectedData {
+                            Some(FwupdDetectedData {
                                 name: d.name,
                                 vendor: d.vendor,
                                 version: d.version,
                                 plugin: d.plugin,
                                 summary: d.summary,
-                                updatable,
+                                updatable: true,
                                 flags: display_flags.join(" · "),
-                            }
+                                device_id: d.device_id,
+                                has_pending_update: false,
+                            })
                         }).collect::<Vec<_>>())
                         .unwrap_or_default()
                 }
@@ -3909,6 +3710,16 @@ fn main() {
         }
         let tx = tx_fw_check.clone();
         thread::spawn(move || {
+            // fwupdmgr refresh && fwupdmgr get-updates
+            let refresh_ok = std::process::Command::new("fwupdmgr")
+                .args(["refresh"])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if !refresh_ok {
+                let _ = tx.send(UiMessage::FirmwareCheckFailed("fwupdmgr refresh failed".into()));
+                return;
+            }
             match std::process::Command::new("fwupdmgr")
                 .args(["get-updates", "--json"])
                 .output()
@@ -3934,6 +3745,23 @@ fn main() {
         let pid = fw_apply_pid.clone();
         thread::spawn(move || {
             run_in_terminal_expanded(&tx, "Firmware Update", "fwupdmgr", &["update"], &input, &pid);
+        });
+    });
+
+    let tx_fw_dev = tx.clone();
+    let fw_dev_input = terminal_input_sender.clone();
+    let fw_dev_pid = terminal_child_pid.clone();
+    window.on_update_device(move |device_id| {
+        let tx = tx_fw_dev.clone();
+        let input = fw_dev_input.clone();
+        let pid = fw_dev_pid.clone();
+        let id = device_id.to_string();
+        thread::spawn(move || {
+            run_in_terminal_expanded(
+                &tx, "Firmware Update", "fwupdmgr",
+                &["update", &id],
+                &input, &pid,
+            );
         });
     });
 
@@ -4635,38 +4463,6 @@ fn main() {
         }
     });
 
-    let term_input = terminal_input_sender.clone();
-    let tx_term_echo = tx.clone();
-    let window_weak_te = window.as_weak();
-    window.on_terminal_send_input(move |text| {
-        let text = text.to_string();
-        // Local echo: show what the user typed in the terminal output immediately.
-        // PTY echo is unreliable after sudo's tcsetattr - don't rely on it.
-        // Skip echo when in password mode (don't reveal the typed secret).
-        let is_password = window_weak_te.upgrade()
-            .map(|w| w.get_terminal_show_password())
-            .unwrap_or(false);
-        if !is_password {
-            if !text.is_empty() {
-                let _ = tx_term_echo.send(UiMessage::TerminalOutput(format!("{}\n", text)));
-            } else {
-                // Empty input + Enter: detect default from the last prompt line and echo it.
-                // The PTY writer always appends \n, so the program receives its default anyway;
-                // we just want to show the user what was "selected".
-                let output = window_weak_te.upgrade()
-                    .map(|w| w.get_terminal_output().to_string())
-                    .unwrap_or_default();
-                let last_line = output.lines().last().unwrap_or("").trim_end();
-                if let Some(default) = detect_prompt_default(last_line) {
-                    let _ = tx_term_echo.send(UiMessage::TerminalOutput(format!("{}\n", default)));
-                }
-            }
-        }
-        if let Some(sender) = term_input.lock().unwrap().as_ref() {
-            let _ = sender.send(text);
-        }
-    });
-
     let tx_export = tx.clone();
     let export_input = terminal_input_sender.clone();
     let export_pid = terminal_child_pid.clone();
@@ -4742,9 +4538,6 @@ fn main() {
         });
     });
 
-    let tx_close = tx.clone();
-    let close_pid = terminal_child_pid.clone();
-    let close_input = terminal_input_sender.clone();
     let tx_mirrors = tx.clone();
     let mirror_input = terminal_input_sender.clone();
     let mirror_pid = terminal_child_pid.clone();
@@ -4803,18 +4596,6 @@ fn main() {
                 "update-grub || grub-mkconfig -o /boot/grub/grub.cfg"
             ], &input, &pid);
         });
-    });
-
-    window.on_terminal_close(move || {
-        info!("Terminal close requested");
-        if let Some(pid) = *close_pid.lock().unwrap() {
-            unsafe {
-                libc::kill(pid as libc::pid_t, libc::SIGTERM);
-            }
-        }
-        *close_input.lock().unwrap() = None;
-
-        let _ = tx_close.send(UiMessage::HideTerminal);
     });
 
     window.on_terminal_reboot(|| {
@@ -4996,6 +4777,8 @@ fn main() {
     // Batch install selected flatpaks
     let win_batch_fi = window.as_weak();
     let tx_bfi = tx.clone();
+    let bfi_input = terminal_input_sender.clone();
+    let bfi_pid = terminal_child_pid.clone();
     window.on_batch_flatpak_install(move || {
         if let Some(w) = win_batch_fi.upgrade() {
             let model = w.get_remote_apps();
@@ -5008,17 +4791,14 @@ fn main() {
                 return;
             }
             let tx = tx_bfi.clone();
-            let title = format!("Installing {} Flatpak(s)...", ids.len());
-            let _ = tx.send(UiMessage::ShowTerminal(title.clone()));
+            let input = bfi_input.clone();
+            let pid = bfi_pid.clone();
+            let title = format!("Installing {} Flatpak(s)", ids.len());
             thread::spawn(move || {
-                let mut args = vec!["install".to_string(), "-y".to_string(), "flathub".to_string()];
-                args.extend(ids.iter().cloned());
-                let status = std::process::Command::new("flatpak")
-                    .args(&args)
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
-                let _ = tx.send(UiMessage::TerminalDone(status));
+                let mut args = vec!["install", "-y", "flathub"];
+                let id_refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+                args.extend(id_refs.iter().copied());
+                run_in_terminal(&tx, &title, "flatpak", &args, &input, &pid);
             });
         }
     });
@@ -5026,6 +4806,8 @@ fn main() {
     // Batch remove selected flatpaks
     let win_batch_fr = window.as_weak();
     let tx_bfr = tx.clone();
+    let bfr_input = terminal_input_sender.clone();
+    let bfr_pid = terminal_child_pid.clone();
     window.on_batch_flatpak_remove(move || {
         if let Some(w) = win_batch_fr.upgrade() {
             let model = w.get_remote_apps();
@@ -5038,17 +4820,14 @@ fn main() {
                 return;
             }
             let tx = tx_bfr.clone();
-            let title = format!("Removing {} Flatpak(s)...", ids.len());
-            let _ = tx.send(UiMessage::ShowTerminal(title.clone()));
+            let input = bfr_input.clone();
+            let pid = bfr_pid.clone();
+            let title = format!("Removing {} Flatpak(s)", ids.len());
             thread::spawn(move || {
-                let mut args = vec!["uninstall".to_string(), "-y".to_string()];
-                args.extend(ids.iter().cloned());
-                let status = std::process::Command::new("flatpak")
-                    .args(&args)
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
-                let _ = tx.send(UiMessage::TerminalDone(status));
+                let mut args = vec!["uninstall", "-y"];
+                let id_refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+                args.extend(id_refs.iter().copied());
+                run_in_terminal(&tx, &title, "flatpak", &args, &input, &pid);
             });
         }
     });
@@ -5549,6 +5328,8 @@ fn main() {
 
     window.set_setting_flatpak_enabled(config.flatpak_enabled);
     window.set_setting_check_updates_on_start(config.check_updates_on_start);
+    window.set_setting_notify_on_updates(config.notify_on_updates);
+    window.set_setting_auto_clean_cache(config.auto_clean_cache);
     // Prefer actual value from /etc/pacman.conf over stored config
     let pacman_parallel = read_pacman_parallel_downloads().unwrap_or(config.parallel_downloads);
     window.set_setting_parallel_downloads(pacman_parallel as i32);

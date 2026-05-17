@@ -47,16 +47,19 @@ A package manager GUI for Arch Linux managing **pacman** and **Flatpak** from on
 
 **Terminal**
 
-- VT100-aware live output with auto-scroll and correct progress bar rendering
+- Stream-based live output with auto-scroll and correct progress bar rendering
 - Conflict resolution dialog for pacman file conflicts and dep breaks
 - Interactive prompt detection (provider selection, key import)
 - SIGTERM cancellation support
 
 **Settings**
 
-Settings are now stored in `~/.config/xpm/config.json` for easy modification.
+Settings are stored in `~/.config/xpm/config.json` for easy modification.
 
-- Toggle Flatpak support, auto-update checks, parallel downloads, cache retention
+- Toggle Flatpak support, auto-update checks, parallel downloads, cache auto-clean
+- Desktop notifications for available updates
+- HoldPkg management (prevent accidental removal of pinned packages)
+- Flatpak remote manager (add / remove Flatpak repositories)
 - Mirror list update, keyring fix, initramfs rebuild, GRUB rebuild
 
 ---
@@ -104,11 +107,20 @@ cd xPackageManager/packaging/ && makepkg -rsifcd
 
 ---
 
-### To Do
+## Changelog
 
-- [X] New feature : Repo manager
-- [X] Change Browse Repos to Native Packages
-- [ ] Fix Terminal output issues (more robust)
+### v0.5.0
+- **Settings — **HoldPkg**
+- **Settings — Cache Auto-Clean**
+- **Settings — Desktop Notifications**
+- **Settings — Flatpak Remote Manager**
+
+### v0.4.0
+- Flatpak detail view with add-ons modal (AppStream XML parsing)
+- Dependency tree view
+- Activity log
+- vt100 progress output (superseded in v0.5.0)
+- Config persistence via `~/.config/xpm/config.json`
 
 ---
 
