@@ -853,7 +853,21 @@ impl TermStream {
         while parts.last().map(|s| s.trim().is_empty()).unwrap_or(false) {
             parts.pop();
         }
-        if parts.is_empty() { String::new() } else { format!("{}\n", parts.join("\n")) }
+        if parts.is_empty() {
+            return String::new();
+        }
+        // Collapse consecutive blank lines to at most 1 (removes the giant gap
+        // between pacman and flatpak sections of a combined update operation).
+        let mut out = String::with_capacity(parts.iter().map(|s| s.len() + 1).sum::<usize>() + 1);
+        let mut prev_blank = false;
+        for line in &parts {
+            let is_blank = line.trim().is_empty();
+            if is_blank && prev_blank { continue; }
+            prev_blank = is_blank;
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
     }
 }
 

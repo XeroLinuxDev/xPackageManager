@@ -1451,11 +1451,35 @@ export component MainWindow inherits Window {
                     vertical-alignment: center;
                 }
 
-                if view == 1 && (update-packages.length > 0 || flatpak-update-packages.length > 0): Btn {
-                    label: "Update All";
-                    primary: true;
-                    enabled: !busy;
-                    clicked => { root.update-all(); }
+                if view == 1 && (update-packages.length > 0 || flatpak-update-packages.length > 0): Rectangle {
+                    property <float> upd-pulse: 1.0;
+                    animate upd-pulse { duration: 850ms; easing: ease-in-out; }
+                    Timer { interval: 900ms; running: !busy; triggered => { upd-pulse = upd-pulse > 0.6 ? 0.45 : 1.0; } }
+
+                    height: 32px;
+                    min-width: 100px;
+                    border-radius: 8px;
+                    background: busy ? Cat.surface0 : Cat.green.with-alpha(upd-pulse * 0.9 + 0.05);
+                    border-width: 1px;
+                    border-color: busy ? Cat.surface1 : Cat.green.with-alpha(upd-pulse * 0.6 + 0.2);
+                    drop-shadow-blur: busy ? 0px : 8px;
+                    drop-shadow-color: Cat.green.with-alpha(upd-pulse * 0.45);
+                    drop-shadow-offset-x: 0px;
+                    drop-shadow-offset-y: 0px;
+                    animate background { duration: 100ms; }
+
+                    Text {
+                        text: "Update All";
+                        font-size: Cat.fs13;
+                        font-weight: 700;
+                        color: busy ? Cat.overlay0 : Cat.crust;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        mouse-cursor: busy ? default : pointer;
+                        clicked => { if !busy { root.update-all(); } }
+                    }
                 }
 
                 // Flatpaks view — update flatpaks button
