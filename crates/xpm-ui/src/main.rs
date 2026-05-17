@@ -4177,7 +4177,7 @@ fn main() {
         thread::spawn(move || {
             // yes | pacman -Scc answers both confirmation prompts (-Scc asks twice).
             // --noconfirm is unreliable for -Scc in PTY context.
-            let script = "yes | pacman -Scc; \
+            let script = "yes | LANG=C pacman -Scc 2>/dev/null; \
                           echo ''; \
                           echo 'Removing leftover download dirs (pacman bug workaround)...'; \
                           rm -rfv /var/cache/pacman/pkg/download-* 2>/dev/null && echo 'Done.' || echo 'No download dirs found.'";
