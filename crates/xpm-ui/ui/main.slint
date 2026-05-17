@@ -178,53 +178,6 @@ component NavIcon inherits Rectangle {
     }
 }
 
-component Input inherits Rectangle {
-    in-out property <string> text <=> input.text;
-    in property <string> placeholder: "";
-    out property <bool> has-focus: input.has-focus;
-    in property <bool> is-password: false;
-    callback accepted(string);
-    callback edited(string);
-    public function grab-focus() { input.focus(); }
-
-    height: 38px;
-    background: Cat.surface0;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: input.has-focus
-        ? (is-password ? Cat.yellow.with-alpha(0.7) : Cat.mauve.with-alpha(0.6))
-        : Cat.surface2;
-    animate border-color { duration: 80ms; }
-
-    TouchArea { width: 100%; height: 100%; clicked => { input.focus(); } }
-
-    input := TextInput {
-        x: 12px;
-        y: 0;
-        width: parent.width - 24px;
-        height: parent.height;
-        color: Cat.text;
-        font-size: Cat.fs14;
-        vertical-alignment: center;
-        single-line: true;
-        input-type: root.is-password ? InputType.password : InputType.text;
-        selection-background-color: Cat.mauve.with-alpha(0.3);
-        selection-foreground-color: Cat.text;
-        accepted => { root.accepted(self.text); }
-        edited => { root.edited(self.text); }
-    }
-
-    if input.text == "" && !input.has-focus: Text {
-        x: 12px;
-        width: parent.width - 24px;
-        height: parent.height;
-        text: root.placeholder;
-        font-size: Cat.fs14;
-        color: Cat.overlay0;
-        vertical-alignment: center;
-    }
-}
-
 component Btn inherits Rectangle {
     in property <string> label;
     in property <bool> primary: false;
@@ -1158,6 +1111,7 @@ export component MainWindow inherits Window {
     property <string> icon-alert-triangle: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01";
     property <string> icon-info: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2M12 8h.01M11 12h1v4h1";
     property <string> icon-chevron-right: "M9 18l6-6-6-6";
+    property <string> icon-trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6";
 
 
     // Forces ScrollView viewport-y bindings to re-evaluate while output is live.
@@ -5478,33 +5432,9 @@ export component MainWindow inherits Window {
                     GridLayout {
                         spacing: 10px;
 
-                        // Update Mirrorlists
-                        Rectangle {
-                            row: 0; col: 0; height: 125px; border-radius: 12px;
-                            background: mir-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
-                            animate background { duration: 80ms; }
-                            mir-ta := TouchArea {}
-                            HorizontalLayout {
-                                Rectangle { width: 3px; background: Cat.teal; }
-                                HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 10px; padding-bottom: 10px; spacing: 12px;
-                                    VerticalLayout { alignment: center;
-                                        Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.teal.with-alpha(0.12); border-width: 1px; border-color: Cat.teal.with-alpha(0.25);
-                                            NavIcon { d: icon-globe; icon-color: Cat.teal; width: 18px; height: 18px; x: 10px; y: 10px; } } }
-                                    VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Update Mirrorlists"; font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Re-rank fastest mirrors via rate-mirrors"; font-size: Cat.fs13; color: Cat.overlay1; }
-                                        Text { text: "$ rate-mirrors arch | tee /etc/pacman.d/mirrorlist"; font-size: Cat.fs14; color: Cat.teal.with-alpha(0.7); overflow: elide; } }
-                                    VerticalLayout { alignment: center;
-                                        Rectangle { width: 58px; height: 26px; border-radius: 6px; background: mir-btn.has-hover ? Cat.teal.with-alpha(0.25) : Cat.teal.with-alpha(0.1); border-width: 1px; border-color: Cat.teal.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.teal; horizontal-alignment: center; vertical-alignment: center; }
-                                            mir-btn := TouchArea { mouse-cursor: pointer; clicked => { root.update-mirrorlists(); } } } }
-                                }
-                            }
-                        }
-
                         // Rebuild InitRamFS
                         Rectangle {
-                            row: 0; col: 1; height: 125px; border-radius: 12px;
+                            row: 0; col: 0; height: 125px; border-radius: 12px;
                             background: ini-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
                             animate background { duration: 80ms; }
                             ini-ta := TouchArea {}
@@ -5528,7 +5458,7 @@ export component MainWindow inherits Window {
 
                         // Fix GnuPG Keyring
                         Rectangle {
-                            row: 1; col: 0; height: 125px; border-radius: 12px;
+                            row: 0; col: 1; height: 125px; border-radius: 12px;
                             background: key-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
                             animate background { duration: 80ms; }
                             key-ta := TouchArea {}
@@ -5552,7 +5482,7 @@ export component MainWindow inherits Window {
 
                         // Rebuild Grub
                         Rectangle {
-                            row: 1; col: 1; height: 125px; border-radius: 12px;
+                            row: 1; col: 0; height: 125px; border-radius: 12px;
                             background: grb-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
                             animate background { duration: 80ms; }
                             grb-ta := TouchArea {}
@@ -5570,6 +5500,30 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: grb-btn.has-hover ? Cat.peach.with-alpha(0.25) : Cat.peach.with-alpha(0.1); border-width: 1px; border-color: Cat.peach.with-alpha(0.35); animate background { duration: 70ms; }
                                             Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.peach; horizontal-alignment: center; vertical-alignment: center; }
                                             grb-btn := TouchArea { mouse-cursor: pointer; clicked => { root.rebuild-grub(); } } } }
+                                }
+                            }
+                        }
+
+                        // Orphan Manager
+                        Rectangle {
+                            row: 1; col: 1; height: 125px; border-radius: 12px;
+                            background: orp-ts-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
+                            animate background { duration: 80ms; }
+                            orp-ts-ta := TouchArea {}
+                            HorizontalLayout {
+                                Rectangle { width: 3px; background: Cat.red; }
+                                HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 10px; padding-bottom: 10px; spacing: 12px;
+                                    VerticalLayout { alignment: center;
+                                        Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.red.with-alpha(0.12); border-width: 1px; border-color: Cat.red.with-alpha(0.25);
+                                            NavIcon { d: icon-trash; icon-color: Cat.red; width: 18px; height: 18px; x: 10px; y: 10px; } } }
+                                    VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
+                                        Text { text: "Orphan Manager"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: "Review and remove orphaned packages"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: stats.orphan-count + " orphaned package(s) found"; font-size: Cat.fs13; color: stats.orphan-count > 0 ? Cat.red.with-alpha(0.8) : Cat.overlay0; } }
+                                    VerticalLayout { alignment: center;
+                                        Rectangle { width: 58px; height: 26px; border-radius: 6px; background: orp-ts-btn.has-hover ? Cat.red.with-alpha(0.25) : Cat.red.with-alpha(0.1); border-width: 1px; border-color: Cat.red.with-alpha(0.35); animate background { duration: 70ms; }
+                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                            orp-ts-btn := TouchArea { mouse-cursor: pointer; clicked => { root.load-orphan-list(); root.show-orphan-dialog = true; } } } }
                                 }
                             }
                         }
@@ -6034,13 +5988,13 @@ export component MainWindow inherits Window {
                                 horizontal-stretch: 1;
                                 height: 66px;
                                 border-radius: 10px;
-                                background: home-orphan-touch.has-hover ? (stats.orphan-count > 0 ? Cat.red.with-alpha(0.18) : Cat.surface0.with-alpha(0.5)) : Cat.surface0.with-alpha(0.4);
-                                opacity: stats.orphan-count == 0 ? 0.5 : 1.0;
+                                background: home-mirror-touch.has-hover ? Cat.teal.with-alpha(0.15) : Cat.surface0.with-alpha(0.4);
+                                opacity: busy ? 0.5 : 1.0;
                                 animate background { duration: 100ms; }
 
-                                home-orphan-touch := TouchArea {
-                                    mouse-cursor: stats.orphan-count > 0 ? pointer : default;
-                                    clicked => { if stats.orphan-count > 0 { root.load-orphan-list(); root.show-orphan-dialog = true; } }
+                                home-mirror-touch := TouchArea {
+                                    mouse-cursor: busy ? default : pointer;
+                                    clicked => { if !busy { root.update-mirrorlists(); } }
                                 }
 
                                 VerticalLayout {
@@ -6050,14 +6004,13 @@ export component MainWindow inherits Window {
                                     spacing: 3px;
 
                                     Text {
-                                        text: "Remove Orphans";
+                                        text: "Update Mirrorlists";
                                         font-size: Cat.fs14;
                                         font-weight: 600;
-                                        color: stats.orphan-count > 0 ? Cat.red : Cat.overlay0;
+                                        color: Cat.teal;
                                     }
-                                    if loading: Rectangle { width: 130px; height: 11px; border-radius: 3px; background: Cat.overlay0.with-alpha(0.1); }
-                                    if !loading: Text {
-                                        text: stats.orphan-count + " orphaned packages";
+                                    Text {
+                                        text: "Re-rank fastest mirrors";
                                         font-size: Cat.fs15;
                                         color: Cat.overlay0;
                                     }

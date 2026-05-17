@@ -46,6 +46,7 @@ fn acquire_instance_lock() -> Option<std::fs::File> {
     let file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(false)
         .open(instance_lock_path())
         .ok()?;
     let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
@@ -146,6 +147,7 @@ enum UiMessage {
     FirmwareUpdatesLoaded(Vec<FwupdDeviceData>),
     FirmwareCheckFailed(String),
     FirmwareRefreshDone(bool),
+    UpdateCacheSize(String),
 }
 
 #[derive(Clone)]
@@ -286,7 +288,7 @@ fn toggle_repo_in_conf(content: &str, repo_name: &str, enable: bool) -> String {
         if in_target && !trimmed.is_empty() {
             if enable {
                 if trimmed.starts_with('#') {
-                    result.push(trimmed[1..].trim_start().to_string());
+                    result.push(trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start().to_string());
                 } else {
                     result.push(line.to_string());
                 }
@@ -649,7 +651,7 @@ fn read_pacman_parallel_downloads() -> Option<u32> {
         let trimmed = line.trim();
         if trimmed.starts_with('#') { continue; }
         if let Some(rest) = trimmed.strip_prefix("ParallelDownloads") {
-            let val_str = rest.trim_start_matches(|c: char| c == ' ' || c == '=').trim();
+            let val_str = rest.trim_start_matches([' ', '=']).trim();
             if let Ok(n) = val_str.parse::<u32>() {
                 return Some(n);
             }
@@ -931,7 +933,7 @@ fn is_installable(pkg_name: &str) -> bool {
         Some(o) if o.status.success() => {
             let text = String::from_utf8_lossy(&o.stdout);
             text.lines().any(|line| {
-                line.contains("/") && line.split_whitespace().next().map_or(false, |name| {
+                line.contains("/") && line.split_whitespace().next().is_some_and(|name| {
                     name.ends_with(&format!("/{}/", pkg_name)) || name.ends_with(&format!("/{}", pkg_name))
                 })
             })
@@ -1002,15 +1004,15 @@ fn parse_qi_block(text: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
 
         // New key-value line
         state = 0;
-        if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.splitn(2, ':').nth(1)) {
+        if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 1;
             depends.extend(val.split_whitespace().filter(|&t| t != "None").map(clean_dep_name));
-        } else if let Some(val) = line.strip_prefix("Optional Deps").and_then(|r| r.splitn(2, ':').nth(1)) {
+        } else if let Some(val) = line.strip_prefix("Optional Deps").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 2;
             optional.extend(val.split_whitespace().filter(|&t| t != "None").map(|t| {
                 clean_dep_name(t.split(':').next().unwrap_or(t))
             }));
-        } else if let Some(val) = line.strip_prefix("Required By").and_then(|r| r.splitn(2, ':').nth(1)) {
+        } else if let Some(val) = line.strip_prefix("Required By").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 3;
             reqby.extend(val.split_whitespace().filter(|&t| t != "None").map(|t| t.to_string()));
         }
@@ -1042,12 +1044,12 @@ fn batch_deps(names: &[&str]) -> HashMap<String, Vec<String>> {
         }
         in_depends = false;
 
-        if let Some(val) = line.strip_prefix("Name").and_then(|r| r.splitn(2, ':').nth(1)) {
+        if let Some(val) = line.strip_prefix("Name").and_then(|r| r.split_once(':').map(|x| x.1)) {
             if !cur_name.is_empty() {
                 result.insert(cur_name.clone(), resolve_dep_list(std::mem::take(&mut cur_deps)));
             }
             cur_name = val.trim().to_string();
-        } else if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.splitn(2, ':').nth(1)) {
+        } else if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.split_once(':').map(|x| x.1)) {
             in_depends = true;
             cur_deps.extend(val.split_whitespace().filter(|&t| t != "None").map(clean_dep_name));
         }
@@ -1079,12 +1081,12 @@ fn parse_si_block(text: &str) -> (Vec<String>, Vec<String>) {
             }
             continue;
         }
-        if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.splitn(2, ':').nth(1)) {
+        if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 1;
             depends.extend(val.split_whitespace()
                 .filter(|&t| t != "None")
                 .map(|t| clean_dep_name(t.split(':').next().unwrap_or(t))));
-        } else if let Some(val) = line.strip_prefix("Optional Deps").and_then(|r| r.splitn(2, ':').nth(1)) {
+        } else if let Some(val) = line.strip_prefix("Optional Deps").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 2;
             optional.extend(val.split_whitespace()
                 .filter(|&t| t != "None")
@@ -1123,7 +1125,7 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
         let root_text = String::from_utf8_lossy(&root_out.stdout);
         let ver = root_text.lines()
             .find(|l| l.starts_with("Version"))
-            .and_then(|l| l.splitn(2, ':').nth(1))
+            .and_then(|l| l.split_once(':').map(|x| x.1))
             .map(|v| trim_version(v.trim()))
             .unwrap_or_default();
         let (d, o) = parse_si_block(&root_text);
@@ -1318,8 +1320,8 @@ fn classify_log_level(lower: &str) -> u8 {
 /// Extract the last `XX%` token from a line (pacman inline progress indicator).
 fn extract_inline_percent(raw: &str) -> Option<i32> {
     raw.split_whitespace()
-        .filter_map(|t| t.strip_suffix('%')?.parse::<i32>().ok().filter(|&p| p >= 0 && p <= 100))
-        .last()
+        .filter_map(|t| t.strip_suffix('%')?.parse::<i32>().ok().filter(|&p| (0..=100).contains(&p)))
+        .next_back()
 }
 
 /// Parse `(k/N)` from a pacman progress line and return fractional progress
@@ -1420,8 +1422,7 @@ fn handle_pty_prompt(cleaned: &str, always_input: bool, tx: &mpsc::Sender<UiMess
     let needs_user_input = PACMAN_USER_PROMPT_PATTERNS.iter().any(|p| cleaned.contains(p)) || has_y_n;
     if needs_user_input || has_yn {
         let prompt_text = cleaned.lines()
-            .filter(|l| !l.trim().is_empty())
-            .last()
+            .rfind(|l| !l.trim().is_empty())
             .unwrap_or(cleaned)
             .trim()
             .to_string();
@@ -1888,8 +1889,8 @@ fn update_to_ui(update: &xpm_core::package::UpdateInfo) -> PackageData {
 
     let version_str = format!(
         "{} → {}",
-        update.current_version.to_string(),
-                              update.new_version.to_string()
+        update.current_version,
+                              update.new_version
     );
 
     PackageData {
@@ -1990,7 +1991,7 @@ fn update_selection_in_models(window: &MainWindow, name: &str, backend: i32, sel
 #[allow(dead_code)]
 fn detect_prompt_default(line: &str) -> Option<String> {
     // Look for [...] bracket patterns last on the line: [Y/n], [y/N], [Y/N], [yes/no] etc.
-    let line = line.trim_end_matches(|c: char| c == ' ' || c == ':');
+    let line = line.trim_end_matches([' ', ':']);
     if let Some(start) = line.rfind('[') {
         if let Some(rel_end) = line[start..].find(']') {
             let inner = &line[start + 1..start + rel_end];
@@ -2076,12 +2077,12 @@ fn load_recent_activity() -> Vec<ActivityItem> {
             // Format: [2024-01-15T10:30:00+0000] [ALPM] installed pkg (ver)
             let alpm_pos = line.find("] [ALPM] ")?;
             let rest = &line[alpm_pos + 9..];
-            let (action, pkg_part) = if rest.starts_with("installed ") {
-                ("installed", &rest[10..])
-            } else if rest.starts_with("removed ") {
-                ("removed", &rest[8..])
-            } else if rest.starts_with("upgraded ") {
-                ("upgraded", &rest[9..])
+            let (action, pkg_part) = if let Some(s) = rest.strip_prefix("installed ") {
+                ("installed", s)
+            } else if let Some(s) = rest.strip_prefix("removed ") {
+                ("removed", s)
+            } else if let Some(s) = rest.strip_prefix("upgraded ") {
+                ("upgraded", s)
             } else {
                 return None;
             };
@@ -2250,7 +2251,7 @@ fn repo_display_order(repo: &str) -> u8 {
         "extra" => 1,
         "multilib" => 2,
         r if r.contains("testing") => 3,
-        r if r.is_empty() => 8,
+        "" => 8,
         r if r.starts_with("aur") || r == "local" => 9,
         _ => 5,
     }
@@ -2465,10 +2466,7 @@ fn parse_arch_rss(xml: &str) -> Vec<ArchNewsItem> {
             Ok(Event::CData(e)) => {
                 if !in_item { continue; }
                 let text = String::from_utf8_lossy(e.as_ref()).to_string();
-                match cur_tag.as_str() {
-                    "description" => description = strip_html(&text),
-                    _ => {}
-                }
+                if cur_tag.as_str() == "description" { description = strip_html(&text) }
             }
             Ok(Event::End(e)) => {
                 let name_bytes = e.name();
@@ -2595,7 +2593,7 @@ fn main() {
         };
         let page_size_early = 50usize;
         let page: Vec<PackageData> = installed.iter().take(page_size_early).cloned().collect();
-        let total = ((installed.len() + page_size_early - 1) / page_size_early).max(1) as i32;
+        let total = installed.len().div_ceil(page_size_early).max(1) as i32;
         window.set_installed_packages(ModelRc::new(VecModel::from(page)));
         window.set_total_pages(total);
         window.set_update_packages(ModelRc::new(VecModel::from(updates)));
@@ -2645,7 +2643,7 @@ fn main() {
                         *full_installed_timer.borrow_mut() = installed;
                         let ps = page_size as usize;
                         let inst = full_installed_timer.borrow();
-                        let total = ((inst.len() + ps - 1) / ps).max(1) as i32;
+                        let total = inst.len().div_ceil(ps).max(1) as i32;
                         let page: Vec<PackageData> = inst.iter().take(ps).cloned().collect();
                         window.set_installed_packages(ModelRc::new(VecModel::from(page)));
                         window.set_current_page(0);
@@ -2840,7 +2838,7 @@ fn main() {
                                             }
                                             let ps = page_size as usize;
                                             let inst = full_installed_timer.borrow();
-                                            let total = ((inst.len() + ps - 1) / ps).max(1) as i32;
+                                            let total = inst.len().div_ceil(ps).max(1) as i32;
                                             let page: Vec<PackageData> = inst.iter().take(ps).cloned().collect();
                                             drop(inst);
                                             window.set_installed_packages(ModelRc::new(VecModel::from(page)));
@@ -3127,6 +3125,11 @@ fn main() {
                             error!("fwupd refresh failed");
                         }
                     }
+                    UiMessage::UpdateCacheSize(size) => {
+                        let mut s = window.get_stats();
+                        s.cache_size = SharedString::from(&size);
+                        window.set_stats(s);
+                    }
                 }
             }
 
@@ -3219,7 +3222,7 @@ fn main() {
             if window.get_view() == 0 {
                 let data = full_installed_page.borrow();
                 let page_data: Vec<PackageData> = data.iter().skip(start).take(ps).cloned().collect();
-                let total = ((data.len() + ps - 1) / ps).max(1) as i32;
+                let total = data.len().div_ceil(ps).max(1) as i32;
                 window.set_installed_packages(ModelRc::new(VecModel::from(page_data)));
                 window.set_total_pages(total);
             }
@@ -3236,7 +3239,7 @@ fn main() {
             let filtered: Vec<PackageData> = if q.is_empty() {
                 // Reset to first page
                 let ps = 50usize;
-                let total = ((data.len() + ps - 1) / ps).max(1) as i32;
+                let total = data.len().div_ceil(ps).max(1) as i32;
                 w.set_total_pages(total);
                 w.set_current_page(0);
                 data.iter().take(ps).cloned().collect()
@@ -3303,7 +3306,7 @@ fn main() {
                 // Match both commented (#IgnorePkg) and active (IgnorePkg)
                 let stripped = trimmed.strip_prefix('#').unwrap_or(trimmed).trim();
                 if let Some(rest) = stripped.strip_prefix("IgnorePkg") {
-                    let v = rest.trim_start_matches(|c: char| c == ' ' || c == '=').trim().to_string();
+                    let v = rest.trim_start_matches([' ', '=']).trim().to_string();
                     // Active = line is NOT commented
                     if !trimmed.starts_with('#') {
                         active = true;
@@ -3354,7 +3357,7 @@ fn main() {
                 let trimmed = line.trim();
                 let stripped = trimmed.strip_prefix('#').unwrap_or(trimmed).trim();
                 if let Some(rest) = stripped.strip_prefix("HoldPkg") {
-                    let v = rest.trim_start_matches(|c: char| c == ' ' || c == '=').trim().to_string();
+                    let v = rest.trim_start_matches([' ', '=']).trim().to_string();
                     if !trimmed.starts_with('#') { active = true; }
                     if !v.is_empty() { value = v; }
                     break;
@@ -4172,12 +4175,22 @@ fn main() {
         let input = clean_input.clone();
         let pid = clean_pid.clone();
         thread::spawn(move || {
-            // pacman -Scc removes cached packages; also nuke download-* dirs (pacman bug workaround)
-            let script = "pacman -Scc --noconfirm; \
+            // yes | pacman -Scc answers both confirmation prompts (-Scc asks twice).
+            // --noconfirm is unreliable for -Scc in PTY context.
+            let script = "yes | pacman -Scc; \
                           echo ''; \
                           echo 'Removing leftover download dirs (pacman bug workaround)...'; \
                           rm -rfv /var/cache/pacman/pkg/download-* 2>/dev/null && echo 'Done.' || echo 'No download dirs found.'";
             run_in_terminal(&tx, "Cleaning Package Cache", "pkexec", &["bash", "-c", script], &input, &pid);
+            // Recompute cache size and update the home-page stat tile
+            let bytes = std::process::Command::new("du")
+                .args(["-sb", "/var/cache/pacman/pkg"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().next()
+                    .and_then(|s| s.parse::<u64>().ok()))
+                .unwrap_or(0);
+            let _ = tx.send(UiMessage::UpdateCacheSize(format_size(bytes)));
         });
     });
 
@@ -4897,7 +4910,7 @@ fn main() {
             let tx_ss = tx_detail.clone();
             if !ss_url.is_empty() {
                 thread::spawn(move || {
-                    let tmp = format!("/tmp/xpm_ss_{}.jpg", ss_id.replace('/', "_").replace('.', "_"));
+                    let tmp = format!("/tmp/xpm_ss_{}.jpg", ss_id.replace(['/', '.'], "_"));
                     let ok = std::process::Command::new("curl")
                         .args(["-s", "--max-time", "20", "-L", "-o", &tmp, &ss_url])
                         .status()
@@ -5011,7 +5024,7 @@ fn main() {
                     // Extract Description field
                     text.lines()
                         .find(|l| l.starts_with("Description"))
-                        .and_then(|l| l.splitn(2, ':').nth(1))
+                        .and_then(|l| l.split_once(':').map(|x| x.1))
                         .map(|s| s.trim().to_string())
                         .unwrap_or_default()
                 }
@@ -5503,7 +5516,7 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     .map(|p| package_to_ui(p, update_names.contains(&p.name), &desktop_map))
     .collect();
 
-    let updates_ui: Vec<PackageData> = updates.iter().map(|u| update_to_ui(u)).collect();
+    let updates_ui: Vec<PackageData> = updates.iter().map(update_to_ui).collect();
 
     let flatpak_ui: Vec<PackageData> = flatpak_packages
     .iter()
@@ -5513,8 +5526,8 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
         let display_name = if !p.description.is_empty() {
             p.description.clone()
         } else {
-            p.name.split('.').last().unwrap_or(&p.name)
-                .replace('_', " ").replace('-', " ")
+            p.name.split('.').next_back().unwrap_or(&p.name)
+                .replace(['_', '-'], " ")
         };
 
         PackageData {
@@ -5551,8 +5564,8 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
             let display_name = if !p.description.is_empty() {
                 p.description.clone()
             } else {
-                p.name.split('.').last().unwrap_or(&p.name)
-                    .replace('_', " ").replace('-', " ")
+                p.name.split('.').next_back().unwrap_or(&p.name)
+                    .replace(['_', '-'], " ")
             };
             (p.name.clone(), display_name)
         })
@@ -5564,8 +5577,8 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
                 .get(&u.name)
                 .cloned()
                 .unwrap_or_else(|| {
-                    u.name.split('.').last().unwrap_or(&u.name)
-                        .replace('_', " ").replace('-', " ")
+                    u.name.split('.').next_back().unwrap_or(&u.name)
+                        .replace(['_', '-'], " ")
                 });
             let ver_str = format!("{} → {}", u.current_version, u.new_version);
             PackageData {
@@ -5923,7 +5936,7 @@ fn build_desktop_name_map() -> HashMap<String, String> {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "desktop") {
+                if path.extension().is_some_and(|e| e == "desktop") {
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         let mut name = String::new();
                         let mut exec = String::new();
@@ -6553,10 +6566,10 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                     } else if in_url {
                         let url_text = text.trim().to_string();
                         match cur_url_type.as_str() {
-                            "homepage" => { if state.url_homepage.is_empty() { state.url_homepage = url_text; } }
-                            "bugtracker" => { if state.url_bugtracker.is_empty() { state.url_bugtracker = url_text; } }
-                            "translate" => { if state.url_translate.is_empty() { state.url_translate = url_text; } }
-                            "vcs-browser" => { if state.url_vcs.is_empty() { state.url_vcs = url_text; } }
+                            "homepage" if state.url_homepage.is_empty() => { state.url_homepage = url_text; }
+                            "bugtracker" if state.url_bugtracker.is_empty() => { state.url_bugtracker = url_text; }
+                            "translate" if state.url_translate.is_empty() => { state.url_translate = url_text; }
+                            "vcs-browser" if state.url_vcs.is_empty() => { state.url_vcs = url_text; }
                             _ => {}
                         }
                     } else if in_release_desc {
@@ -6645,11 +6658,10 @@ fn apps_to_package_data(
             // Skip add-on entries themselves (they extend another app)
             if !app.extends.is_empty() { return false; }
             // Category filter
-            if !category_filter.is_empty() && category_filter != "All" {
-                if !app.categories.iter().any(|c| c == category_filter) {
+            if !category_filter.is_empty() && category_filter != "All"
+                && !app.categories.iter().any(|c| c == category_filter) {
                     return false;
                 }
-            }
             // Search filter
             if !search_lower.is_empty() {
                 let name_lower = app.name.to_lowercase();
@@ -6768,7 +6780,7 @@ fn load_repo_packages(repo: &str) -> Vec<PackageData> {
                     let repo_name = parts[0];
                     let name = parts[1];
                     let version = parts[2];
-                    let installed = parts.get(3).map_or(false, |s| *s == "[installed]");
+                    let installed = parts.get(3).is_some_and(|s| *s == "[installed]");
                     let display_name = humanize_package_name(name, &desktop_map);
                     let description = desc_map.get(name).cloned().unwrap_or_default();
                     Some(PackageData {

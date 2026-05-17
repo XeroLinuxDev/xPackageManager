@@ -87,15 +87,15 @@ impl CacheManager {
                 continue;
             }
 
-            versions.sort_by(|a, b| b.1.cmp(&a.1));
+            versions.sort_by_key(|&(_, ts)| std::cmp::Reverse(ts));
 
             for (path, _) in versions.iter().skip(keep_versions) {
-                if let Ok(metadata) = fs::metadata(&path) {
+                if let Ok(metadata) = fs::metadata(path) {
                     freed += metadata.len();
                 }
 
                 debug!("Removing old package: {:?}", path);
-                if let Err(e) = fs::remove_file(&path) {
+                if let Err(e) = fs::remove_file(path) {
                     warn!("Failed to remove {:?}: {}", path, e);
                 }
 

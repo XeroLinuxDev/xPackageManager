@@ -117,7 +117,7 @@ impl FlatpakBackend {
                         let is_installed = installed_names.contains(&name);
 
                         // flatpak app ids are reverse-dns so we grab the last part as display name
-                        let display_name = name.split('.').last().unwrap_or(&name).to_string();
+                        let display_name = name.split('.').next_back().unwrap_or(&name).to_string();
 
                         let status = if is_installed {
                             PackageStatus::Installed
@@ -137,7 +137,7 @@ impl FlatpakBackend {
                 }
             }
 
-            packages.sort_by(|a, b| a.description.to_lowercase().cmp(&b.description.to_lowercase()));
+            packages.sort_by_key(|a| a.description.to_lowercase());
 
             Ok(packages)
         })
@@ -333,7 +333,7 @@ impl PackageSource for FlatpakBackend {
                         new_version: Version::new(&current),
                         backend: PackageBackend::Flatpak,
                         repository: origin,
-                        download_size: iref.installed_size() as u64,
+                        download_size: iref.installed_size(),
                     });
                 }
             }
@@ -395,7 +395,7 @@ impl PackageSource for FlatpakBackend {
                             provides: Vec::new(),
                             conflicts: Vec::new(),
                             replaces: Vec::new(),
-                            installed_size: iref.installed_size() as u64,
+                            installed_size: iref.installed_size(),
                             download_size: 0,
                             build_date: None,
                             install_date: None,
