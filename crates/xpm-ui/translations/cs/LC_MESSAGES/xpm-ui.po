@@ -1,0 +1,293 @@
+# Czech translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: cs\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+msgid "Install"
+msgstr "Nainstalovat"
+
+msgid "Remove"
+msgstr "Odebrat"
+
+msgid "Cancel"
+msgstr "Zrušit"
+
+msgid "Proceed"
+msgstr "Pokračovat"
+
+msgid "Apply"
+msgstr "Použít"
+
+msgid "Apply Changes"
+msgstr "Použít změny"
+
+msgid "Save"
+msgstr "Uložit"
+
+msgid "Done"
+msgstr "Hotovo"
+
+msgid "Back"
+msgstr "Zpět"
+
+msgid "Close"
+msgstr "Zavřít"
+
+msgid "Clear"
+msgstr "Vymazat"
+
+msgid "Browse"
+msgstr "Procházet"
+
+msgid "Installed"
+msgstr "Nainstalováno"
+
+msgid "Update"
+msgstr "Aktualizovat"
+
+msgid "Update All"
+msgstr "Aktualizovat vše"
+
+msgid "Updates"
+msgstr "Aktualizace"
+
+msgid "Settings"
+msgstr "Nastavení"
+
+msgid "Troubleshooting"
+msgstr "Odstraňování problémů"
+
+msgid "Add"
+msgstr "Přidat"
+
+msgid "Delete"
+msgstr "Smazat"
+
+msgid "Search for packages"
+msgstr "Hledat balíčky"
+
+msgid "Filter installed..."
+msgstr "Filtrovat nainstalované..."
+
+msgid "No packages found"
+msgstr "Žádné balíčky nenalezeny"
+
+msgid "System is up to date"
+msgstr "Systém je aktuální"
+
+msgid "Loading..."
+msgstr "Načítání..."
+
+msgid "NATIVE PACKAGES"
+msgstr "NATIVNÍ BALÍČKY"
+
+msgid "FLATPAKS"
+msgstr "FLATPAKY"
+
+msgid "LIBRARY"
+msgstr "KNIHOVNA"
+
+msgid "GENERAL"
+msgstr "OBECNÉ"
+
+msgid "ABOUT"
+msgstr "O PROGRAMU"
+
+msgid "SYSTEM"
+msgstr "SYSTÉM"
+
+msgid "Name"
+msgstr "Název"
+
+msgid "Version"
+msgstr "Verze"
+
+msgid "Repo"
+msgstr "Repozitář"
+
+msgid "Action"
+msgstr "Akce"
+
+msgid "All"
+msgstr "Vše"
+
+msgid "Add-Ons"
+msgstr "Doplňky"
+
+msgid "Remove {0}?"
+msgstr "Odebrat {0}?"
+
+msgid "Orphan Manager"
+msgstr "Správce sirotků"
+
+msgid "Orphaned"
+msgstr "Sirotci"
+
+msgid "Check for Updates"
+msgstr "Zkontrolovat aktualizace"
+
+msgid "Clean Cache"
+msgstr "Vyčistit cache"
+
+msgid "Unlock DB"
+msgstr "Odemknout DB"
+
+msgid "Pacman Packages"
+msgstr "Balíčky Pacman"
+
+msgid "Flatpak Apps"
+msgstr "Aplikace Flatpak"
+
+msgid "Parallel Downloads"
+msgstr "Paralelní stahování"
+
+msgid "Custom"
+msgstr "Vlastní"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "Nainstalováno ({0})"
+
+msgid "Available ({0})"
+msgstr "Dostupné ({0})"
+
+msgid "Depends On"
+msgstr "Závisí na"
+
+msgid "Required By"
+msgstr "Vyžadováno"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "sirotci"
+
+msgid "XeroLinux Package Manager"
+msgstr "Správce balíčků XeroLinux"
+
+msgid "READY"
+msgstr "PŘIPRAVEN"
+
+msgid "Reboot System"
+msgstr "Restartovat systém"
+
+msgid "Firmware Updates"
+msgstr "Aktualizace firmwaru"
+
+msgid "HOST"
+msgstr "HOST"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "RAM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Domů"
+
+msgid "Flatpaks"
+msgstr "Flatpaky"
+
+msgid "Packages"
+msgstr "Balíčky"
+
+msgid "Arch News"
+msgstr "Arch novinky"
+
+msgid "Settings & Tweaks"
+msgstr "Nastavení a úpravy"
+
+msgid "Refresh"
+msgstr "Obnovit"
+
+msgid "Flatpak Support"
+msgstr "Podpora Flatpak"
+
+msgid "Check Updates on Startup"
+msgstr "Kontrolovat aktualizace při spuštění"
+
+msgid "Auto-clean Cache"
+msgstr "Automaticky vyčistit cache"
+
+msgid "Notify on Updates"
+msgstr "Upozornit na aktualizace"
+
+msgid "File"
+msgstr "Soubor"
+
+msgid "Size"
+msgstr "Velikost"
+
+msgid "Update All ({0})"
+msgstr "Aktualizovat vše ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Aktualizovat Flatpaky ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Doplňky"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "Nainstalovat {0} doplněk"
+msgstr[1] "Nainstalovat {0} doplňky"
+msgstr[2] "Nainstalovat {0} doplňků"
+
+msgid "Active"
+msgstr "Aktivní"
+
+msgid "Inactive"
+msgstr "Neaktivní"
+
+msgid "Enabled"
+msgstr "Povoleno"
+
+msgid "Disabled"
+msgstr "Zakázáno"
+
+msgid "Dep"
+msgstr "Záv."
+
+msgid "Checking…"
+msgstr "Kontrola…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Přehled, rychlé akce a správa mezipaměti"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Procházet a instalovat aplikace Flatpak"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Procházet a instalovat balíčky z repozitářů Arch"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Zobrazit nejnovější zprávy a oznámení Arch Linux"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Opravit osiřelé balíčky a spravovat ignorované balíčky"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Konfigurovat nastavení pacman, paralelní stahování a blokované balíčky"
+
+msgid "View and install available package updates"
+msgstr "Zobrazit a instalovat dostupné aktualizace balíčků"
+
+msgid "Update Mirrorlists"
+msgstr "Aktualizovat zrcadlové servery"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Seřadit nejrychlejší zrcadla"

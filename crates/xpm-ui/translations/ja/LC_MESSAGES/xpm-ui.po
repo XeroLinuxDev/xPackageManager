@@ -1,0 +1,292 @@
+# Japanese translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ja\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Install"
+msgstr "インストール"
+
+msgid "Remove"
+msgstr "削除"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Proceed"
+msgstr "続行"
+
+msgid "Apply"
+msgstr "適用"
+
+msgid "Apply Changes"
+msgstr "変更を適用"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Done"
+msgstr "完了"
+
+msgid "Back"
+msgstr "戻る"
+
+msgid "Close"
+msgstr "閉じる"
+
+msgid "Clear"
+msgstr "クリア"
+
+msgid "Browse"
+msgstr "ブラウズ"
+
+msgid "Installed"
+msgstr "インストール済み"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Update All"
+msgstr "すべて更新"
+
+msgid "Updates"
+msgstr "更新"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Troubleshooting"
+msgstr "トラブルシューティング"
+
+msgid "Add"
+msgstr "追加"
+
+msgid "Delete"
+msgstr "削除"
+
+msgid "Search for packages"
+msgstr "パッケージを検索"
+
+msgid "Filter installed..."
+msgstr "インストール済みをフィルター..."
+
+msgid "No packages found"
+msgstr "パッケージが見つかりません"
+
+msgid "System is up to date"
+msgstr "システムは最新です"
+
+msgid "Loading..."
+msgstr "読み込み中..."
+
+msgid "NATIVE PACKAGES"
+msgstr "ネイティブパッケージ"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK"
+
+msgid "LIBRARY"
+msgstr "ライブラリ"
+
+msgid "GENERAL"
+msgstr "一般"
+
+msgid "ABOUT"
+msgstr "バージョン情報"
+
+msgid "SYSTEM"
+msgstr "システム"
+
+msgid "Name"
+msgstr "名前"
+
+msgid "Version"
+msgstr "バージョン"
+
+msgid "Repo"
+msgstr "リポジトリ"
+
+msgid "Action"
+msgstr "操作"
+
+msgid "All"
+msgstr "すべて"
+
+msgid "Add-Ons"
+msgstr "アドオン"
+
+msgid "Remove {0}?"
+msgstr "{0} を削除しますか？"
+
+msgid "Orphan Manager"
+msgstr "孤立パッケージ管理"
+
+msgid "Orphaned"
+msgstr "孤立"
+
+msgid "Check for Updates"
+msgstr "更新を確認"
+
+msgid "Clean Cache"
+msgstr "キャッシュを削除"
+
+msgid "Unlock DB"
+msgstr "DBのロックを解除"
+
+msgid "Pacman Packages"
+msgstr "Pacmanパッケージ"
+
+msgid "Flatpak Apps"
+msgstr "Flatpakアプリ"
+
+msgid "Parallel Downloads"
+msgstr "並列ダウンロード"
+
+msgid "Custom"
+msgstr "カスタム"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "インストール済み ({0})"
+
+msgid "Available ({0})"
+msgstr "利用可能 ({0})"
+
+msgid "Depends On"
+msgstr "依存"
+
+msgid "Required By"
+msgstr "被依存"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "孤立"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinuxパッケージマネージャー"
+
+msgid "READY"
+msgstr "準備完了"
+
+msgid "Reboot System"
+msgstr "システムを再起動"
+
+msgid "Firmware Updates"
+msgstr "ファームウェアの更新"
+
+msgid "HOST"
+msgstr "ホスト"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "メモリ"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "ホーム"
+
+msgid "Flatpaks"
+msgstr "Flatpak"
+
+msgid "Packages"
+msgstr "パッケージ"
+
+msgid "Arch News"
+msgstr "Archニュース"
+
+msgid "Settings & Tweaks"
+msgstr "設定と調整"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "Flatpak Support"
+msgstr "Flatpakサポート"
+
+msgid "Check Updates on Startup"
+msgstr "起動時に更新を確認"
+
+msgid "Auto-clean Cache"
+msgstr "キャッシュ自動クリア"
+
+msgid "Notify on Updates"
+msgstr "更新を通知"
+
+msgid "File"
+msgstr "ファイル"
+
+msgid "Size"
+msgstr "サイズ"
+
+msgid "Update All ({0})"
+msgstr "すべて更新 ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Flatpakを更新 ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ アドオン"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0}個のアドオンをインストール"
+msgstr[1] "{0}個のアドオンをインストール"
+
+msgid "Active"
+msgstr "有効"
+
+msgid "Inactive"
+msgstr "無効"
+
+msgid "Enabled"
+msgstr "有効"
+
+msgid "Disabled"
+msgstr "無効"
+
+msgid "Dep"
+msgstr "依存"
+
+msgid "Checking…"
+msgstr "確認中…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "概要、クイックアクション、キャッシュ管理"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Flatpakアプリケーションを検索してインストール"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Archリポジトリからパッケージを検索してインストール"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "最新のArch Linuxニュースとお知らせを表示"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "孤立パッケージの修正と無視パッケージの管理"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "pacmanの設定、並列ダウンロード、保留パッケージの設定"
+
+msgid "View and install available package updates"
+msgstr "利用可能なパッケージの更新を表示してインストール"
+
+msgid "Update Mirrorlists"
+msgstr "ミラーリストを更新"
+
+msgid "Re-rank fastest mirrors"
+msgstr "最速ミラーを再ランク付け"

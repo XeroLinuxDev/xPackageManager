@@ -1285,6 +1285,8 @@ fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
         std::process::Command::new(cmd)
         .args(args)
         .env("TERM", "xterm-256color")
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
         .stdin(std::process::Stdio::from_raw_fd(stdin_fd))
         .stdout(std::process::Stdio::from_raw_fd(stdout_fd))
         .stderr(std::process::Stdio::from_raw_fd(stderr_fd))
@@ -2561,6 +2563,18 @@ fn main() {
     };
 
     let window = MainWindow::new().expect("Failed to create window");
+
+    // Apply locale after component creation (GLOBAL_CONTEXT required by select_bundled_translation)
+    if let Some(locale) = sys_locale::get_locale() {
+        let lang = locale.split(['_', '-', '.']).next().unwrap_or("en").to_ascii_lowercase();
+        let full = locale.replace('-', "_").to_ascii_lowercase();
+        let result = slint::select_bundled_translation(&full)
+            .or_else(|_| slint::select_bundled_translation(&lang));
+        match result {
+            Ok(()) => info!("Translation loaded for locale {} ({})", locale, lang),
+            Err(e) => info!("No translation for locale {}: {:?}", locale, e),
+        }
+    }
 
     let (tx, rx) = mpsc::channel::<UiMessage>();
     let rx = Rc::new(RefCell::new(rx));

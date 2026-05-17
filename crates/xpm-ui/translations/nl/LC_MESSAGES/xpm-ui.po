@@ -1,0 +1,292 @@
+# Dutch translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: nl\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Install"
+msgstr "Installeren"
+
+msgid "Remove"
+msgstr "Verwijderen"
+
+msgid "Cancel"
+msgstr "Annuleren"
+
+msgid "Proceed"
+msgstr "Doorgaan"
+
+msgid "Apply"
+msgstr "Toepassen"
+
+msgid "Apply Changes"
+msgstr "Wijzigingen toepassen"
+
+msgid "Save"
+msgstr "Opslaan"
+
+msgid "Done"
+msgstr "Klaar"
+
+msgid "Back"
+msgstr "Terug"
+
+msgid "Close"
+msgstr "Sluiten"
+
+msgid "Clear"
+msgstr "Wissen"
+
+msgid "Browse"
+msgstr "Bladeren"
+
+msgid "Installed"
+msgstr "Geïnstalleerd"
+
+msgid "Update"
+msgstr "Bijwerken"
+
+msgid "Update All"
+msgstr "Alles bijwerken"
+
+msgid "Updates"
+msgstr "Updates"
+
+msgid "Settings"
+msgstr "Instellingen"
+
+msgid "Troubleshooting"
+msgstr "Probleemoplossing"
+
+msgid "Add"
+msgstr "Toevoegen"
+
+msgid "Delete"
+msgstr "Verwijderen"
+
+msgid "Search for packages"
+msgstr "Pakketten zoeken"
+
+msgid "Filter installed..."
+msgstr "Geïnstalleerde filteren..."
+
+msgid "No packages found"
+msgstr "Geen pakketten gevonden"
+
+msgid "System is up to date"
+msgstr "Systeem is up-to-date"
+
+msgid "Loading..."
+msgstr "Laden..."
+
+msgid "NATIVE PACKAGES"
+msgstr "NATIVE PAKKETTEN"
+
+msgid "FLATPAKS"
+msgstr "FLATPAKS"
+
+msgid "LIBRARY"
+msgstr "BIBLIOTHEEK"
+
+msgid "GENERAL"
+msgstr "ALGEMEEN"
+
+msgid "ABOUT"
+msgstr "OVER"
+
+msgid "SYSTEM"
+msgstr "SYSTEEM"
+
+msgid "Name"
+msgstr "Naam"
+
+msgid "Version"
+msgstr "Versie"
+
+msgid "Repo"
+msgstr "Repository"
+
+msgid "Action"
+msgstr "Actie"
+
+msgid "All"
+msgstr "Alle"
+
+msgid "Add-Ons"
+msgstr "Uitbreidingen"
+
+msgid "Remove {0}?"
+msgstr "{0} verwijderen?"
+
+msgid "Orphan Manager"
+msgstr "Wezen-beheer"
+
+msgid "Orphaned"
+msgstr "Wezen"
+
+msgid "Check for Updates"
+msgstr "Controleren op updates"
+
+msgid "Clean Cache"
+msgstr "Cache wissen"
+
+msgid "Unlock DB"
+msgstr "DB ontgrendelen"
+
+msgid "Pacman Packages"
+msgstr "Pacman-pakketten"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak-apps"
+
+msgid "Parallel Downloads"
+msgstr "Parallelle downloads"
+
+msgid "Custom"
+msgstr "Aangepast"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "Geïnstalleerd ({0})"
+
+msgid "Available ({0})"
+msgstr "Beschikbaar ({0})"
+
+msgid "Depends On"
+msgstr "Afhankelijk van"
+
+msgid "Required By"
+msgstr "Vereist door"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "wezen"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux pakketbeheer"
+
+msgid "READY"
+msgstr "KLAAR"
+
+msgid "Reboot System"
+msgstr "Systeem herstarten"
+
+msgid "Firmware Updates"
+msgstr "Firmware-updates"
+
+msgid "HOST"
+msgstr "HOST"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "MEM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Startpagina"
+
+msgid "Flatpaks"
+msgstr "Flatpaks"
+
+msgid "Packages"
+msgstr "Pakketten"
+
+msgid "Arch News"
+msgstr "Arch-nieuws"
+
+msgid "Settings & Tweaks"
+msgstr "Instellingen en aanpassingen"
+
+msgid "Refresh"
+msgstr "Verversen"
+
+msgid "Flatpak Support"
+msgstr "Flatpak-ondersteuning"
+
+msgid "Check Updates on Startup"
+msgstr "Updates controleren bij opstarten"
+
+msgid "Auto-clean Cache"
+msgstr "Cache automatisch wissen"
+
+msgid "Notify on Updates"
+msgstr "Meldingen voor updates"
+
+msgid "File"
+msgstr "Bestand"
+
+msgid "Size"
+msgstr "Grootte"
+
+msgid "Update All ({0})"
+msgstr "Alles bijwerken ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Flatpaks bijwerken ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Uitbreidingen"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0} uitbreiding installeren"
+msgstr[1] "{0} uitbreidingen installeren"
+
+msgid "Active"
+msgstr "Actief"
+
+msgid "Inactive"
+msgstr "Inactief"
+
+msgid "Enabled"
+msgstr "Ingeschakeld"
+
+msgid "Disabled"
+msgstr "Uitgeschakeld"
+
+msgid "Dep"
+msgstr "Afh."
+
+msgid "Checking…"
+msgstr "Controleren…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Overzicht, snelle acties en cachebeheer"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Flatpak-applicaties bladeren en installeren"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Pakketten uit Arch-repositories bladeren en installeren"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Laatste Arch Linux-nieuws en aankondigingen bekijken"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Weesgepakketten repareren en genegeerde pakketten beheren"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Pacman-instellingen, parallelle downloads en vastgehouden pakketten configureren"
+
+msgid "View and install available package updates"
+msgstr "Beschikbare pakketupdates bekijken en installeren"
+
+msgid "Update Mirrorlists"
+msgstr "Mirrorlijsten bijwerken"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Snelste mirrors opnieuw rangschikken"

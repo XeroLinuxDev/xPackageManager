@@ -1,0 +1,528 @@
+# Chinese Simplified translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Install"
+msgstr "安装"
+
+msgid "Remove"
+msgstr "删除"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Proceed"
+msgstr "继续"
+
+msgid "Apply"
+msgstr "应用"
+
+msgid "Apply Changes"
+msgstr "应用更改"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Done"
+msgstr "完成"
+
+msgid "Back"
+msgstr "返回"
+
+msgid "Close"
+msgstr "关闭"
+
+msgid "Clear"
+msgstr "清除"
+
+msgid "Browse"
+msgstr "浏览"
+
+msgid "Installed"
+msgstr "已安装"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Update All"
+msgstr "全部更新"
+
+msgid "Updates"
+msgstr "更新"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Troubleshooting"
+msgstr "故障排除"
+
+msgid "Add"
+msgstr "添加"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Search for packages"
+msgstr "搜索软件包"
+
+msgid "Search all packages..."
+msgstr "搜索所有软件包..."
+
+msgid "Filter installed..."
+msgstr "筛选已安装..."
+
+msgid "Filter installed packages..."
+msgstr "筛选已安装软件包..."
+
+msgid "Filter installed Flatpaks..."
+msgstr "筛选已安装的Flatpak..."
+
+msgid "Search Flathub apps..."
+msgstr "搜索Flathub应用..."
+
+msgid "No packages found"
+msgstr "未找到软件包"
+
+msgid "No apps found."
+msgstr "未找到应用。"
+
+msgid "No installed flatpaks"
+msgstr "没有已安装的Flatpak"
+
+msgid "No activity found"
+msgstr "未找到活动记录"
+
+msgid "System is up to date"
+msgstr "系统已更新"
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "Loading repositories..."
+msgstr "加载仓库..."
+
+msgid "Parsing appstream metadata..."
+msgstr "解析应用流元数据..."
+
+msgid "Indexing application catalogue"
+msgstr "索引应用目录"
+
+msgid "NATIVE PACKAGES"
+msgstr "原生软件包"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK"
+
+msgid "INSTALLED FLATPAKS"
+msgstr "已安装的FLATPAK"
+
+msgid "LIBRARY"
+msgstr "库"
+
+msgid "GENERAL"
+msgstr "常规"
+
+msgid "REPO MANAGER"
+msgstr "仓库管理"
+
+msgid "ABOUT"
+msgstr "关于"
+
+msgid "SYSTEM OVERVIEW"
+msgstr "系统概览"
+
+msgid "QUICK ACTIONS"
+msgstr "快速操作"
+
+msgid "SYSTEM"
+msgstr "系统"
+
+msgid "RECENT ACTIVITY"
+msgstr "最近活动"
+
+msgid "PACMAN"
+msgstr "PACMAN"
+
+msgid "APPLICATION"
+msgstr "应用"
+
+msgid "STATUS"
+msgstr "状态"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Version"
+msgstr "版本"
+
+msgid "Repo"
+msgstr "仓库"
+
+msgid "Action"
+msgstr "操作"
+
+msgid "Explicit"
+msgstr "显式"
+
+msgid "explicit"
+msgstr "显式"
+
+msgid "Tree"
+msgstr "依赖树"
+
+msgid "All"
+msgstr "全部"
+
+msgid "All Apps"
+msgstr "所有应用"
+
+msgid "Add-Ons"
+msgstr "插件"
+
+msgid "Add-Ons & Extensions"
+msgstr "插件与扩展"
+
+msgid "Available to Install"
+msgstr "可安装"
+
+msgid "Already Installed"
+msgstr "已安装"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "安装 {0} 个插件"
+msgstr[1] "安装 {0} 个插件"
+
+msgid "Remove {0}?"
+msgstr "删除 {0}？"
+
+msgid "Remove + Data"
+msgstr "删除+数据"
+
+msgid "Remove Only"
+msgstr "仅删除"
+
+msgid "Remove Selected"
+msgstr "删除所选"
+
+msgid "Remove Orphaned Packages"
+msgstr "删除孤立软件包"
+
+msgid "Orphan Manager"
+msgstr "孤立包管理"
+
+msgid "Orphaned"
+msgstr "孤立包"
+
+msgid "Conflict Detected"
+msgstr "检测到冲突"
+
+msgid "Force Overwrite"
+msgstr "强制覆盖"
+
+msgid "DANGER — Read before proceeding"
+msgstr "危险 — 操作前请阅读"
+
+msgid "Select / Deselect All"
+msgstr "全选/全不选"
+
+msgid "Check for Updates"
+msgstr "检查更新"
+
+msgid "Clean Cache"
+msgstr "清理缓存"
+
+msgid "Update Mirrorlists"
+msgstr "更新镜像列表"
+
+msgid "Fix GnuPG Keyring"
+msgstr "修复GnuPG密钥环"
+
+msgid "Rebuild InitRamFS"
+msgstr "重建InitRamFS"
+
+msgid "Rebuild Grub"
+msgstr "重建GRUB"
+
+msgid "Unlock Pacman Database"
+msgstr "解锁Pacman数据库"
+
+msgid "Unlock DB"
+msgstr "解锁数据库"
+
+msgid "Pacman Packages"
+msgstr "Pacman软件包"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak应用"
+
+msgid "Parallel Downloads"
+msgstr "并行下载"
+
+msgid "Custom"
+msgstr "自定义"
+
+msgid "Enable / Disable"
+msgstr "启用/禁用"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Packages (space-separated)"
+msgstr "软件包（空格分隔）"
+
+msgid "Installed ({0})"
+msgstr "已安装 ({0})"
+
+msgid "Available ({0})"
+msgstr "可用 ({0})"
+
+msgid "Load {0} more packages"
+msgstr "加载更多 {0} 个软件包"
+
+msgid "Changes in version {0}"
+msgstr "版本 {0} 的变更"
+
+msgid "Nothing depends on {0}"
+msgstr "没有软件包依赖 {0}"
+
+msgid "Depends On"
+msgstr "依赖于"
+
+msgid "Required By"
+msgstr "被依赖"
+
+msgid "Optional Dependencies"
+msgstr "可选依赖"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "孤立包"
+
+msgid "installed"
+msgstr "已安装"
+
+msgid "missing"
+msgstr "缺失"
+
+msgid "optional"
+msgstr "可选"
+
+msgid "hard"
+msgstr "必需"
+
+msgid "Project Website"
+msgstr "项目网站"
+
+msgid "Report an Issue"
+msgstr "报告问题"
+
+msgid "Contribute Translations"
+msgstr "贡献翻译"
+
+msgid "Browse Source Code"
+msgstr "浏览源代码"
+
+msgid "xpm  —  about"
+msgstr "xpm  —  关于"
+
+msgid "View Source"
+msgstr "查看源码"
+
+msgid "I Understand, Proceed"
+msgstr "我理解，继续"
+
+msgid "Don't show this again"
+msgstr "不再显示"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux软件包管理器"
+
+msgid "XeroLinux Package Manager GUI"
+msgstr "XeroLinux软件包管理器图形界面"
+
+msgid "xPackageManager is built exclusively for XeroLinux"
+msgstr "xPackageManager专为XeroLinux构建"
+
+msgid "⚠  UNSUPPORTED DISTRIBUTION"
+msgstr "⚠  不支持的发行版"
+
+msgid "READY"
+msgstr "就绪"
+
+msgid "▶  RUN"
+msgstr "▶  运行"
+
+msgid "Show Details ↓"
+msgstr "显示详情 ↓"
+
+msgid "Type response and press Enter…"
+msgstr "输入响应并按回车…"
+
+msgid "Reboot System"
+msgstr "重启系统"
+
+msgid "Also remove leftover user data?"
+msgstr "同时删除残留用户数据？"
+
+msgid "This will uninstall the application from your system."
+msgstr "这将从您的系统卸载该应用。"
+
+msgid "Load All Installed Packages"
+msgstr "加载所有已安装软件包"
+
+msgid "Enable Flatpak package management"
+msgstr "启用Flatpak软件包管理"
+
+msgid "Firmware Updates"
+msgstr "固件更新"
+
+msgid "System Info"
+msgstr "系统信息"
+
+msgid "Export Package List"
+msgstr "导出软件包列表"
+
+msgid "Import Package List"
+msgstr "导入软件包列表"
+
+msgid "Install Local Package"
+msgstr "安装本地软件包"
+
+msgid "Flatpak Remotes"
+msgstr "Flatpak远程仓库"
+
+msgid "Add Remote"
+msgstr "添加远程"
+
+msgid "HOST"
+msgstr "主机"
+
+msgid "OS "
+msgstr "系统"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "内存"
+
+msgid "UP "
+msgstr "运行"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "DSK"
+msgstr "磁盘"
+
+msgid "Links"
+msgstr "链接"
+
+msgid "Read more"
+msgstr "阅读更多"
+
+msgid "Fetching Arch news..."
+msgstr "获取Arch新闻..."
+
+
+msgid "Home"
+msgstr "主页"
+
+msgid "Flatpaks"
+msgstr "Flatpak"
+
+msgid "Packages"
+msgstr "软件包"
+
+msgid "Arch News"
+msgstr "Arch新闻"
+
+msgid "Settings & Tweaks"
+msgstr "设置与调整"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Flatpak Support"
+msgstr "Flatpak支持"
+
+msgid "Check Updates on Startup"
+msgstr "启动时检查更新"
+
+msgid "Auto-clean Cache"
+msgstr "自动清理缓存"
+
+msgid "Notify on Updates"
+msgstr "更新通知"
+
+msgid "File"
+msgstr "文件"
+
+msgid "Size"
+msgstr "大小"
+
+msgid "Update All ({0})"
+msgstr "全部更新 ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "更新Flatpak ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ 插件"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "安装 {0} 个插件"
+msgstr[1] "安装 {0} 个插件"
+
+msgid "Active"
+msgstr "已启用"
+
+msgid "Inactive"
+msgstr "未启用"
+
+msgid "Enabled"
+msgstr "已启用"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Dep"
+msgstr "依赖"
+
+msgid "Checking…"
+msgstr "检查中…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "概览、快速操作和缓存管理"
+
+msgid "Browse and install Flatpak applications"
+msgstr "浏览并安装 Flatpak 应用程序"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "浏览并从 Arch 仓库安装软件包"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "查看最新的 Arch Linux 新闻和公告"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "修复孤立软件包并管理忽略的软件包"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "配置 pacman 设置、并行下载和保留软件包"
+
+msgid "View and install available package updates"
+msgstr "查看并安装可用的软件包更新"
+
+msgid "Re-rank fastest mirrors"
+msgstr "重新排列最快镜像"

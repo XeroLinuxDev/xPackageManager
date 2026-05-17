@@ -1,0 +1,302 @@
+# Polish translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: pl\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Install"
+msgstr "Zainstaluj"
+
+msgid "Remove"
+msgstr "Usuń"
+
+msgid "Cancel"
+msgstr "Anuluj"
+
+msgid "Proceed"
+msgstr "Kontynuuj"
+
+msgid "Apply"
+msgstr "Zastosuj"
+
+msgid "Apply Changes"
+msgstr "Zastosuj zmiany"
+
+msgid "Save"
+msgstr "Zapisz"
+
+msgid "Done"
+msgstr "Gotowe"
+
+msgid "Back"
+msgstr "Wstecz"
+
+msgid "Close"
+msgstr "Zamknij"
+
+msgid "Clear"
+msgstr "Wyczyść"
+
+msgid "Browse"
+msgstr "Przeglądaj"
+
+msgid "Installed"
+msgstr "Zainstalowane"
+
+msgid "Update"
+msgstr "Aktualizuj"
+
+msgid "Update All"
+msgstr "Zaktualizuj wszystko"
+
+msgid "Updates"
+msgstr "Aktualizacje"
+
+msgid "Settings"
+msgstr "Ustawienia"
+
+msgid "Troubleshooting"
+msgstr "Rozwiązywanie problemów"
+
+msgid "Add"
+msgstr "Dodaj"
+
+msgid "Delete"
+msgstr "Usuń"
+
+msgid "Search for packages"
+msgstr "Szukaj pakietów"
+
+msgid "Filter installed..."
+msgstr "Filtruj zainstalowane..."
+
+msgid "No packages found"
+msgstr "Nie znaleziono pakietów"
+
+msgid "No apps found."
+msgstr "Nie znaleziono aplikacji."
+
+msgid "System is up to date"
+msgstr "System jest aktualny"
+
+msgid "Loading..."
+msgstr "Ładowanie..."
+
+msgid "NATIVE PACKAGES"
+msgstr "PAKIETY NATYWNE"
+
+msgid "FLATPAKS"
+msgstr "FLATPAKI"
+
+msgid "INSTALLED FLATPAKS"
+msgstr "ZAINSTALOWANE FLATPAKI"
+
+msgid "LIBRARY"
+msgstr "BIBLIOTEKA"
+
+msgid "GENERAL"
+msgstr "OGÓLNE"
+
+msgid "ABOUT"
+msgstr "O PROGRAMIE"
+
+msgid "SYSTEM"
+msgstr "SYSTEM"
+
+msgid "Name"
+msgstr "Nazwa"
+
+msgid "Version"
+msgstr "Wersja"
+
+msgid "Repo"
+msgstr "Repozytorium"
+
+msgid "Action"
+msgstr "Akcja"
+
+msgid "All"
+msgstr "Wszystkie"
+
+msgid "Add-Ons"
+msgstr "Rozszerzenia"
+
+msgid "Remove {0}?"
+msgstr "Usunąć {0}?"
+
+msgid "Remove Orphaned Packages"
+msgstr "Usuń osierocone pakiety"
+
+msgid "Orphan Manager"
+msgstr "Menedżer osieroconych"
+
+msgid "Orphaned"
+msgstr "Osierocone"
+
+msgid "Check for Updates"
+msgstr "Sprawdź aktualizacje"
+
+msgid "Clean Cache"
+msgstr "Wyczyść pamięć podręczną"
+
+msgid "Unlock DB"
+msgstr "Odblokuj BD"
+
+msgid "Pacman Packages"
+msgstr "Pakiety Pacman"
+
+msgid "Flatpak Apps"
+msgstr "Aplikacje Flatpak"
+
+msgid "Parallel Downloads"
+msgstr "Równoległe pobieranie"
+
+msgid "Custom"
+msgstr "Niestandardowy"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "Zainstalowane ({0})"
+
+msgid "Available ({0})"
+msgstr "Dostępne ({0})"
+
+msgid "Depends On"
+msgstr "Zależy od"
+
+msgid "Required By"
+msgstr "Wymagane przez"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "osierocone"
+
+msgid "XeroLinux Package Manager"
+msgstr "Menedżer pakietów XeroLinux"
+
+msgid "READY"
+msgstr "GOTOWY"
+
+msgid "Reboot System"
+msgstr "Uruchom ponownie system"
+
+msgid "Firmware Updates"
+msgstr "Aktualizacje firmware"
+
+msgid "HOST"
+msgstr "HOST"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "RAM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Strona główna"
+
+msgid "Flatpaks"
+msgstr "Flatpaki"
+
+msgid "Packages"
+msgstr "Pakiety"
+
+msgid "Arch News"
+msgstr "Wiadomości Arch"
+
+msgid "Settings & Tweaks"
+msgstr "Ustawienia i dostosowania"
+
+msgid "Refresh"
+msgstr "Odśwież"
+
+msgid "Flatpak Support"
+msgstr "Wsparcie Flatpak"
+
+msgid "Check Updates on Startup"
+msgstr "Sprawdzaj aktualizacje przy starcie"
+
+msgid "Auto-clean Cache"
+msgstr "Automatyczne czyszczenie pamięci podręcznej"
+
+msgid "Notify on Updates"
+msgstr "Powiadamiaj o aktualizacjach"
+
+msgid "File"
+msgstr "Plik"
+
+msgid "Size"
+msgstr "Rozmiar"
+
+msgid "Update All ({0})"
+msgstr "Zaktualizuj wszystko ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Aktualizuj Flatpaki ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Rozszerzenia"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "Zainstaluj {0} rozszerzenie"
+msgstr[1] "Zainstaluj {0} rozszerzenia"
+msgstr[2] "Zainstaluj {0} rozszerzeń"
+
+msgid "Active"
+msgstr "Aktywny"
+
+msgid "Inactive"
+msgstr "Nieaktywny"
+
+msgid "Enabled"
+msgstr "Włączony"
+
+msgid "Disabled"
+msgstr "Wyłączony"
+
+msgid "Dep"
+msgstr "Zal."
+
+msgid "Checking…"
+msgstr "Sprawdzanie…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Przegląd, szybkie akcje i zarządzanie pamięcią podręczną"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Przeglądaj i instaluj aplikacje Flatpak"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Przeglądaj i instaluj pakiety z repozytoriów Arch"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Przeglądaj najnowsze wiadomości i ogłoszenia Arch Linux"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Napraw osierocone pakiety i zarządzaj ignorowanymi pakietami"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Konfiguruj ustawienia pacman, równoległe pobieranie i wstrzymane pakiety"
+
+msgid "View and install available package updates"
+msgstr "Przeglądaj i instaluj dostępne aktualizacje pakietów"
+
+msgid "Update Mirrorlists"
+msgstr "Zaktualizuj listy mirrorów"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Ponownie posortuj najszybsze mirrory"

@@ -157,6 +157,11 @@ export global Cat {
     out property <length> fs30: 30px * font-scale;
 }
 
+global NavTooltip {
+    in-out property <string> text: "";
+    in-out property <length> y: 0px;
+}
+
 component NavIcon inherits Rectangle {
     in property <brush> icon-color: Cat.text;
     in property <string> d;
@@ -216,6 +221,7 @@ component NavButton inherits Rectangle {
     in property <bool> icon-filled: false;
     in property <bool> active: false;
     in property <string> badge: "";
+    in property <string> tooltip-text: "";
     callback clicked;
 
     height: 40px;
@@ -226,6 +232,14 @@ component NavButton inherits Rectangle {
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+        changed has-hover => {
+            if self.has-hover && root.tooltip-text != "" {
+                NavTooltip.text = root.tooltip-text;
+                NavTooltip.y = root.y + root.height / 2 - 14px;
+            } else {
+                NavTooltip.text = "";
+            }
+        }
     }
 
     HorizontalLayout {
@@ -249,7 +263,6 @@ component NavButton inherits Rectangle {
             color: active ? Cat.mauve : Cat.text;
             opacity: active ? 1.0 : 0.85;
             vertical-alignment: center;
-            horizontal-stretch: 1;
         }
 
         if badge != "": VerticalLayout {
@@ -386,7 +399,7 @@ component PackageRow inherits Rectangle {
                 border-width: 1px;
                 border-color: Cat.mauve.with-alpha(0.35);
                 Text {
-                    text: "explicit";
+                    text: @tr("explicit");
                     font-size: Cat.fs13;
                     font-weight: 600;
                     color: Cat.mauve;
@@ -587,7 +600,7 @@ component RepoRow inherits Rectangle {
                     background: rr-tree-ta.has-hover ? Cat.teal.with-alpha(0.25) : Cat.teal.with-alpha(0.12);
                     border-width: 1px; border-color: Cat.teal.with-alpha(0.35);
                     animate background { duration: 60ms; }
-                    VerticalLayout { alignment: center; Text { text: "Tree"; font-size: Cat.fs15; font-weight: 600; color: Cat.teal; horizontal-alignment: center; } }
+                    VerticalLayout { alignment: center; Text { text: @tr("Tree"); font-size: Cat.fs15; font-weight: 600; color: Cat.teal; horizontal-alignment: center; } }
                     rr-tree-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-tree(); } }
                 }
                 // Install / Remove button
@@ -595,14 +608,14 @@ component RepoRow inherits Rectangle {
                     width: 90px; height: 32px; border-radius: 6px;
                     background: rr-inst-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.75);
                     animate background { duration: 60ms; }
-                    VerticalLayout { alignment: center; Text { text: "Install"; font-size: Cat.fs15; font-weight: 600; color: #fff; horizontal-alignment: center; } }
+                    VerticalLayout { alignment: center; Text { text: @tr("Install"); font-size: Cat.fs15; font-weight: 600; color: #fff; horizontal-alignment: center; } }
                     rr-inst-ta := TouchArea { mouse-cursor: pointer; clicked => { root.install(); } }
                 }
                 if pkg.installed: Rectangle {
                     width: 90px; height: 32px; border-radius: 6px;
                     background: rr-rm-ta.has-hover ? Cat.red : Cat.red.with-alpha(0.75);
                     animate background { duration: 60ms; }
-                    VerticalLayout { alignment: center; Text { text: "Remove"; font-size: Cat.fs15; font-weight: 600; color: #fff; horizontal-alignment: center; } }
+                    VerticalLayout { alignment: center; Text { text: @tr("Remove"); font-size: Cat.fs15; font-weight: 600; color: #fff; horizontal-alignment: center; } }
                     rr-rm-ta := TouchArea { mouse-cursor: pointer; clicked => { root.remove(); } }
                 }
             }
@@ -762,7 +775,7 @@ component DetailProperty inherits HorizontalLayout {
 
 
 export component MainWindow inherits Window {
-    title: "XeroLinux Package Manager GUI";
+    title: @tr("XeroLinux Package Manager GUI");
     preferred-width: 1600px;
     preferred-height: 1000px;
     min-width: 1280px;
@@ -1134,11 +1147,11 @@ export component MainWindow inherits Window {
     Rectangle {
         x: 0;
         y: 0;
-        width: 200px;
+        width: sidebar-vl.preferred-width;
         height: parent.height;
         background: Cat.mantle;
 
-        VerticalLayout {
+        sidebar-vl := VerticalLayout {
             padding: 12px;
             spacing: 2px;
 
@@ -1158,29 +1171,32 @@ export component MainWindow inherits Window {
                 }
 
                 Text {
-                    text: "XeroLinux Package Manager GUI";
+                    text: @tr("XeroLinux Package Manager GUI");
                     font-size: Cat.fs13;
                     font-weight: 600;
                     color: Cat.overlay1;
                     horizontal-alignment: center;
                     wrap: word-wrap;
+                    max-width: 200px;
                 }
             }
 
             Rectangle { height: 8px; }
-            SectionLabel { section-title: "LIBRARY"; }
+            SectionLabel { section-title: @tr("LIBRARY"); }
             Rectangle { height: 4px; }
 
             NavButton {
                 icon-path: icon-home;
-                label: "Home";
+                label: @tr("Home");
+                tooltip-text: @tr("Overview, quick actions and cache management");
                 active: view == 9;
                 clicked => { view = 9; }
             }
 
             if setting-flatpak-enabled: NavButton {
                 icon-path: icon-flatpak;
-                label: "Flatpaks";
+                label: @tr("Flatpaks");
+                tooltip-text: @tr("Browse and install Flatpak applications");
                 active: view == 10;
                 clicked => {
                     view = 10; selected-index = -1; show-flatpak-detail = false;
@@ -1190,7 +1206,8 @@ export component MainWindow inherits Window {
 
             NavButton {
                 icon-path: icon-folder;
-                label: "Packages";
+                label: @tr("Packages");
+                tooltip-text: @tr("Browse and install packages from Arch repositories");
                 active: view == 7 || view == 8;
                 clicked => {
                     view = 7; repos-view = 0; selected-index = -1;
@@ -1201,7 +1218,8 @@ export component MainWindow inherits Window {
 
             NavButton {
                 icon-path: icon-rss;
-                label: "Arch News";
+                label: @tr("Arch News");
+                tooltip-text: @tr("View latest Arch Linux news and announcements");
                 active: view == 13;
                 clicked => {
                     view = 13;
@@ -1215,14 +1233,16 @@ export component MainWindow inherits Window {
 
             NavButton {
                 icon-path: icon-wrench;
-                label: "Troubleshooting";
+                label: @tr("Troubleshooting");
+                tooltip-text: @tr("Fix orphaned packages and manage ignored packages");
                 active: view == 11;
                 clicked => { view = 11; root.read-ignorepkg(); }
             }
 
             NavButton {
                 icon-path: icon-gear;
-                label: "Settings & Tweaks";
+                label: @tr("Settings & Tweaks");
+                tooltip-text: @tr("Configure pacman settings, parallel downloads and held packages");
                 active: view == 5;
                 clicked => { view = 5; root.read-holdpkg(); }
             }
@@ -1231,7 +1251,8 @@ export component MainWindow inherits Window {
 
             if stats.update-count > 0: NavButton {
                 icon-path: icon-arrow-up;
-                label: "Updates";
+                label: @tr("Updates");
+                tooltip-text: @tr("View and install available package updates");
                 badge: stats.update-count;
                 active: view == 1;
                 clicked => { view = 1; selected-index = -1; }
@@ -1245,7 +1266,7 @@ export component MainWindow inherits Window {
                 animate background { duration: 100ms; }
 
                 Text {
-                    text: "Check for Updates";
+                    text: @tr("Check for Updates");
                     font-size: Cat.fs13;
                     font-weight: 600;
                     color: Cat.crust;
@@ -1285,7 +1306,7 @@ export component MainWindow inherits Window {
     }
 
     Rectangle {
-        x: 200px;
+        x: sidebar-vl.preferred-width;
         y: 0;
         width: 1px;
         height: parent.height;
@@ -1293,9 +1314,9 @@ export component MainWindow inherits Window {
     }
 
     Rectangle {
-        x: 201px;
+        x: sidebar-vl.preferred-width + 1px;
         y: 0;
-        width: parent.width - 201px;
+        width: parent.width - sidebar-vl.preferred-width - 1px;
         height: parent.height;
         clip: true;
 
@@ -1411,7 +1432,7 @@ export component MainWindow inherits Window {
                     Timer { interval: 900ms; running: !busy; triggered => { upd-pulse = upd-pulse > 0.6 ? 0.45 : 1.0; } }
 
                     height: 32px;
-                    min-width: 100px;
+                    width: upd-all-lbl.preferred-width + 24px;
                     border-radius: 8px;
                     background: busy ? Cat.surface0 : Cat.green.with-alpha(upd-pulse * 0.9 + 0.05);
                     border-width: 1px;
@@ -1422,8 +1443,8 @@ export component MainWindow inherits Window {
                     drop-shadow-offset-y: 0px;
                     animate background { duration: 100ms; }
 
-                    Text {
-                        text: "Update All";
+                    upd-all-lbl := Text {
+                        text: @tr("Update All");
                         font-size: Cat.fs13;
                         font-weight: 700;
                         color: busy ? Cat.overlay0 : Cat.crust;
@@ -1438,7 +1459,7 @@ export component MainWindow inherits Window {
 
                 // Flatpaks view — update flatpaks button
                 if view == 10 && flatpak-update-count > 0: Btn {
-                    label: "Update Flatpaks (" + flatpak-update-count + ")";
+                    label: @tr("Update Flatpaks ({0})", flatpak-update-count);
                     primary: true;
                     enabled: !busy;
                     clicked => { root.update-all-flatpaks(); }
@@ -1446,14 +1467,14 @@ export component MainWindow inherits Window {
 
                 // Browse Repos view — update native packages button
                 if (view == 7 || view == 8) && native-update-count > 0: Btn {
-                    label: "Update All (" + native-update-count + ")";
+                    label: @tr("Update All ({0})", native-update-count);
                     primary: true;
                     enabled: !busy;
                     clicked => { root.update-all(); }
                 }
 
                 if view == 0: Btn {
-                    label: "Refresh";
+                    label: @tr("Refresh");
                     clicked => { root.refresh(); }
                 }
 
@@ -1522,7 +1543,7 @@ export component MainWindow inherits Window {
 
                                 if installed-filter-text == "" && !inst-ti.has-focus: Text {
                                     width: 100%; height: 100%;
-                                    text: "Filter installed...";
+                                    text: @tr("Filter installed...");
                                     font-size: Cat.fs12;
                                     color: Cat.overlay0;
                                     vertical-alignment: center;
@@ -1600,7 +1621,7 @@ export component MainWindow inherits Window {
 
                                 if search-text == "" && !all-pkg-ti.has-focus: Text {
                                     width: 100%; height: 100%;
-                                    text: "Search all packages...";
+                                    text: @tr("Search all packages...");
                                     font-size: Cat.fs12;
                                     color: Cat.overlay0;
                                     vertical-alignment: center;
@@ -1639,7 +1660,7 @@ export component MainWindow inherits Window {
                 }
 
                 Text {
-                    text: "Search for packages";
+                    text: @tr("Search for packages");
                     font-size: Cat.fs15;
                     color: Cat.overlay0;
                     horizontal-alignment: center;
@@ -1685,7 +1706,7 @@ export component MainWindow inherits Window {
                 }
 
                 Text {
-                    text: "No packages found";
+                    text: @tr("No packages found");
                     font-size: Cat.fs15;
                     color: Cat.overlay0;
                     horizontal-alignment: center;
@@ -1730,7 +1751,7 @@ export component MainWindow inherits Window {
                             padding-left: 16px; padding-right: 16px;
                             spacing: 8px;
                             VerticalLayout { alignment: center;
-                                Text { text: "NATIVE PACKAGES"; font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; letter-spacing: 0.8px; }
+                                Text { text: @tr("NATIVE PACKAGES"); font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; letter-spacing: 0.8px; }
                             }
                             Rectangle { horizontal-stretch: 1; }
                             VerticalLayout { alignment: center;
@@ -1758,7 +1779,7 @@ export component MainWindow inherits Window {
                             padding-left: 16px; padding-right: 16px;
                             spacing: 8px;
                             VerticalLayout { alignment: center;
-                                Text { text: "FLATPAKS"; font-size: Cat.fs10; font-weight: 700; color: Cat.blue; letter-spacing: 0.8px; }
+                                Text { text: @tr("FLATPAKS"); font-size: Cat.fs10; font-weight: 700; color: Cat.blue; letter-spacing: 0.8px; }
                             }
                             Rectangle { horizontal-stretch: 1; }
                             VerticalLayout { alignment: center;
@@ -1782,7 +1803,7 @@ export component MainWindow inherits Window {
 
             if !loading && view == 1 && update-packages.length == 0 && flatpak-update-packages.length == 0: VerticalLayout {
                 vertical-stretch: 1; alignment: center;
-                Text { text: "System is up to date"; font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
+                Text { text: @tr("System is up to date"); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
             }
 
             // Flatpaks (view 10) — flat list with pill search + multi-select + detail
@@ -1803,7 +1824,7 @@ export component MainWindow inherits Window {
                             width: 90px;
                             height: parent.height;
                             Text {
-                                text: "Browse";
+                                text: @tr("Browse");
                                 font-size: Cat.fs15;
                                 font-weight: flatpak-tab == 0 ? 700 : 500;
                                 color: flatpak-tab == 0 ? Cat.mauve : Cat.overlay1;
@@ -1827,7 +1848,7 @@ export component MainWindow inherits Window {
                             width: 100px;
                             height: parent.height;
                             Text {
-                                text: "Installed";
+                                text: @tr("Installed");
                                 font-size: Cat.fs15;
                                 font-weight: flatpak-tab == 1 ? 700 : 500;
                                 color: flatpak-tab == 1 ? Cat.green : Cat.overlay1;
@@ -1926,7 +1947,7 @@ export component MainWindow inherits Window {
 
                                 if flatpak-search == "" && !fk-ti.has-focus: Text {
                                     width: 100%; height: 100%;
-                                    text: "Search Flathub apps...";
+                                    text: @tr("Search Flathub apps...");
                                     font-size: Cat.fs14;
                                     color: Cat.overlay0;
                                     vertical-alignment: center;
@@ -1974,7 +1995,7 @@ export component MainWindow inherits Window {
                             }
                         }
                         Text {
-                            text: "Apps with add-ons are marked  + Add-ons. Install add-ons via the app's info page.";
+                            text: @tr("Apps with add-ons are marked  + Add-ons. Install add-ons via the app's info page.");
                             font-size: Cat.fs10;
                             color: Cat.mauve.with-alpha(0.75);
                             vertical-alignment: center;
@@ -2029,12 +2050,12 @@ export component MainWindow inherits Window {
                                     HorizontalLayout {
                                         spacing: 6px;
                                         Text { text: "›"; font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; }
-                                        Text { text: "Parsing appstream metadata..."; font-size: Cat.fs14; color: Cat.subtext0; vertical-alignment: center; }
+                                        Text { text: @tr("Parsing appstream metadata..."); font-size: Cat.fs14; color: Cat.subtext0; vertical-alignment: center; }
                                     }
                                     HorizontalLayout {
                                         spacing: 6px;
                                         Text { text: "›"; font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; }
-                                        Text { text: "Indexing application catalogue"; font-size: Cat.fs14; color: Cat.subtext0; vertical-alignment: center; }
+                                        Text { text: @tr("Indexing application catalogue"); font-size: Cat.fs14; color: Cat.subtext0; vertical-alignment: center; }
                                     }
                                 }
 
@@ -2122,7 +2143,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: center; spacing: 6px;
                                             NavIcon { d: "M19 12H5M12 19l-7-7 7-7"; icon-color: Cat.subtext0; width: 13px; height: 13px; }
-                                            bk-lbl := Text { text: "All Apps"; font-size: Cat.fs13; color: Cat.subtext0; }
+                                            bk-lbl := Text { text: @tr("All Apps"); font-size: Cat.fs13; color: Cat.subtext0; }
                                         }
                                     }
                                     bk-touch := TouchArea {
@@ -2220,12 +2241,12 @@ export component MainWindow inherits Window {
 
                                     // Install / Remove button
                                     if !flatpak-detail-installed: Rectangle {
-                                        width: 120px;
+                                        width: fp-inst-lbl.preferred-width + 32px;
                                         height: 38px;
                                         border-radius: 10px;
                                         background: inst-touch.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.88);
                                         animate background { duration: 80ms; }
-                                        Text { text: "Install"; font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                                        fp-inst-lbl := Text { text: @tr("Install"); font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                                         inst-touch := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => {
@@ -2235,12 +2256,12 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                     if flatpak-detail-installed: Rectangle {
-                                        width: 120px;
+                                        width: fp-rm-lbl.preferred-width + 32px;
                                         height: 38px;
                                         border-radius: 10px;
                                         background: rm-touch.has-hover ? Cat.red : Cat.red.with-alpha(0.85);
                                         animate background { duration: 80ms; }
-                                        Text { text: "Remove"; font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                                        fp-rm-lbl := Text { text: @tr("Remove"); font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                                         rm-touch := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => {
@@ -2253,7 +2274,7 @@ export component MainWindow inherits Window {
 
                                     // Add-Ons button — shown if any addons exist (installed or not)
                                     if flatpak-addons.length > 0 || flatpak-addons-installed.length > 0: Rectangle {
-                                        width: 120px;
+                                        width: fp-addons-lbl.preferred-width + 36px;
                                         height: 31px;
                                         border-radius: 10px;
                                         // all-installed = nothing left to install
@@ -2285,8 +2306,8 @@ export component MainWindow inherits Window {
                                                 }
                                             }
 
-                                            Text {
-                                                text: "Add-Ons";
+                                            fp-addons-lbl := Text {
+                                                text: @tr("Add-Ons");
                                                 font-size: Cat.fs13; font-weight: 600;
                                                 color: all-installed ? Cat.green
                                                     : some-installed ? Cat.peach : Cat.subtext0;
@@ -2334,7 +2355,7 @@ export component MainWindow inherits Window {
                                         spacing: 8px;
                                         alignment: start;
                                         Text {
-                                            text: "Changes in version " + flatpak-detail-version;
+                                            text: @tr("Changes in version {0}", flatpak-detail-version);
                                             font-size: Cat.fs14;
                                             font-weight: 700;
                                             color: Cat.text;
@@ -2366,7 +2387,7 @@ export component MainWindow inherits Window {
                                     padding: 16px;
                                     spacing: 10px;
                                     Text {
-                                        text: "Links";
+                                        text: @tr("Links");
                                         font-size: Cat.fs14;
                                         font-weight: 700;
                                         color: Cat.text;
@@ -2380,7 +2401,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 8px; alignment: start;
                                             VerticalLayout { alignment: center; NavIcon { d: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"; icon-color: Cat.blue; width: 14px; height: 14px; } }
-                                            Text { text: "Project Website"; font-size: Cat.fs14; color: link-home-ta.has-hover ? Cat.lavender : Cat.blue; vertical-alignment: center; animate color { duration: 80ms; } }
+                                            Text { text: @tr("Project Website"); font-size: Cat.fs14; color: link-home-ta.has-hover ? Cat.lavender : Cat.blue; vertical-alignment: center; animate color { duration: 80ms; } }
                                         }
                                     }
                                     if flatpak-detail-url-bug != "": Rectangle {
@@ -2392,7 +2413,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 8px; alignment: start;
                                             VerticalLayout { alignment: center; NavIcon { d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"; icon-color: Cat.peach; width: 14px; height: 14px; } }
-                                            Text { text: "Report an Issue"; font-size: Cat.fs14; color: link-bug-ta.has-hover ? Cat.yellow : Cat.peach; vertical-alignment: center; animate color { duration: 80ms; } }
+                                            Text { text: @tr("Report an Issue"); font-size: Cat.fs14; color: link-bug-ta.has-hover ? Cat.yellow : Cat.peach; vertical-alignment: center; animate color { duration: 80ms; } }
                                         }
                                     }
                                     if flatpak-detail-url-translate != "": Rectangle {
@@ -2404,7 +2425,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 8px; alignment: start;
                                             VerticalLayout { alignment: center; NavIcon { d: "M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"; icon-color: Cat.teal; width: 14px; height: 14px; } }
-                                            Text { text: "Contribute Translations"; font-size: Cat.fs14; color: link-tr-ta.has-hover ? Cat.sky : Cat.teal; vertical-alignment: center; animate color { duration: 80ms; } }
+                                            Text { text: @tr("Contribute Translations"); font-size: Cat.fs14; color: link-tr-ta.has-hover ? Cat.sky : Cat.teal; vertical-alignment: center; animate color { duration: 80ms; } }
                                         }
                                     }
                                     if flatpak-detail-url-vcs != "": Rectangle {
@@ -2416,7 +2437,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 8px; alignment: start;
                                             VerticalLayout { alignment: center; NavIcon { d: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"; icon-color: Cat.mauve; width: 14px; height: 14px; } }
-                                            Text { text: "Browse Source Code"; font-size: Cat.fs14; color: link-vcs-ta.has-hover ? Cat.lavender : Cat.mauve; vertical-alignment: center; animate color { duration: 80ms; } }
+                                            Text { text: @tr("Browse Source Code"); font-size: Cat.fs14; color: link-vcs-ta.has-hover ? Cat.lavender : Cat.mauve; vertical-alignment: center; animate color { duration: 80ms; } }
                                         }
                                     }
                                 }
@@ -2482,7 +2503,7 @@ export component MainWindow inherits Window {
 
                             Text {
                                 horizontal-stretch: 1;
-                                text: "APPLICATION";
+                                text: @tr("APPLICATION");
                                 font-size: Cat.fs10;
                                 font-weight: 700;
                                 color: Cat.overlay0;
@@ -2499,7 +2520,7 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "STATUS";
+                                text: @tr("STATUS");
                                 font-size: Cat.fs10;
                                 font-weight: 700;
                                 color: Cat.overlay0;
@@ -2523,7 +2544,7 @@ export component MainWindow inherits Window {
                     if remote-apps.length == 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center;
-                        Text { text: "No apps found."; font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                        Text { text: @tr("No apps found."); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
                     ScrollView {
@@ -2635,7 +2656,7 @@ export component MainWindow inherits Window {
                                                 border-width: 1px;
                                                 border-color: Cat.mauve.with-alpha(0.3);
                                                 addon-tag-lbl := Text {
-                                                    text: "+ Add-ons";
+                                                    text: @tr("+ Add-ons");
                                                     font-size: Cat.fs9;
                                                     font-weight: 700;
                                                     color: Cat.mauve.with-alpha(0.85);
@@ -2829,7 +2850,7 @@ export component MainWindow inherits Window {
 
                                     if installed-flatpak-filter == "" && !ifk-search-ti.has-focus: Text {
                                         width: 100%; height: 100%;
-                                        text: "Filter installed Flatpaks...";
+                                        text: @tr("Filter installed Flatpaks...");
                                         font-size: Cat.fs13;
                                         color: Cat.overlay0;
                                         vertical-alignment: center;
@@ -2863,7 +2884,7 @@ export component MainWindow inherits Window {
 
                             Text {
                                 horizontal-stretch: 1;
-                                text: "INSTALLED FLATPAKS";
+                                text: @tr("INSTALLED FLATPAKS");
                                 font-size: Cat.fs10;
                                 font-weight: 700;
                                 color: Cat.overlay0;
@@ -2903,7 +2924,7 @@ export component MainWindow inherits Window {
                         }
 
                         Text {
-                            text: "No installed flatpaks";
+                            text: @tr("No installed flatpaks");
                             font-size: Cat.fs15;
                             color: Cat.overlay0;
                             horizontal-alignment: center;
@@ -2995,7 +3016,7 @@ export component MainWindow inherits Window {
                                             animate background { duration: 60ms; }
 
                                             Text {
-                                                text: "Remove";
+                                                text: @tr("Remove");
                                                 font-size: Cat.fs15;
                                                 font-weight: 600;
                                                 color: Cat.red;
@@ -3048,7 +3069,7 @@ export component MainWindow inherits Window {
                             width: 90px;
                             height: parent.height;
                             Text {
-                                text: "Browse";
+                                text: @tr("Browse");
                                 font-size: Cat.fs14;
                                 font-weight: repos-view == 0 ? 700 : 500;
                                 color: repos-view == 0 ? Cat.blue : Cat.overlay1;
@@ -3072,7 +3093,7 @@ export component MainWindow inherits Window {
                             width: 100px;
                             height: parent.height;
                             Text {
-                                text: "Installed";
+                                text: @tr("Installed");
                                 font-size: Cat.fs14;
                                 font-weight: repos-view == 1 ? 700 : 500;
                                 color: repos-view == 1 ? Cat.mauve : Cat.overlay1;
@@ -3188,7 +3209,7 @@ export component MainWindow inherits Window {
                             width: 14px;
                             height: 14px;
                         }
-                        Text { text: "Loading repositories..."; font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                        Text { text: @tr("Loading repositories..."); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
                     }
 
                     if pacman-repos.length > 0: HorizontalLayout {
@@ -3207,7 +3228,7 @@ export component MainWindow inherits Window {
                                         (all-pill-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.5));
                             animate background { duration: 70ms; }
                             all-pill-lbl := Text {
-                                text: "All";
+                                text: @tr("All");
                                 font-size: Cat.fs14;
                                 font-weight: selected-repo == "" ? 700 : 400;
                                 color: selected-repo == "" ? Cat.blue : Cat.subtext0;
@@ -3274,16 +3295,16 @@ export component MainWindow inherits Window {
                         background: Cat.surface0.with-alpha(0.5);
                         HorizontalLayout {
                             padding-left: 14px; padding-right: 12px;
-                            Text { text: "Name"; font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-stretch: 1; }
-                            Rectangle { width: 120px; Text { text: "Version"; font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: right; } }
-                            Rectangle { width: 80px; Text { text: "Repo"; font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: right; } }
-                            Rectangle { width: 90px; Text { text: "Action"; font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: center; } }
+                            Text { text: @tr("Name"); font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Rectangle { width: 120px; Text { text: @tr("Version"); font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: right; } }
+                            Rectangle { width: 80px; Text { text: @tr("Repo"); font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: right; } }
+                            Rectangle { width: 90px; Text { text: @tr("Action"); font-size: Cat.fs14; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.5px; vertical-alignment: center; horizontal-alignment: center; } }
                         }
                     }
 
                     if !repo-loading && repo-packages.length == 0: VerticalLayout {
                         vertical-stretch: 1; alignment: center;
-                        Text { text: "No packages found"; font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                        Text { text: @tr("No packages found"); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
                     if !repo-loading && repo-packages.length > 0: ListView {
@@ -3317,7 +3338,7 @@ export component MainWindow inherits Window {
                             background: lm-ta.has-hover ? Cat.blue.with-alpha(0.2) : Cat.blue.with-alpha(0.1);
                             border-width: 1px; border-color: Cat.blue.with-alpha(0.3);
                             animate background { duration: 60ms; }
-                            lm-lbl := Text { text: "Load " + repo-extra-count + " more packages"; font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
+                            lm-lbl := Text { text: @tr("Load {0} more packages", repo-extra-count); font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
                             lm-ta := TouchArea { mouse-cursor: pointer; clicked => { root.load-more-repo-pkgs(); } }
                         }
                     }
@@ -3353,7 +3374,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: "Installed (" + search-installed.length + ")";
+                                    text: @tr("Installed ({0})", search-installed.length);
                                     font-size: Cat.fs15;
                                     font-weight: 700;
                                     color: Cat.green;
@@ -3395,7 +3416,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: "Available (" + search-available.length + ")";
+                                    text: @tr("Available ({0})", search-available.length);
                                     font-size: Cat.fs15;
                                     font-weight: 700;
                                     color: Cat.blue;
@@ -3474,7 +3495,7 @@ export component MainWindow inherits Window {
 
                                     if installed-grouped-filter == "" && !ni-search-ti.has-focus: Text {
                                         width: 100%; height: 100%;
-                                        text: "Filter installed packages...";
+                                        text: @tr("Filter installed packages...");
                                         font-size: Cat.fs13;
                                         color: Cat.overlay0;
                                         vertical-alignment: center;
@@ -3549,7 +3570,7 @@ export component MainWindow inherits Window {
                         alignment: center;
                         spacing: 6px;
                         Spinner { indeterminate: true; width: 20px; height: 20px; x: (parent.width - 20px) / 2; }
-                        Text { text: "Loading..."; font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
+                        Text { text: @tr("Loading..."); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
                     if installed-grouped.length > 0: ListView {
@@ -3660,16 +3681,15 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center;
                                         visible: pkg.explicit;
-                                        width: pkg.explicit ? 54px : 0px;
                                         Rectangle {
-                                            width: 54px;
+                                            width: ri-explicit-lbl.preferred-width + 16px;
                                             height: 20px;
                                             border-radius: 5px;
                                             background: Cat.mauve.with-alpha(0.18);
                                             border-width: 1px;
                                             border-color: Cat.mauve.with-alpha(0.4);
-                                            Text {
-                                                text: "Explicit";
+                                            ri-explicit-lbl := Text {
+                                                text: @tr("Explicit");
                                                 font-size: Cat.fs13;
                                                 font-weight: 600;
                                                 color: Cat.mauve;
@@ -3683,15 +3703,15 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
-                                            width: 66px;
+                                            width: ri-tree-lbl.preferred-width + 20px;
                                             height: 32px;
                                             border-radius: 6px;
                                             background: ri-tr-touch.has-hover
                                                 ? Cat.sapphire.with-alpha(0.28)
                                                 : Cat.sapphire.with-alpha(0.15);
                                             animate background { duration: 60ms; }
-                                            Text {
-                                                text: "Tree";
+                                            ri-tree-lbl := Text {
+                                                text: @tr("Tree");
                                                 font-size: Cat.fs15;
                                                 font-weight: 600;
                                                 color: Cat.sapphire;
@@ -3717,15 +3737,15 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
-                                            width: 82px;
+                                            width: ri-dg-lbl.preferred-width + 20px;
                                             height: 31px;
                                             border-radius: 6px;
                                             background: ri-dg-touch.has-hover
                                                 ? Cat.yellow.with-alpha(0.28)
                                                 : Cat.yellow.with-alpha(0.15);
                                             animate background { duration: 60ms; }
-                                            Text {
-                                                text: "Downgrade";
+                                            ri-dg-lbl := Text {
+                                                text: @tr("Downgrade");
                                                 font-size: Cat.fs14;
                                                 font-weight: 600;
                                                 color: Cat.yellow;
@@ -3743,15 +3763,15 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
-                                            width: 82px;
+                                            width: ri-rm-lbl.preferred-width + 20px;
                                             height: 32px;
                                             border-radius: 6px;
                                             background: ri-rm-touch.has-hover
                                                 ? Cat.red.with-alpha(0.28)
                                                 : Cat.red.with-alpha(0.15);
                                             animate background { duration: 60ms; }
-                                            Text {
-                                                text: "Remove";
+                                            ri-rm-lbl := Text {
+                                                text: @tr("Remove");
                                                 font-size: Cat.fs15;
                                                 font-weight: 600;
                                                 color: Cat.red;
@@ -3799,7 +3819,7 @@ export component MainWindow inherits Window {
                             }
 
                             Text {
-                                text: "Load All Installed Packages";
+                                text: @tr("Load All Installed Packages");
                                 font-size: Cat.fs13;
                                 font-weight: 500;
                                 color: load-all-ta.has-hover ? Cat.blue : Cat.subtext0;
@@ -3831,11 +3851,11 @@ export component MainWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "GENERAL"; }
+                        SectionLabel { section-title: @tr("GENERAL"); }
 
                         SettingsRow {
-                            label: "Flatpak Support";
-                            subtitle: "Enable Flatpak package management";
+                            label: @tr("Flatpak Support");
+                            subtitle: @tr("Enable Flatpak package management");
                             checked: setting-flatpak-enabled;
                             toggled(val) => {
                                 setting-flatpak-enabled = val;
@@ -3858,7 +3878,7 @@ export component MainWindow inherits Window {
                                 VerticalLayout { alignment: center;
                                     NavIcon { d: "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z"; icon-color: Cat.teal; width: 15px; height: 15px; }
                                 }
-                                Text { text: "Manage Flatpak Remotes"; font-size: Cat.fs14; font-weight: 500; color: Cat.text; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: @tr("Manage Flatpak Remotes"); font-size: Cat.fs14; font-weight: 500; color: Cat.text; vertical-alignment: center; horizontal-stretch: 1; }
                                 VerticalLayout { alignment: center;
                                     NavIcon { d: "M9 18l6-6-6-6"; icon-color: Cat.overlay0; width: 14px; height: 14px; }
                                 }
@@ -3870,8 +3890,8 @@ export component MainWindow inherits Window {
                         }
 
                         SettingsRow {
-                            label: "Check Updates on Startup";
-                            subtitle: "Automatically sync databases on launch";
+                            label: @tr("Check Updates on Startup");
+                            subtitle: @tr("Automatically sync databases on launch");
                             checked: setting-check-updates-on-start;
                             toggled(val) => { setting-check-updates-on-start = val; root.save-settings(); }
                         }
@@ -3880,15 +3900,15 @@ export component MainWindow inherits Window {
                             spacing: 8px;
                             SettingsRow {
                                 horizontal-stretch: 1;
-                                label: "Auto-clean Cache";
-                                subtitle: "Run paccache after upgrade";
+                                label: @tr("Auto-clean Cache");
+                                subtitle: @tr("Run paccache after upgrade");
                                 checked: setting-auto-clean-cache;
                                 toggled(val) => { setting-auto-clean-cache = val; root.save-settings(); }
                             }
                             SettingsRow {
                                 horizontal-stretch: 1;
-                                label: "Notify on Updates";
-                                subtitle: "Desktop notify-send on startup";
+                                label: @tr("Notify on Updates");
+                                subtitle: @tr("Desktop notify-send on startup");
                                 checked: setting-notify-on-updates;
                                 toggled(val) => { setting-notify-on-updates = val; root.save-settings(); }
                             }
@@ -3923,12 +3943,12 @@ export component MainWindow inherits Window {
                                         spacing: 2px;
 
                                         Text {
-                                            text: "Parallel Downloads";
+                                            text: @tr("Parallel Downloads");
                                             font-size: Cat.fs14;
                                             color: Cat.text;
                                         }
                                         Text {
-                                            text: "Current: " + setting-parallel-downloads
+                                            text: @tr("Current: {0}", setting-parallel-downloads)
                                                 + (is-preset ? "" : "  (Custom)");
                                             font-size: Cat.fs15;
                                             color: is-preset ? Cat.overlay0 : Cat.peach;
@@ -3971,15 +3991,15 @@ export component MainWindow inherits Window {
 
                                         // Custom pill
                                         Rectangle {
-                                            width: 52px;
+                                            width: pd-custom-lbl.preferred-width + 20px;
                                             height: 29px;
                                             border-radius: 6px;
                                             background: setting-pd-custom-mode ?
                                                 Cat.peach : (custom-pill-ta.has-hover ? Cat.surface1 : Cat.surface0);
                                             animate background { duration: 80ms; }
 
-                                            Text {
-                                                text: "Custom";
+                                            pd-custom-lbl := Text {
+                                                text: @tr("Custom");
                                                 font-size: Cat.fs15;
                                                 font-weight: setting-pd-custom-mode ? 700 : 400;
                                                 color: setting-pd-custom-mode ? Cat.crust : Cat.subtext0;
@@ -4016,7 +4036,7 @@ export component MainWindow inherits Window {
 
                                             if setting-pd-custom-text == "" && !custom-input.has-focus: Text {
                                                 height: 30px;
-                                                text: "Enter number (e.g. 8)";
+                                                text: @tr("Enter number (e.g. 8)");
                                                 font-size: Cat.fs13;
                                                 color: Cat.overlay0;
                                                 vertical-alignment: center;
@@ -4041,14 +4061,14 @@ export component MainWindow inherits Window {
                                     }
 
                                     Rectangle {
-                                        width: 60px;
+                                        width: pd-apply-lbl.preferred-width + 24px;
                                         height: 32px;
                                         border-radius: 6px;
                                         background: apply-ta.has-hover ? Cat.peach.with-alpha(0.85) : Cat.peach;
                                         animate background { duration: 80ms; }
 
-                                        Text {
-                                            text: "Apply";
+                                        pd-apply-lbl := Text {
+                                            text: @tr("Apply");
                                             font-size: Cat.fs15;
                                             font-weight: 700;
                                             color: Cat.crust;
@@ -4095,7 +4115,7 @@ export component MainWindow inherits Window {
                                         }
 
                                         Text {
-                                            text: "Values above 25 may overwhelm mirrors and cause slower or failed downloads. Use at your own risk.";
+                                            text: @tr("Values above 25 may overwhelm mirrors and cause slower or failed downloads. Use at your own risk.");
                                             font-size: Cat.fs11;
                                             color: Cat.peach;
                                             vertical-alignment: center;
@@ -4123,8 +4143,8 @@ export component MainWindow inherits Window {
                                     spacing: 10px;
                                     VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 2px;
                                         HorizontalLayout { spacing: 6px; alignment: start;
-                                            Text { text: "HoldPkg"; font-size: Cat.fs14; color: Cat.text; vertical-alignment: center; }
-                                            Text { text: "(Don't Change. Advanced Users Only !)"; font-size: Cat.fs11; color: Cat.red.with-alpha(0.65); vertical-alignment: center; }
+                                            Text { text: @tr("HoldPkg"); font-size: Cat.fs14; color: Cat.text; vertical-alignment: center; }
+                                            Text { text: @tr("(Don't Change. Advanced Users Only !)"); font-size: Cat.fs11; color: Cat.red.with-alpha(0.65); vertical-alignment: center; }
                                         }
                                         Text {
                                             text: holdpkg-active
@@ -4135,14 +4155,14 @@ export component MainWindow inherits Window {
                                     }
                                     VerticalLayout { alignment: center;
                                         Rectangle {
-                                            width: 70px; height: 26px; border-radius: 6px;
+                                            width: hp-tog-lbl.preferred-width + 20px; height: 26px; border-radius: 6px;
                                             background: holdpkg-active
                                                 ? (hp-tog.has-hover ? Cat.yellow.with-alpha(0.3) : Cat.yellow.with-alpha(0.18))
                                                 : (hp-tog.has-hover ? Cat.surface1 : Cat.surface0);
                                             border-width: 1px;
                                             border-color: holdpkg-active ? Cat.yellow.with-alpha(0.5) : Cat.surface1;
                                             animate background { duration: 80ms; }
-                                            Text { text: holdpkg-active ? "Active" : "Inactive"; font-size: Cat.fs10; font-weight: 700; color: holdpkg-active ? Cat.yellow : Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
+                                            hp-tog-lbl := Text { text: holdpkg-active ? @tr("Active") : @tr("Inactive"); font-size: Cat.fs10; font-weight: 700; color: holdpkg-active ? Cat.yellow : Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
                                             hp-tog := TouchArea {
                                                 mouse-cursor: pointer;
                                                 clicked => {
@@ -4172,15 +4192,15 @@ export component MainWindow inherits Window {
                                         }
                                         if holdpkg-edit-text == "" && !hp-ti.has-focus: Text {
                                             x: 8px; y: 0; width: parent.width - 16px; height: 100%;
-                                            text: "Packages (space-separated)";
+                                            text: @tr("Packages (space-separated)");
                                             font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center;
                                         }
                                     }
                                     Rectangle {
-                                        width: 52px; height: 25px; border-radius: 6px;
+                                        width: hp-save-lbl.preferred-width + 24px; height: 25px; border-radius: 6px;
                                         background: hp-save.has-hover ? Cat.yellow.with-alpha(0.85) : Cat.yellow;
                                         animate background { duration: 70ms; }
-                                        Text { text: "Save"; font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                        hp-save-lbl := Text { text: @tr("Save"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
                                         hp-save := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { holdpkg-value = holdpkg-edit-text; root.save-holdpkg(true, holdpkg-edit-text); }
@@ -4193,7 +4213,7 @@ export component MainWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "REPO MANAGER"; }
+                        SectionLabel { section-title: @tr("REPO MANAGER"); }
 
                         HorizontalLayout {
                             spacing: 8px;
@@ -4222,12 +4242,12 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                     Text {
-                                        text: "Enable / Disable";
+                                        text: @tr("Enable / Disable");
                                         font-size: Cat.fs12; font-weight: 600;
                                         color: Cat.text; horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Toggle repos on/off";
+                                        text: @tr("Toggle repos on/off");
                                         font-size: Cat.fs10;
                                         color: Cat.subtext0; horizontal-alignment: center;
                                     }
@@ -4267,12 +4287,12 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                     Text {
-                                        text: "pacman Options";
+                                        text: @tr("pacman Options");
                                         font-size: Cat.fs12; font-weight: 600;
                                         color: Cat.text; horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Configure pacman.conf flags";
+                                        text: @tr("Configure pacman.conf flags");
                                         font-size: Cat.fs10;
                                         color: Cat.subtext0; horizontal-alignment: center;
                                     }
@@ -4311,12 +4331,12 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                     Text {
-                                        text: "Edit pacman.conf";
+                                        text: @tr("Edit pacman.conf");
                                         font-size: Cat.fs12; font-weight: 600;
                                         color: Cat.text; horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Advanced manual edit (Terminal)";
+                                        text: @tr("Advanced manual edit (Terminal)");
                                         font-size: Cat.fs10;
                                         color: Cat.subtext0; horizontal-alignment: center;
                                     }
@@ -4333,7 +4353,7 @@ export component MainWindow inherits Window {
                     // ── FIRMWARE UPDATES ──────────────────────────────────────
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "FIRMWARE UPDATES"; }
+                        SectionLabel { section-title: @tr("FIRMWARE UPDATES"); }
 
                         Rectangle {
                             height: 44px;
@@ -4353,7 +4373,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: "Firmware Updates";
+                                    text: @tr("Firmware Updates");
                                     font-size: Cat.fs14; font-weight: 500;
                                     color: Cat.text;
                                     vertical-alignment: center;
@@ -4396,7 +4416,7 @@ export component MainWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "ABOUT"; }
+                        SectionLabel { section-title: @tr("ABOUT"); }
 
                         // ── Geeky about card ──────────────────────────────────
                         Rectangle {
@@ -4425,7 +4445,7 @@ export component MainWindow inherits Window {
                                         }
 
                                         Text {
-                                            text: "xpm  —  about";
+                                            text: @tr("xpm  —  about");
                                             font-size: Cat.fs12; font-family: "monospace";
                                             color: Cat.overlay0;
                                             horizontal-alignment: center;
@@ -4450,17 +4470,17 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         spacing: 2px;
                                         Text {
-                                            text: "XeroLinux Package Manager";
+                                            text: @tr("XeroLinux Package Manager");
                                             font-size: Cat.fs13; font-family: "monospace"; font-weight: 700;
                                             color: Cat.text; horizontal-alignment: center;
                                         }
                                         Text {
-                                            text: "Rust + Slint  /  pacman + flatpak";
+                                            text: @tr("Rust + Slint  /  pacman + flatpak");
                                             font-size: Cat.fs10; font-family: "monospace";
                                             color: Cat.overlay1; horizontal-alignment: center;
                                         }
                                         Text {
-                                            text: "\u{25A0} " + stats.pacman-count + " pacman   \u{25A0} " + stats.flatpak-count + " flatpak   \u{25A0} " + stats.orphan-count + " orphans";
+                                            text: "\u{25A0} " + stats.pacman-count + " " + @tr("pacman") + "   \u{25A0} " + stats.flatpak-count + " " + @tr("flatpak") + "   \u{25A0} " + stats.orphan-count + " " + @tr("orphans");
                                             font-size: Cat.fs11; font-family: "monospace";
                                             color: Cat.mauve.with-alpha(0.65); horizontal-alignment: center;
                                         }
@@ -4486,7 +4506,7 @@ export component MainWindow inherits Window {
                                                         icon-color: Cat.text; width: 12px; height: 12px;
                                                     }
                                                 }
-                                                Text { text: "GitHub"; font-size: Cat.fs11; font-weight: 600; color: Cat.text; vertical-alignment: center; }
+                                                Text { text: @tr("GitHub"); font-size: Cat.fs11; font-weight: 600; color: Cat.text; vertical-alignment: center; }
                                             }
                                             gh-ta := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://github.com/xerolinux"); } }
                                         }
@@ -4500,7 +4520,7 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 alignment: center; spacing: 5px;
                                                 Text { text: "☕"; font-size: Cat.fs12; vertical-alignment: center; }
-                                                Text { text: "Ko-Fi"; font-size: Cat.fs11; font-weight: 700; color: #ff5e5b; vertical-alignment: center; }
+                                                Text { text: @tr("Ko-Fi"); font-size: Cat.fs11; font-weight: 700; color: #ff5e5b; vertical-alignment: center; }
                                             }
                                             kofi-ta2 := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://ko-fi.com/xerolinux"); } }
                                         }
@@ -4519,7 +4539,7 @@ export component MainWindow inherits Window {
                                                         icon-color: #5865f2; width: 12px; height: 12px;
                                                     }
                                                 }
-                                                Text { text: "Discord"; font-size: Cat.fs11; font-weight: 700; color: #5865f2; vertical-alignment: center; }
+                                                Text { text: @tr("Discord"); font-size: Cat.fs11; font-weight: 700; color: #5865f2; vertical-alignment: center; }
                                             }
                                             disc-ta := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://discord.gg/5sqxTSuKZu"); } }
                                         }
@@ -4564,7 +4584,7 @@ export component MainWindow inherits Window {
                                     HorizontalLayout {
                                         alignment: center; spacing: 6px;
                                         NavIcon { d: "M19 12H5M12 19l-7-7 7-7"; icon-color: Cat.subtext0; width: 14px; height: 14px; }
-                                        Text { text: "Back"; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; }
+                                        Text { text: @tr("Back"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; }
                                     }
                                 }
                                 dt-back-ta := TouchArea { mouse-cursor: pointer; clicked => { view = 7; repos-view = 1; } }
@@ -4638,22 +4658,22 @@ export component MainWindow inherits Window {
                         padding-left: 14px; spacing: 0px;
 
                         Rectangle {
-                            width: 130px; height: 40px;
+                            width: dt-tab0-lbl.preferred-width + 28px; height: 40px;
                             background: transparent;
                             VerticalLayout {
                                 alignment: center;
-                                Text { text: "Depends On"; font-size: Cat.fs13; font-weight: dep-tree-tab == 0 ? 700 : 400; color: dep-tree-tab == 0 ? Cat.blue : Cat.overlay1; horizontal-alignment: center; }
+                                dt-tab0-lbl := Text { text: @tr("Depends On"); font-size: Cat.fs13; font-weight: dep-tree-tab == 0 ? 700 : 400; color: dep-tree-tab == 0 ? Cat.blue : Cat.overlay1; horizontal-alignment: center; }
                             }
                             if dep-tree-tab == 0: Rectangle { y: parent.height - 2px; height: 2px; background: Cat.blue; }
                             dt-tab0 := TouchArea { clicked => { dep-tree-tab = 0; } }
                         }
 
                         Rectangle {
-                            width: 130px; height: 40px;
+                            width: dt-tab1-lbl.preferred-width + 28px; height: 40px;
                             background: transparent;
                             VerticalLayout {
                                 alignment: center;
-                                Text { text: "Required By"; font-size: Cat.fs13; font-weight: dep-tree-tab == 1 ? 700 : 400; color: dep-tree-tab == 1 ? Cat.green : Cat.overlay1; horizontal-alignment: center; }
+                                dt-tab1-lbl := Text { text: @tr("Required By"); font-size: Cat.fs13; font-weight: dep-tree-tab == 1 ? 700 : 400; color: dep-tree-tab == 1 ? Cat.green : Cat.overlay1; horizontal-alignment: center; }
                             }
                             if dep-tree-tab == 1: Rectangle { y: parent.height - 2px; height: 2px; background: Cat.green; }
                             dt-tab1 := TouchArea { clicked => { dep-tree-tab = 1; } }
@@ -4675,9 +4695,9 @@ export component MainWindow inherits Window {
                             alignment: center;
                             HorizontalLayout {
                                 spacing: 16px;
-                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.green; } } Text { text: "installed"; font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
-                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.red; } } Text { text: "missing"; font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
-                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.peach; } } Text { text: "optional"; font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
+                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.green; } } Text { text: @tr("installed"); font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
+                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.red; } } Text { text: @tr("missing"); font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
+                                HorizontalLayout { spacing: 5px; VerticalLayout { alignment: center; Rectangle { width: 7px; height: 7px; border-radius: 3px; background: Cat.peach; } } Text { text: @tr("optional"); font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; } }
                             }
                         }
                     }
@@ -4688,7 +4708,7 @@ export component MainWindow inherits Window {
                 // ── Loading ──────────────────────────────────────────────────
                 if dep-tree-loading: Rectangle {
                     vertical-stretch: 1;
-                    Text { text: "Resolving…"; horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs13; }
+                    Text { text: @tr("Resolving…"); horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs13; }
                 }
 
                 // ── Depends On tab ───────────────────────────────────────────
@@ -4698,7 +4718,7 @@ export component MainWindow inherits Window {
                     // ── Dependency tree list ──────────────────────────────────
                     if dep-tree-nodes.length == 0: Rectangle {
                         vertical-stretch: 1;
-                        Text { text: "No dependencies found."; horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs14; }
+                        Text { text: @tr("No dependencies found."); horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs14; }
                     }
 
                     if dep-tree-nodes.length > 0: ListView {
@@ -4722,7 +4742,7 @@ export component MainWindow inherits Window {
                                 }
                                 VerticalLayout {
                                     alignment: center;
-                                    Text { text: "Optional Dependencies"; font-size: Cat.fs14; font-weight: 700; color: Cat.peach.with-alpha(0.7); }
+                                    Text { text: @tr("Optional Dependencies"); font-size: Cat.fs14; font-weight: 700; color: Cat.peach.with-alpha(0.7); }
                                 }
                                 VerticalLayout {
                                     alignment: center;
@@ -4781,7 +4801,7 @@ export component MainWindow inherits Window {
                                             Rectangle {
                                                 width: 34px; height: 16px; border-radius: 4px;
                                                 background: Cat.blue.with-alpha(0.12);
-                                                Text { text: "hard"; font-size: Cat.fs13; font-weight: 700; color: Cat.blue.with-alpha(0.8); horizontal-alignment: center; vertical-alignment: center; }
+                                                Text { text: @tr("hard"); font-size: Cat.fs13; font-weight: 700; color: Cat.blue.with-alpha(0.8); horizontal-alignment: center; vertical-alignment: center; }
                                             }
                                         }
                                     }
@@ -4792,14 +4812,14 @@ export component MainWindow inherits Window {
                                     alignment: center; width: 80px;
                                     
                                     if node.installable && !node.installed: dt-install-btn := Rectangle {
-                                        width: 76px; height: 24px;
+                                        width: dt-inst-lbl.preferred-width + 20px; height: 24px;
                                         border-radius: 6px;
                                         background: dt-install-ta.has-hover ? Cat.green.with-alpha(0.25) : Cat.green.with-alpha(0.12);
                                         border-width: 1px;
                                         border-color: dt-install-ta.has-hover ? Cat.green.with-alpha(0.6) : Cat.green.with-alpha(0.3);
                                         animate background, border-color { duration: 80ms; }
-                                        Text {
-                                            text: "Install";
+                                        dt-inst-lbl := Text {
+                                            text: @tr("Install");
                                             font-size: Cat.fs12; font-weight: 700;
                                             color: Cat.green;
                                             horizontal-alignment: center; vertical-alignment: center;
@@ -4845,8 +4865,8 @@ export component MainWindow inherits Window {
                         VerticalLayout {
                             alignment: center; spacing: 10px;
                             NavIcon { d: icon-package; icon-color: Cat.green; width: 32px; height: 29px; }
-                            Text { text: "Nothing depends on " + dep-tree-pkg; font-size: Cat.fs15; font-weight: 600; color: Cat.text; horizontal-alignment: center; }
-                            Text { text: "This package can be safely removed without breaking other packages."; font-size: Cat.fs13; color: Cat.overlay1; horizontal-alignment: center; }
+                            Text { text: @tr("Nothing depends on {0}", dep-tree-pkg); font-size: Cat.fs15; font-weight: 600; color: Cat.text; horizontal-alignment: center; }
+                            Text { text: @tr("This package can be safely removed without breaking other packages."); font-size: Cat.fs13; color: Cat.overlay1; horizontal-alignment: center; }
                         }
                     }
 
@@ -4868,7 +4888,7 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center; horizontal-stretch: 1;
                                         Text { text: dep-tree-pkg + " is required by " + dep-reqby-nodes.length + " installed packages"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                        Text { text: "Removing it may break these packages"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Removing it may break these packages"); font-size: Cat.fs14; color: Cat.overlay1; }
                                     }
                                 }
                             }
@@ -4948,7 +4968,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: center; spacing: 6px;
                                             NavIcon { d: "M19 12H5M12 19l-7-7 7-7"; icon-color: Cat.subtext0; width: 14px; height: 14px; }
-                                            Text { text: "Settings"; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; }
+                                            Text { text: @tr("Settings"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; }
                                         }
                                     }
                                     fw15-back-ta := TouchArea { mouse-cursor: pointer; clicked => { view = 5; } }
@@ -4976,7 +4996,7 @@ export component MainWindow inherits Window {
 
                                     VerticalLayout {
                                         alignment: center; horizontal-stretch: 1; spacing: 2px;
-                                        Text { text: "Firmware Updates"; font-size: Cat.fs16; font-weight: 700; color: Cat.blue; }
+                                        Text { text: @tr("Firmware Updates"); font-size: Cat.fs16; font-weight: 700; color: Cat.blue; }
                                         Text {
                                             text: firmware-detecting ? "Detecting devices…"
                                                 : (firmware-detected-count < 0 ? "Detecting devices…"
@@ -4989,7 +5009,7 @@ export component MainWindow inherits Window {
                                     // Check for Updates button
                                     VerticalLayout { alignment: center;
                                         Rectangle {
-                                            width: 150px; height: 30px; border-radius: 7px;
+                                            width: fw-check-lbl.preferred-width + 42px; height: 30px; border-radius: 7px;
                                             background: fw15-check-ta.has-hover
                                                 ? Cat.mauve.with-alpha(0.22) : Cat.mauve.with-alpha(0.12);
                                             border-width: 1px;
@@ -5007,8 +5027,8 @@ export component MainWindow inherits Window {
                                                 if !firmware-loading: VerticalLayout { alignment: center;
                                                     NavIcon { d: icon-search; icon-color: Cat.mauve; width: 12px; height: 12px; }
                                                 }
-                                                Text {
-                                                    text: firmware-loading ? "Checking…" : "Check for Updates";
+                                                fw-check-lbl := Text {
+                                                    text: firmware-loading ? @tr("Checking…") : @tr("Check for Updates");
                                                     font-size: Cat.fs12; font-weight: 600;
                                                     color: Cat.mauve;
                                                     vertical-alignment: center;
@@ -5050,7 +5070,7 @@ export component MainWindow inherits Window {
                                     NavIcon { d: icon-alert-triangle; icon-color: Cat.yellow; width: 13px; height: 13px; }
                                 }
                                 Text {
-                                    text: "Use at your own risk — if it ain't broke, don't mess with it. Firmware updates can brick hardware.";
+                                    text: @tr("Use at your own risk — if it ain't broke, don't mess with it. Firmware updates can brick hardware.");
                                     font-size: Cat.fs11; color: Cat.yellow;
                                     vertical-alignment: center;
                                     overflow: elide;
@@ -5064,15 +5084,15 @@ export component MainWindow inherits Window {
                         vertical-stretch: 1;
                         alignment: center; spacing: 12px;
                         Spinner { width: 28px; height: 28px; indeterminate: true; }
-                        Text { text: "Detecting firmware devices…"; font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; }
+                        Text { text: @tr("Detecting firmware devices…"); font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; }
                     }
 
                     if !firmware-detecting && firmware-detected-count == 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center; spacing: 10px;
                         NavIcon { d: icon-chip; icon-color: Cat.overlay0; width: 36px; height: 36px; }
-                        Text { text: "No supported firmware devices found"; font-size: Cat.fs15; font-weight: 600; color: Cat.text; horizontal-alignment: center; }
-                        Text { text: "fwupd could not detect any updatable hardware on this system."; font-size: Cat.fs13; color: Cat.overlay1; horizontal-alignment: center; }
+                        Text { text: @tr("No supported firmware devices found"); font-size: Cat.fs15; font-weight: 600; color: Cat.text; horizontal-alignment: center; }
+                        Text { text: @tr("fwupd could not detect any updatable hardware on this system."); font-size: Cat.fs13; color: Cat.overlay1; horizontal-alignment: center; }
                     }
 
                     if !firmware-detecting && firmware-detected-count > 0: ScrollView {
@@ -5159,7 +5179,7 @@ export component MainWindow inherits Window {
                                                 alignment: center; spacing: 6px;
                                                 NavIcon { d: icon-zap; icon-color: Cat.green; width: 12px; height: 12px; }
                                                 Text {
-                                                    text: "Update";
+                                                    text: @tr("Update");
                                                     font-size: Cat.fs13; font-weight: 700;
                                                     color: Cat.green;
                                                     vertical-alignment: center;
@@ -5189,13 +5209,13 @@ export component MainWindow inherits Window {
                     alignment: center;
                     spacing: 14px;
                     HorizontalLayout { alignment: center; Spinner { indeterminate: true; width: 28px; height: 28px; } }
-                    Text { text: "Fetching Arch news..."; font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                    Text { text: @tr("Fetching Arch news..."); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
                 }
 
                 if !arch-news-loading && arch-news-items.length == 0: VerticalLayout {
                     vertical-stretch: 1;
                     alignment: center;
-                    Text { text: "No news loaded. Press Refresh."; font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                    Text { text: @tr("No news loaded. Press Refresh."); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
                 }
 
                 if arch-news-items.length > 0: ScrollView {
@@ -5257,7 +5277,7 @@ export component MainWindow inherits Window {
                                         border-color: Cat.blue.with-alpha(0.3);
                                         animate background { duration: 60ms; }
                                         news-link-lbl := Text {
-                                            text: "Read more";
+                                            text: @tr("Read more");
                                             font-size: Cat.fs12; font-weight: 600;
                                             color: Cat.blue;
                                             horizontal-alignment: center;
@@ -5301,14 +5321,14 @@ export component MainWindow inherits Window {
 
                         VerticalLayout {
                             horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: "Troubleshooting"; font-size: Cat.fs16; font-weight: 800; color: Cat.green; }
-                            Text { text: "System & Pacman diagnostics — repair tools for common issues"; font-size: Cat.fs14; color: Cat.overlay1; }
+                            Text { text: @tr("Troubleshooting"); font-size: Cat.fs16; font-weight: 800; color: Cat.green; }
+                            Text { text: @tr("System & Pacman diagnostics — repair tools for common issues"); font-size: Cat.fs14; color: Cat.overlay1; }
                         }
 
                         VerticalLayout {
                             alignment: center; spacing: 3px;
                             Rectangle { width: 7px; height: 7px; border-radius: 4px; background: Cat.green; }
-                            Text { text: "READY"; font-size: Cat.fs9; font-weight: 700; color: Cat.green.with-alpha(0.6); horizontal-alignment: center; }
+                            Text { text: @tr("READY"); font-size: Cat.fs9; font-weight: 700; color: Cat.green.with-alpha(0.6); horizontal-alignment: center; }
                         }
                     }
                 }
@@ -5321,7 +5341,7 @@ export component MainWindow inherits Window {
                     HorizontalLayout {
                         padding-left: 16px; padding-right: 16px; spacing: 6px; alignment: center;
                         Text { text: "⚠"; font-size: Cat.fs16; color: Cat.peach; vertical-alignment: center; }
-                        Text { text: "Use at your own risk — these operations modify system files and may require a reboot."; font-size: Cat.fs13; color: Cat.peach.with-alpha(0.85); vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: @tr("Use at your own risk — these operations modify system files and may require a reboot."); font-size: Cat.fs13; color: Cat.peach.with-alpha(0.85); vertical-alignment: center; horizontal-stretch: 1; }
                     }
                 }
 
@@ -5424,7 +5444,7 @@ export component MainWindow inherits Window {
                     HorizontalLayout {
                         spacing: 8px;
                         Rectangle { width: 3px; border-radius: 2px; background: Cat.green; }
-                        Text { text: "SYSTEM"; font-size: Cat.fs10; font-weight: 800; color: Cat.green; letter-spacing: 1.2px; vertical-alignment: center; }
+                        Text { text: @tr("SYSTEM"); font-size: Cat.fs10; font-weight: 800; color: Cat.green; letter-spacing: 1.2px; vertical-alignment: center; }
                         Rectangle { height: 1px; horizontal-stretch: 1; background: Cat.green.with-alpha(0.2); y: parent.height / 2; }
                     }
 
@@ -5445,12 +5465,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.mauve.with-alpha(0.12); border-width: 1px; border-color: Cat.mauve.with-alpha(0.25);
                                             NavIcon { d: icon-cpu; icon-color: Cat.mauve; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Rebuild InitRamFS"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Regenerate initramfs images via mkinitcpio"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Rebuild InitRamFS"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Regenerate initramfs images via mkinitcpio"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ mkinitcpio -P"; font-size: Cat.fs13; color: Cat.mauve.with-alpha(0.7); } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: ini-btn.has-hover ? Cat.mauve.with-alpha(0.25) : Cat.mauve.with-alpha(0.1); border-width: 1px; border-color: Cat.mauve.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; vertical-alignment: center; }
                                             ini-btn := TouchArea { mouse-cursor: pointer; clicked => { root.rebuild-initramfs(); } } } }
                                 }
                             }
@@ -5469,12 +5489,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.yellow.with-alpha(0.12); border-width: 1px; border-color: Cat.yellow.with-alpha(0.25);
                                             NavIcon { d: icon-refresh; icon-color: Cat.yellow; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Fix GnuPG Keyring"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Reset and repopulate pacman keys"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Fix GnuPG Keyring"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Reset and repopulate pacman keys"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ pacman-key --init && pacman-key --populate"; font-size: Cat.fs13; color: Cat.yellow.with-alpha(0.7); overflow: elide; } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: key-btn.has-hover ? Cat.yellow.with-alpha(0.25) : Cat.yellow.with-alpha(0.1); border-width: 1px; border-color: Cat.yellow.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.yellow; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.yellow; horizontal-alignment: center; vertical-alignment: center; }
                                             key-btn := TouchArea { mouse-cursor: pointer; clicked => { root.fix-keyring(); } } } }
                                 }
                             }
@@ -5493,12 +5513,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.peach.with-alpha(0.12); border-width: 1px; border-color: Cat.peach.with-alpha(0.25);
                                             NavIcon { d: icon-chip; icon-color: Cat.peach; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Rebuild Grub"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Regenerate GRUB bootloader config"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Rebuild Grub"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Regenerate GRUB bootloader config"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ update-grub"; font-size: Cat.fs13; color: Cat.peach.with-alpha(0.7); } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: grb-btn.has-hover ? Cat.peach.with-alpha(0.25) : Cat.peach.with-alpha(0.1); border-width: 1px; border-color: Cat.peach.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.peach; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.peach; horizontal-alignment: center; vertical-alignment: center; }
                                             grb-btn := TouchArea { mouse-cursor: pointer; clicked => { root.rebuild-grub(); } } } }
                                 }
                             }
@@ -5517,12 +5537,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.red.with-alpha(0.12); border-width: 1px; border-color: Cat.red.with-alpha(0.25);
                                             NavIcon { d: icon-trash; icon-color: Cat.red; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Orphan Manager"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Review and remove orphaned packages"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Orphan Manager"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Review and remove orphaned packages"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: stats.orphan-count + " orphaned package(s) found"; font-size: Cat.fs13; color: stats.orphan-count > 0 ? Cat.red.with-alpha(0.8) : Cat.overlay0; } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: orp-ts-btn.has-hover ? Cat.red.with-alpha(0.25) : Cat.red.with-alpha(0.1); border-width: 1px; border-color: Cat.red.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
                                             orp-ts-btn := TouchArea { mouse-cursor: pointer; clicked => { root.load-orphan-list(); root.show-orphan-dialog = true; } } } }
                                 }
                             }
@@ -5533,7 +5553,7 @@ export component MainWindow inherits Window {
                     HorizontalLayout {
                         spacing: 8px;
                         Rectangle { width: 3px; border-radius: 2px; background: Cat.blue; }
-                        Text { text: "PACMAN"; font-size: Cat.fs10; font-weight: 800; color: Cat.blue; letter-spacing: 1.2px; vertical-alignment: center; }
+                        Text { text: @tr("PACMAN"); font-size: Cat.fs10; font-weight: 800; color: Cat.blue; letter-spacing: 1.2px; vertical-alignment: center; }
                         Rectangle { height: 1px; horizontal-stretch: 1; background: Cat.blue.with-alpha(0.2); y: parent.height / 2; }
                     }
 
@@ -5554,12 +5574,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.sapphire.with-alpha(0.12); border-width: 1px; border-color: Cat.sapphire.with-alpha(0.25);
                                             NavIcon { d: icon-file; icon-color: Cat.sapphire; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Export Package List"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Save explicitly installed packages to a file"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Export Package List"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Save explicitly installed packages to a file"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ pacman -Qqe > packages.txt"; font-size: Cat.fs13; color: Cat.sapphire.with-alpha(0.7); } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: exp-btn.has-hover ? Cat.sapphire.with-alpha(0.25) : Cat.sapphire.with-alpha(0.1); border-width: 1px; border-color: Cat.sapphire.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.sapphire; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.sapphire; horizontal-alignment: center; vertical-alignment: center; }
                                             exp-btn := TouchArea { mouse-cursor: pointer; clicked => { root.export-package-list(); } } } }
                                 }
                             }
@@ -5578,12 +5598,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.green.with-alpha(0.12); border-width: 1px; border-color: Cat.green.with-alpha(0.25);
                                             NavIcon { d: icon-folder; icon-color: Cat.green; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Import Package List"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Install packages from an exported list file"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Import Package List"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Install packages from an exported list file"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ pacman -S --needed $(cat packages.txt)"; font-size: Cat.fs13; color: Cat.green.with-alpha(0.7); overflow: elide; } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: imp-btn.has-hover ? Cat.green.with-alpha(0.25) : Cat.green.with-alpha(0.1); border-width: 1px; border-color: Cat.green.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.green; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.green; horizontal-alignment: center; vertical-alignment: center; }
                                             imp-btn := TouchArea { mouse-cursor: pointer; clicked => { root.import-package-list(); } } } }
                                 }
                             }
@@ -5602,12 +5622,12 @@ export component MainWindow inherits Window {
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.red.with-alpha(0.12); border-width: 1px; border-color: Cat.red.with-alpha(0.25);
                                             NavIcon { d: icon-lock; icon-color: Cat.red; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: "Unlock Database"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: "Remove stale pacman DB lock file"; font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("Unlock Database"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Remove stale pacman DB lock file"); font-size: Cat.fs14; color: Cat.overlay1; }
                                         Text { text: "$ rm /var/lib/pacman/db.lck"; font-size: Cat.fs13; color: Cat.red.with-alpha(0.7); } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 58px; height: 26px; border-radius: 6px; background: ulk-btn.has-hover ? Cat.red.with-alpha(0.3) : Cat.red.with-alpha(0.12); border-width: 1px; border-color: Cat.red.with-alpha(0.4); animate background { duration: 70ms; }
-                                            Text { text: "▶  RUN"; font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
                                             ulk-btn := TouchArea { mouse-cursor: pointer; clicked => { root.show-unlock-db-confirm = true; } } } }
                                 }
                             }
@@ -5637,7 +5657,7 @@ export component MainWindow inherits Window {
                                             Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.peach.with-alpha(0.12); border-width: 1px; border-color: Cat.peach.with-alpha(0.25);
                                                 NavIcon { d: icon-chip; icon-color: Cat.peach; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                         VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                            Text { text: "IgnorePkg"; font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                            Text { text: @tr("IgnorePkg"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
                                             Text {
                                                 text: ignorepkg-active
                                                     ? (ignorepkg-value == "" ? "Active — no packages set" : "Active: " + ignorepkg-value)
@@ -5646,18 +5666,18 @@ export component MainWindow inherits Window {
                                                 color: ignorepkg-active ? Cat.peach : Cat.overlay1;
                                                 overflow: elide;
                                             }
-                                            Text { text: "# /etc/pacman.conf IgnorePkg"; font-size: Cat.fs13; color: Cat.peach.with-alpha(0.6); }
+                                            Text { text: @tr("# /etc/pacman.conf IgnorePkg"); font-size: Cat.fs13; color: Cat.peach.with-alpha(0.6); }
                                         }
                                         VerticalLayout { alignment: center;
                                             Rectangle {
-                                                width: 70px; height: 26px; border-radius: 6px;
+                                                width: ig-tog-lbl.preferred-width + 20px; height: 26px; border-radius: 6px;
                                                 background: ignorepkg-active
                                                     ? (ig-tog.has-hover ? Cat.peach.with-alpha(0.3) : Cat.peach.with-alpha(0.18))
                                                     : (ig-tog.has-hover ? Cat.surface1 : Cat.surface0);
                                                 border-width: 1px;
                                                 border-color: ignorepkg-active ? Cat.peach.with-alpha(0.5) : Cat.surface1;
                                                 animate background { duration: 80ms; }
-                                                Text { text: ignorepkg-active ? "Active" : "Inactive"; font-size: Cat.fs10; font-weight: 700; color: ignorepkg-active ? Cat.peach : Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
+                                                ig-tog-lbl := Text { text: ignorepkg-active ? @tr("Active") : @tr("Inactive"); font-size: Cat.fs10; font-weight: 700; color: ignorepkg-active ? Cat.peach : Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
                                                 ig-tog := TouchArea {
                                                     mouse-cursor: pointer;
                                                     clicked => {
@@ -5693,15 +5713,15 @@ export component MainWindow inherits Window {
                                             if ignorepkg-edit-text == "" && !ig-ti.has-focus: Text {
                                                 x: 8px; y: 0;
                                                 width: parent.width - 16px; height: 100%;
-                                                text: "Packages (space-separated)";
+                                                text: @tr("Packages (space-separated)");
                                                 font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center;
                                             }
                                         }
                                         Rectangle {
-                                            width: 52px; height: 25px; border-radius: 6px;
+                                            width: ig-save-lbl.preferred-width + 24px; height: 25px; border-radius: 6px;
                                             background: ig-save.has-hover ? Cat.peach.with-alpha(0.85) : Cat.peach;
                                             animate background { duration: 70ms; }
-                                            Text { text: "Save"; font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                            ig-save-lbl := Text { text: @tr("Save"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
                                             ig-save := TouchArea {
                                                 mouse-cursor: pointer;
                                                 clicked => { ignorepkg-value = ignorepkg-edit-text; root.save-ignorepkg(true, ignorepkg-edit-text); }
@@ -5748,7 +5768,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 aur-pill-text := Text {
-                                    text: "A.U.R support disabled for stability purposes. Use the Chaotic-AUR (on XeroLinux) for pre-built packages. Use | paru packagename | in Terminal instead.";
+                                    text: @tr("A.U.R support disabled for stability purposes. Use the Chaotic-AUR (on XeroLinux) for pre-built packages. Use | paru packagename | in Terminal instead.");
                                     font-size: Cat.fs13;
                                     color: Cat.yellow;
                                     vertical-alignment: center;
@@ -5786,7 +5806,7 @@ export component MainWindow inherits Window {
                     // Stat cards
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "SYSTEM OVERVIEW"; }
+                        SectionLabel { section-title: @tr("SYSTEM OVERVIEW"); }
 
                         HorizontalLayout {
                             spacing: 10px;
@@ -5812,7 +5832,7 @@ export component MainWindow inherits Window {
                                         horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Pacman Packages";
+                                        text: @tr("Pacman Packages");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay1;
                                         horizontal-alignment: center;
@@ -5841,7 +5861,7 @@ export component MainWindow inherits Window {
                                         horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Flatpak Apps";
+                                        text: @tr("Flatpak Apps");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay1;
                                         horizontal-alignment: center;
@@ -5870,7 +5890,7 @@ export component MainWindow inherits Window {
                                         horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Orphaned";
+                                        text: @tr("Orphaned");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay1;
                                         horizontal-alignment: center;
@@ -5899,7 +5919,7 @@ export component MainWindow inherits Window {
                                         horizontal-alignment: center;
                                     }
                                     Text {
-                                        text: "Updates";
+                                        text: @tr("Updates");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay1;
                                         horizontal-alignment: center;
@@ -5912,7 +5932,7 @@ export component MainWindow inherits Window {
                     // Quick actions
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: "QUICK ACTIONS"; }
+                        SectionLabel { section-title: @tr("QUICK ACTIONS"); }
 
                         HorizontalLayout {
                             spacing: 10px;
@@ -5937,7 +5957,7 @@ export component MainWindow inherits Window {
                                     spacing: 3px;
 
                                     Text {
-                                        text: "Check for Updates";
+                                        text: @tr("Check for Updates");
                                         font-size: Cat.fs14;
                                         font-weight: 600;
                                         color: Cat.mauve;
@@ -5970,7 +5990,7 @@ export component MainWindow inherits Window {
                                     spacing: 3px;
 
                                     Text {
-                                        text: "Clean Cache";
+                                        text: @tr("Clean Cache");
                                         font-size: Cat.fs14;
                                         font-weight: 600;
                                         color: Cat.blue;
@@ -6004,13 +6024,13 @@ export component MainWindow inherits Window {
                                     spacing: 3px;
 
                                     Text {
-                                        text: "Update Mirrorlists";
+                                        text: @tr("Update Mirrorlists");
                                         font-size: Cat.fs14;
                                         font-weight: 600;
                                         color: Cat.teal;
                                     }
                                     Text {
-                                        text: "Re-rank fastest mirrors";
+                                        text: @tr("Re-rank fastest mirrors");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay0;
                                     }
@@ -6023,7 +6043,7 @@ export component MainWindow inherits Window {
                     VerticalLayout {
                         spacing: 8px;
 
-                        SectionLabel { section-title: "SYSTEM"; }
+                        SectionLabel { section-title: @tr("SYSTEM"); }
 
                         // System info terminal card
                         Rectangle {
@@ -6051,7 +6071,7 @@ export component MainWindow inherits Window {
                                         }
 
                                         Text {
-                                            text: "System Info";
+                                            text: @tr("System Info");
                                             font-size: Cat.fs12; font-family: "monospace";
                                             color: Cat.overlay0;
                                             horizontal-alignment: center;
@@ -6073,7 +6093,7 @@ export component MainWindow inherits Window {
                                     // Hostname + distro row
                                     HorizontalLayout {
                                         spacing: 8px;
-                                        Text { text: "HOST"; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                        Text { text: @tr("HOST"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                         Text {
                                             text: sys-info.hostname != "" ? sys-info.hostname : "localhost";
                                             font-size: Cat.fs12; font-weight: 600; font-family: "monospace";
@@ -6102,15 +6122,15 @@ export component MainWindow inherits Window {
                                             horizontal-stretch: 1; spacing: 9px;
 
                                             HorizontalLayout { spacing: 8px;
-                                                Text { text: "OS "; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("OS "); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.kernel; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.teal; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                                             }
                                             HorizontalLayout { spacing: 8px;
-                                                Text { text: "CPU"; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("CPU"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.cpu; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                                             }
                                             HorizontalLayout { spacing: 8px;
-                                                Text { text: "MEM"; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("MEM"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.ram-used + " / " + sys-info.ram-total; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.green; vertical-alignment: center; horizontal-stretch: 1; }
                                             }
                                         }
@@ -6119,15 +6139,15 @@ export component MainWindow inherits Window {
                                             horizontal-stretch: 1; spacing: 9px;
 
                                             HorizontalLayout { spacing: 8px;
-                                                Text { text: "UP "; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("UP "); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.uptime; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.yellow; vertical-alignment: center; horizontal-stretch: 1; }
                                             }
                                             if sys-info.gpu != "": HorizontalLayout { spacing: 8px;
-                                                Text { text: "GPU"; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("GPU"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.gpu; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                                             }
                                             if sys-info.disk-total != "": HorizontalLayout { spacing: 8px;
-                                                Text { text: "DSK"; font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
+                                                Text { text: @tr("DSK"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
                                                 Text { text: sys-info.disk-used + " / " + sys-info.disk-total; font-size: Cat.fs12; font-weight: 500; font-family: "monospace"; color: Cat.sapphire; vertical-alignment: center; horizontal-stretch: 1; }
                                             }
                                         }
@@ -6141,7 +6161,7 @@ export component MainWindow inherits Window {
                     VerticalLayout {
                         spacing: 8px;
 
-                        SectionLabel { section-title: "RECENT ACTIVITY"; }
+                        SectionLabel { section-title: @tr("RECENT ACTIVITY"); }
 
                         VerticalLayout {
                             spacing: 0;
@@ -6151,7 +6171,7 @@ export component MainWindow inherits Window {
                                 border-radius: 8px;
                                 background: Cat.surface0.with-alpha(0.3);
                                 Text {
-                                    text: "No activity found";
+                                    text: @tr("No activity found");
                                     font-size: Cat.fs15;
                                     color: Cat.overlay0;
                                     horizontal-alignment: center;
@@ -6224,6 +6244,8 @@ export component MainWindow inherits Window {
         }
     }
 
+    }
+
     // ── Top-right loading / progress indicator ──────────────────────────────
 
     if selected-count > 0: Rectangle {
@@ -6268,7 +6290,7 @@ export component MainWindow inherits Window {
                     background: fab-clear-touch.has-hover ? Cat.surface1 : transparent;
 
                     Text {
-                        text: "Clear";
+                        text: @tr("Clear");
                         font-size: Cat.fs15;
                         color: Cat.subtext0;
                         horizontal-alignment: center;
@@ -6285,7 +6307,7 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 alignment: center;
                 Btn {
-                    label: "Install";
+                    label: @tr("Install");
                     primary: selected-uninstalled-count > 0;
                     enabled: selected-uninstalled-count > 0;
                     min-width: 60px;
@@ -6299,7 +6321,7 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 alignment: center;
                 Btn {
-                    label: "Remove";
+                    label: @tr("Remove");
                     danger: selected-installed-count > 0;
                     enabled: selected-installed-count > 0;
                     min-width: 64px;
@@ -6349,7 +6371,7 @@ export component MainWindow inherits Window {
                         icon-color: Cat.mauve; width: 20px; height: 20px;
                     }
                     Text {
-                        text: "Add-Ons & Extensions";
+                        text: @tr("Add-Ons & Extensions");
                         font-size: Cat.fs17; font-weight: 700; color: Cat.text;
                         vertical-alignment: center; horizontal-stretch: 1;
                     }
@@ -6402,7 +6424,7 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 10px; padding-right: 10px;
                                 Text {
-                                    text: "Available to Install";
+                                    text: @tr("Available to Install");
                                     font-size: Cat.fs14; font-weight: 700;
                                     color: Cat.subtext0; vertical-alignment: center;
                                     letter-spacing: 0.5px;
@@ -6471,7 +6493,7 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 10px; padding-right: 10px;
                                 Text {
-                                    text: "Already Installed";
+                                    text: @tr("Already Installed");
                                     font-size: Cat.fs14; font-weight: 700;
                                     color: Cat.green; vertical-alignment: center;
                                     letter-spacing: 0.5px;
@@ -6524,7 +6546,7 @@ export component MainWindow inherits Window {
                                         border-width: 1px; border-color: Cat.red.with-alpha(0.3);
                                         animate background { duration: 60ms; }
                                         Text {
-                                            text: "Remove";
+                                            text: @tr("Remove");
                                             font-size: Cat.fs11; font-weight: 600; color: Cat.red;
                                             horizontal-alignment: center; vertical-alignment: center;
                                         }
@@ -6558,7 +6580,7 @@ export component MainWindow inherits Window {
                         width: 80px; height: 31px; border-radius: 8px;
                         background: close-btn-t.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.6);
                         animate background { duration: 60ms; }
-                        Text { text: "Close"; font-size: Cat.fs13; font-weight: 500; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: @tr("Close"); font-size: Cat.fs13; font-weight: 500; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                         close-btn-t := TouchArea {
                             mouse-cursor: pointer;
                             clicked => { root.show-addons-modal = false; root.addon-select-all(false); }
@@ -6570,7 +6592,7 @@ export component MainWindow inherits Window {
                         background: inst-sel-t.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
                         animate background { duration: 60ms; }
                         inst-sel-lbl := Text {
-                            text: "Install " + addon-selected-count + " Add-On" + (addon-selected-count == 1 ? "" : "s");
+                            text: @tr("Install {0} Add-On | Install {0} Add-Ons", addon-selected-count);
                             font-size: Cat.fs13; font-weight: 600; color: Cat.crust;
                             horizontal-alignment: center; vertical-alignment: center;
                         }
@@ -6623,7 +6645,7 @@ export component MainWindow inherits Window {
                         height: 24px;
                     }
                     Text {
-                        text: "Install Local Package";
+                        text: @tr("Install Local Package");
                         font-size: Cat.fs17;
                         font-weight: 600;
                         color: Cat.text;
@@ -6635,10 +6657,10 @@ export component MainWindow inherits Window {
 
                 VerticalLayout {
                     spacing: 8px;
-                    DetailProperty { prop-label: "Name"; prop-value: local-package.display-name != "" ? local-package.display-name : "Unknown"; }
-                    DetailProperty { prop-label: "Version"; prop-value: local-package.version; }
-                    DetailProperty { prop-label: "Size"; prop-value: local-package.installed-size; }
-                    DetailProperty { prop-label: "File"; prop-value: local-package-path; }
+                    DetailProperty { prop-label: @tr("Name"); prop-value: local-package.display-name != "" ? local-package.display-name : "Unknown"; }
+                    DetailProperty { prop-label: @tr("Version"); prop-value: local-package.version; }
+                    DetailProperty { prop-label: @tr("Size"); prop-value: local-package.installed-size; }
+                    DetailProperty { prop-label: @tr("File"); prop-value: local-package-path; }
                 }
 
                 Rectangle { vertical-stretch: 1; }
@@ -6648,12 +6670,12 @@ export component MainWindow inherits Window {
                     alignment: end;
 
                     Btn {
-                        label: "Cancel";
+                        label: @tr("Cancel");
                         clicked => { root.cancel-local-install(); }
                     }
 
                     Btn {
-                        label: "Install";
+                        label: @tr("Install");
                         primary: true;
                         enabled: !busy;
                         clicked => { root.install-local-package(local-package-path); }
@@ -6938,7 +6960,7 @@ export component MainWindow inherits Window {
                         VerticalLayout {
                             alignment: center;
                             Text {
-                                text: "Show Details ↓";
+                                text: @tr("Show Details ↓");
                                 font-size: Cat.fs11;
                                 color: Cat.red.with-alpha(0.7);
                                 vertical-alignment: center;
@@ -7030,7 +7052,7 @@ export component MainWindow inherits Window {
                                 border-color: Cat.green.with-alpha(proceed-ta.has-hover ? 0.6 : 0.3);
                                 animate background { duration: 80ms; }
                                 Text {
-                                    text: "Proceed";
+                                    text: @tr("Proceed");
                                     font-size: Cat.fs12;
                                     font-weight: 700;
                                     color: Cat.green;
@@ -7052,7 +7074,7 @@ export component MainWindow inherits Window {
                                 border-color: Cat.red.with-alpha(cancel-inp-ta.has-hover ? 0.6 : 0.3);
                                 animate background { duration: 80ms; }
                                 Text {
-                                    text: "Cancel";
+                                    text: @tr("Cancel");
                                     font-size: Cat.fs12;
                                     font-weight: 700;
                                     color: Cat.red;
@@ -7109,7 +7131,7 @@ export component MainWindow inherits Window {
                                 x: 10px;
                                 width: parent.width - 20px;
                                 height: parent.height;
-                                text: "Type response and press Enter…";
+                                text: @tr("Type response and press Enter…");
                                 font-size: Cat.fs13;
                                 color: Cat.overlay0;
                                 vertical-alignment: center;
@@ -7143,7 +7165,7 @@ export component MainWindow inherits Window {
                                 animate background { duration: 80ms; }
 
                                 done-reboot-label := Text {
-                                    text: "Reboot System";
+                                    text: @tr("Reboot System");
                                     font-size: Cat.fs14;
                                     font-weight: 600;
                                     color: Cat.peach;
@@ -7168,7 +7190,7 @@ export component MainWindow inherits Window {
                                 animate background { duration: 80ms; }
 
                                 done-close-label := Text {
-                                    text: "Close";
+                                    text: @tr("Close");
                                     font-size: Cat.fs14;
                                     font-weight: 600;
                                     color: Cat.crust;
@@ -7222,8 +7244,8 @@ export component MainWindow inherits Window {
                     }
                     VerticalLayout {
                         alignment: center; horizontal-stretch: 1; spacing: 3px;
-                        Text { text: "Remove " + fp-confirm-name + "?"; font-size: Cat.fs15; font-weight: 700; color: Cat.text; overflow: elide; }
-                        Text { text: "This will uninstall the application from your system."; font-size: Cat.fs13; color: Cat.overlay1; }
+                        Text { text: @tr("Remove {0}?", fp-confirm-name); font-size: Cat.fs15; font-weight: 700; color: Cat.text; overflow: elide; }
+                        Text { text: @tr("This will uninstall the application from your system."); font-size: Cat.fs13; color: Cat.overlay1; }
                     }
                 }
 
@@ -7235,8 +7257,8 @@ export component MainWindow inherits Window {
                         padding-left: 14px; padding-right: 14px;
                         VerticalLayout {
                             alignment: center; horizontal-stretch: 1;
-                            Text { text: "Also remove leftover user data?"; font-size: Cat.fs13; color: Cat.subtext1; }
-                            Text { text: "Saved settings, files, and app data will be deleted."; font-size: Cat.fs14; color: Cat.overlay0; }
+                            Text { text: @tr("Also remove leftover user data?"); font-size: Cat.fs13; color: Cat.subtext1; }
+                            Text { text: @tr("Saved settings, files, and app data will be deleted."); font-size: Cat.fs14; color: Cat.overlay0; }
                         }
                     }
                 }
@@ -7250,7 +7272,7 @@ export component MainWindow inherits Window {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
                         animate background { duration: 60ms; }
-                        VerticalLayout { alignment: center; Text { text: "Cancel"; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; } }
+                        VerticalLayout { alignment: center; Text { text: @tr("Cancel"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; } }
                         fp-cancel-ta := TouchArea { mouse-cursor: pointer; clicked => { root.fp-confirm-open = false; } }
                     }
 
@@ -7259,7 +7281,7 @@ export component MainWindow inherits Window {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-remonly-ta.has-hover ? Cat.red.with-alpha(0.25) : Cat.red.with-alpha(0.14);
                         animate background { duration: 60ms; }
-                        VerticalLayout { alignment: center; Text { text: "Remove Only"; font-size: Cat.fs13; font-weight: 600; color: Cat.red; horizontal-alignment: center; } }
+                        VerticalLayout { alignment: center; Text { text: @tr("Remove Only"); font-size: Cat.fs13; font-weight: 600; color: Cat.red; horizontal-alignment: center; } }
                         fp-remonly-ta := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
@@ -7274,7 +7296,7 @@ export component MainWindow inherits Window {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-remdata-ta.has-hover ? Cat.red.with-alpha(0.5) : Cat.red.with-alpha(0.3);
                         animate background { duration: 60ms; }
-                        VerticalLayout { alignment: center; Text { text: "Remove + Data"; font-size: Cat.fs13; font-weight: 700; color: Cat.red; horizontal-alignment: center; } }
+                        VerticalLayout { alignment: center; Text { text: @tr("Remove + Data"); font-size: Cat.fs13; font-weight: 700; color: Cat.red; horizontal-alignment: center; } }
                         fp-remdata-ta := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
@@ -7345,7 +7367,7 @@ export component MainWindow inherits Window {
                             alignment: center;
                             spacing: 2px;
                             Text {
-                                text: "Remove Orphaned Packages";
+                                text: @tr("Remove Orphaned Packages");
                                 font-size: Cat.fs15;
                                 font-weight: 700;
                                 color: Cat.text;
@@ -7410,14 +7432,14 @@ export component MainWindow inherits Window {
                             alignment: center;
                             spacing: 3px;
                             Text {
-                                text: "DANGER — Read before proceeding";
+                                text: @tr("DANGER — Read before proceeding");
                                 font-size: Cat.fs15;
                                 font-weight: 800;
                                 color: Cat.red;
                                 letter-spacing: 0.5px;
                             }
                             Text {
-                                text: "Orphans are packages no longer required as dependencies. Some may still be needed by manually installed software or config. Removing them can break your system. Review carefully.";
+                                text: @tr("Orphans are packages no longer required as dependencies. Some may still be needed by manually installed software or config. Removing them can break your system. Review carefully.");
                                 font-size: Cat.fs14;
                                 color: Cat.subtext0;
                                 wrap: word-wrap;
@@ -7469,7 +7491,7 @@ export component MainWindow inherits Window {
 
                         Text {
                             horizontal-stretch: 1;
-                            text: "Select / Deselect All";
+                            text: @tr("Select / Deselect All");
                             font-size: Cat.fs15;
                             color: Cat.subtext0;
                             vertical-alignment: center;
@@ -7555,9 +7577,8 @@ export component MainWindow inherits Window {
                             // Tag badge: Explicit / Dep (clickable → shows dep info)
                             VerticalLayout {
                                 alignment: center;
-                                width: 54px;
                                 Rectangle {
-                                    width: 54px;
+                                    width: orphan-tag-lbl.preferred-width + 16px;
                                     height: 18px;
                                     border-radius: 5px;
                                     background: tag-ta.has-hover
@@ -7566,8 +7587,8 @@ export component MainWindow inherits Window {
                                     border-width: 1px;
                                     border-color: pkg.explicit ? Cat.mauve.with-alpha(0.4) : Cat.sapphire.with-alpha(0.4);
                                     animate background { duration: 60ms; }
-                                    Text {
-                                        text: pkg.explicit ? "Explicit" : "Dep";
+                                    orphan-tag-lbl := Text {
+                                        text: pkg.explicit ? @tr("Explicit") : @tr("Dep");
                                         font-size: Cat.fs9;
                                         font-weight: 600;
                                         color: pkg.explicit ? Cat.mauve : Cat.sapphire;
@@ -7669,7 +7690,7 @@ export component MainWindow inherits Window {
                             background: oph-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
                             animate background { duration: 80ms; }
                             Text {
-                                text: "Cancel";
+                                text: @tr("Cancel");
                                 font-size: Cat.fs13;
                                 font-weight: 600;
                                 color: Cat.subtext0;
@@ -7689,7 +7710,7 @@ export component MainWindow inherits Window {
                                 (oph-rm-ta.has-hover ? Cat.red : Cat.red.with-alpha(0.85));
                             animate background { duration: 80ms; }
                             Text {
-                                text: "Remove Selected";
+                                text: @tr("Remove Selected");
                                 font-size: Cat.fs13;
                                 font-weight: 700;
                                 color: Cat.crust;
@@ -7745,7 +7766,7 @@ export component MainWindow inherits Window {
                         }
                         Text {
                             horizontal-stretch: 1;
-                            text: "Unlock Pacman Database";
+                            text: @tr("Unlock Pacman Database");
                             font-size: Cat.fs15; font-weight: 700; color: Cat.text;
                             vertical-alignment: center;
                         }
@@ -7767,7 +7788,7 @@ export component MainWindow inherits Window {
                     padding-left: 24px; padding-right: 24px;
                     spacing: 10px;
                     Text {
-                        text: "Only do this if pacman is NOT running. Removing the lock while pacman is active will corrupt your database.";
+                        text: @tr("Only do this if pacman is NOT running. Removing the lock while pacman is active will corrupt your database.");
                         font-size: Cat.fs12; color: Cat.subtext0;
                         wrap: word-wrap; horizontal-alignment: center;
                     }
@@ -7793,14 +7814,14 @@ export component MainWindow inherits Window {
                             width: 88px; height: 32px; border-radius: 8px;
                             background: ulk-cancel.has-hover ? Cat.surface1 : Cat.surface0;
                             animate background { duration: 80ms; }
-                            Text { text: "Cancel"; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: @tr("Cancel"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                             ulk-cancel := TouchArea { mouse-cursor: pointer; clicked => { root.show-unlock-db-confirm = false; } }
                         }
                         Rectangle {
                             width: 130px; height: 32px; border-radius: 8px;
                             background: ulk-confirm.has-hover ? Cat.red : Cat.red.with-alpha(0.85);
                             animate background { duration: 80ms; }
-                            Text { text: "Unlock DB"; font-size: Cat.fs13; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: @tr("Unlock DB"); font-size: Cat.fs13; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
                             ulk-confirm := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
@@ -7872,7 +7893,7 @@ export component MainWindow inherits Window {
                             spacing: 2px;
 
                             Text {
-                                text: "Conflict Detected";
+                                text: @tr("Conflict Detected");
                                 font-size: Cat.fs16;
                                 font-weight: 700;
                                 color: Cat.text;
@@ -7952,7 +7973,7 @@ export component MainWindow inherits Window {
                             animate background { duration: 80ms; }
 
                             cancel-conf-label := Text {
-                                text: "Cancel";
+                                text: @tr("Cancel");
                                 font-size: Cat.fs13;
                                 font-weight: 500;
                                 color: Cat.text;
@@ -7974,7 +7995,7 @@ export component MainWindow inherits Window {
                             animate background { duration: 80ms; }
 
                             force-label := Text {
-                                text: "Force Overwrite";
+                                text: @tr("Force Overwrite");
                                 font-size: Cat.fs13;
                                 font-weight: 700;
                                 color: Cat.crust;
@@ -8040,13 +8061,13 @@ export component MainWindow inherits Window {
                         alignment: center;
                         spacing: 4px;
                         Text {
-                            text: "⚠  UNSUPPORTED DISTRIBUTION";
+                            text: @tr("⚠  UNSUPPORTED DISTRIBUTION");
                             font-size: Cat.fs16; font-weight: 800;
                             color: Cat.red;
                             letter-spacing: 0.5px;
                         }
                         Text {
-                            text: "xPackageManager is built exclusively for XeroLinux";
+                            text: @tr("xPackageManager is built exclusively for XeroLinux");
                             font-size: Cat.fs11; font-weight: 400;
                             color: #aa7777;
                         }
@@ -8058,7 +8079,7 @@ export component MainWindow inherits Window {
 
                 // Body
                 Text {
-                    text: "This application was built specifically for XeroLinux.\n\nUsing it on any other Arch-based distribution is entirely at your own risk. No support, warranty, or guarantees of any kind are provided. \n\nFunctionality may be incomplete or incorrect on unsupported systems.";
+                    text: @tr("This application was built specifically for XeroLinux.\n\nUsing it on any other Arch-based distribution is entirely at your own risk. No support, warranty, or guarantees of any kind are provided. \n\nFunctionality may be incomplete or incorrect on unsupported systems.");
                     font-size: Cat.fs14;
                     color: #e8c8c8;
                     wrap: word-wrap;
@@ -8106,7 +8127,7 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 alignment: center;
                                 Text {
-                                    text: "Don't show this again";
+                                    text: @tr("Don't show this again");
                                     font-size: Cat.fs13;
                                     color: #aa7777;
                                 }
@@ -8124,7 +8145,7 @@ export component MainWindow inherits Window {
                         border-color: Cat.blue.with-alpha(0.4);
                         animate background { duration: 60ms; }
                         src-lbl := Text {
-                            text: "View Source";
+                            text: @tr("View Source");
                             font-size: Cat.fs13; font-weight: 600;
                             color: Cat.blue;
                             horizontal-alignment: center;
@@ -8146,7 +8167,7 @@ export component MainWindow inherits Window {
                         border-color: Cat.red.with-alpha(0.55);
                         animate background { duration: 60ms; }
                         ack-lbl := Text {
-                            text: "I Understand, Proceed";
+                            text: @tr("I Understand, Proceed");
                             font-size: Cat.fs13; font-weight: 700;
                             color: Cat.red;
                             horizontal-alignment: center;
@@ -8210,7 +8231,7 @@ export component MainWindow inherits Window {
 
                         VerticalLayout {
                             horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: "Enable / Disable Repositories"; font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Enable / Disable Repositories"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
                             Text { text: repo-mgr-list.length + " repositories"; font-size: Cat.fs11; color: Cat.subtext0; }
                         }
 
@@ -8243,7 +8264,7 @@ export component MainWindow inherits Window {
                             }
                         }
                         Text {
-                            text: "After applying changes, run 'sudo pacman -Sy' to sync the updated repo list.";
+                            text: @tr("After applying changes, run 'sudo pacman -Sy' to sync the updated repo list.");
                             font-size: Cat.fs11; color: Cat.blue.with-alpha(0.85);
                             vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1;
                         }
@@ -8302,15 +8323,20 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 alignment: center;
                                 Rectangle {
-                                    width: 62px; height: 20px; border-radius: 5px;
+                                    height: 20px; border-radius: 5px;
                                     background: repo-mgr-enabled[i] ? Cat.green.with-alpha(0.18) : Cat.surface1;
                                     border-width: 1px;
                                     border-color: repo-mgr-enabled[i] ? Cat.green.with-alpha(0.4) : Cat.overlay0.with-alpha(0.3);
-                                    Text {
-                                        text: repo-mgr-enabled[i] ? "Enabled" : "Disabled";
-                                        font-size: Cat.fs9; font-weight: 600;
-                                        color: repo-mgr-enabled[i] ? Cat.green : Cat.overlay1;
-                                        horizontal-alignment: center; vertical-alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: 8px; padding-right: 8px;
+                                        VerticalLayout { alignment: center;
+                                            Text {
+                                                text: repo-mgr-enabled[i] ? @tr("Enabled") : @tr("Disabled");
+                                                font-size: Cat.fs9; font-weight: 600;
+                                                color: repo-mgr-enabled[i] ? Cat.green : Cat.overlay1;
+                                                horizontal-alignment: center; vertical-alignment: center;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -8338,7 +8364,7 @@ export component MainWindow inherits Window {
                                 width: 90px; height: 34px; border-radius: 8px;
                                 background: ren-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
                                 animate background { duration: 80ms; }
-                                Text { text: "Cancel"; font-size: Cat.fs13; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Cancel"); font-size: Cat.fs13; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                                 ren-cancel-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => { root.show-repo-enable-modal = false; }
@@ -8352,7 +8378,7 @@ export component MainWindow inherits Window {
                                 background: ren-apply-ta.has-hover ? Cat.green.with-alpha(0.28) : Cat.green.with-alpha(0.18);
                                 border-width: 1px; border-color: Cat.green.with-alpha(0.5);
                                 animate background { duration: 80ms; }
-                                Text { text: "Apply Changes"; font-size: Cat.fs13; font-weight: 700; color: Cat.green; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Apply Changes"); font-size: Cat.fs13; font-weight: 700; color: Cat.green; horizontal-alignment: center; vertical-alignment: center; }
                                 ren-apply-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -8407,8 +8433,8 @@ export component MainWindow inherits Window {
 
                         VerticalLayout {
                             horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: "Add / Remove Repositories"; font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
-                            Text { text: "Changes are written directly to /etc/pacman.conf"; font-size: Cat.fs11; color: Cat.subtext0; }
+                            Text { text: @tr("Add / Remove Repositories"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Changes are written directly to /etc/pacman.conf"); font-size: Cat.fs11; color: Cat.subtext0; }
                         }
 
                         VerticalLayout {
@@ -8444,7 +8470,7 @@ export component MainWindow inherits Window {
                             }
                         }
                         Text {
-                            text: "Removing a repo permanently deletes its section from /etc/pacman.conf and cannot be undone. NOT intended for repos that use separate keyrings or mirrorlists — use 'Edit pacman.conf' for those.";
+                            text: @tr("Removing a repo permanently deletes its section from /etc/pacman.conf and cannot be undone. NOT intended for repos that use separate keyrings or mirrorlists — use 'Edit pacman.conf' for those.");
                             font-size: Cat.fs11; color: Cat.red.with-alpha(0.9);
                             vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1;
                         }
@@ -8465,7 +8491,7 @@ export component MainWindow inherits Window {
                             alignment: center;
                             horizontal-stretch: 1;
                             Text {
-                                text: "Delete '" + repo-delete-target + "'? This cannot be undone.";
+                                text: @tr("Delete '{0}'? This cannot be undone.", repo-delete-target);
                                 font-size: Cat.fs12; font-weight: 600; color: Cat.red;
                                 overflow: elide;
                             }
@@ -8477,7 +8503,7 @@ export component MainWindow inherits Window {
                                 width: 65px; height: 28px; border-radius: 6px;
                                 background: rdel-no-ta.has-hover ? Cat.surface1 : Cat.surface0;
                                 animate background { duration: 60ms; }
-                                Text { text: "Cancel"; font-size: Cat.fs11; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Cancel"); font-size: Cat.fs11; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                                 rdel-no-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -8495,7 +8521,7 @@ export component MainWindow inherits Window {
                                 background: rdel-yes-ta.has-hover ? Cat.red.with-alpha(0.5) : Cat.red.with-alpha(0.3);
                                 border-width: 1px; border-color: Cat.red.with-alpha(0.6);
                                 animate background { duration: 60ms; }
-                                Text { text: "Delete"; font-size: Cat.fs11; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Delete"); font-size: Cat.fs11; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
                                 rdel-yes-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -8538,15 +8564,20 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 alignment: center;
                                 Rectangle {
-                                    width: 62px; height: 20px; border-radius: 5px;
+                                    height: 20px; border-radius: 5px;
                                     background: repo-mgr-enabled[i] ? Cat.green.with-alpha(0.18) : Cat.surface1;
                                     border-width: 1px;
                                     border-color: repo-mgr-enabled[i] ? Cat.green.with-alpha(0.4) : Cat.overlay0.with-alpha(0.3);
-                                    Text {
-                                        text: repo-mgr-enabled[i] ? "Enabled" : "Disabled";
-                                        font-size: Cat.fs9; font-weight: 600;
-                                        color: repo-mgr-enabled[i] ? Cat.green : Cat.overlay1;
-                                        horizontal-alignment: center; vertical-alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: 8px; padding-right: 8px;
+                                        VerticalLayout { alignment: center;
+                                            Text {
+                                                text: repo-mgr-enabled[i] ? @tr("Enabled") : @tr("Disabled");
+                                                font-size: Cat.fs9; font-weight: 600;
+                                                color: repo-mgr-enabled[i] ? Cat.green : Cat.overlay1;
+                                                horizontal-alignment: center; vertical-alignment: center;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -8558,7 +8589,7 @@ export component MainWindow inherits Window {
                                     background: rm2-del-ta.has-hover ? Cat.red.with-alpha(0.28) : Cat.red.with-alpha(0.12);
                                     border-width: 1px; border-color: Cat.red.with-alpha(0.4);
                                     animate background { duration: 60ms; }
-                                    Text { text: "Remove"; font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: @tr("Remove"); font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
                                     rm2-del-ta := TouchArea {
                                         mouse-cursor: pointer;
                                         clicked => {
@@ -8589,7 +8620,7 @@ export component MainWindow inherits Window {
                         padding-top: 10px; padding-bottom: 10px;
                         spacing: 7px;
 
-                        Text { text: "Add New Repository"; font-size: Cat.fs12; font-weight: 700; color: Cat.subtext0; }
+                        Text { text: @tr("Add New Repository"); font-size: Cat.fs12; font-weight: 700; color: Cat.subtext0; }
 
                         // Row 1: Name + URL
                         HorizontalLayout {
@@ -8608,7 +8639,7 @@ export component MainWindow inherits Window {
                                 }
                                 if new-repo-name-text == "" && !add-name-ti.has-focus: Text {
                                     x: 8px; width: parent.width - 16px; height: parent.height;
-                                    text: "Name (e.g. myrepo)";
+                                    text: @tr("Name (e.g. myrepo)");
                                     font-size: Cat.fs11; color: Cat.overlay0; vertical-alignment: center;
                                 }
                             }
@@ -8626,7 +8657,7 @@ export component MainWindow inherits Window {
                                 }
                                 if new-repo-server-text == "" && !add-srv-ti.has-focus: Text {
                                     x: 8px; width: parent.width - 16px; height: parent.height;
-                                    text: "Server URL or /etc/pacman.d/mirrorfile";
+                                    text: @tr("Server URL or /etc/pacman.d/mirrorfile");
                                     font-size: Cat.fs11; color: Cat.overlay0; vertical-alignment: center;
                                 }
                             }
@@ -8639,7 +8670,7 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 alignment: center; width: 70px;
                                 Text {
-                                    text: "SigLevel =";
+                                    text: @tr("SigLevel =");
                                     font-size: Cat.fs11; color: Cat.overlay1;
                                 }
                             }
@@ -8657,7 +8688,7 @@ export component MainWindow inherits Window {
                                 }
                                 if new-repo-siglevel-text == "" && !add-sig-ti.has-focus: Text {
                                     x: 8px; width: parent.width - 16px; height: parent.height;
-                                    text: "Optional (e.g. Required DatabaseOptional)";
+                                    text: @tr("Optional (e.g. Required DatabaseOptional)");
                                     font-size: Cat.fs11; color: Cat.overlay0; vertical-alignment: center;
                                 }
                             }
@@ -8667,7 +8698,7 @@ export component MainWindow inherits Window {
                                 background: add-repo-ta.has-hover ? Cat.blue.with-alpha(0.35) : Cat.blue.with-alpha(0.2);
                                 border-width: 1px; border-color: Cat.blue.with-alpha(0.5);
                                 animate background { duration: 80ms; }
-                                Text { text: "Add"; font-size: Cat.fs12; font-weight: 700; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Add"); font-size: Cat.fs12; font-weight: 700; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
                                 add-repo-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -8696,7 +8727,7 @@ export component MainWindow inherits Window {
                                 width: 80px; height: 32px; border-radius: 8px;
                                 background: rm2-done-ta.has-hover ? Cat.surface1 : Cat.surface0;
                                 animate background { duration: 80ms; }
-                                Text { text: "Done"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Done"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; horizontal-alignment: center; vertical-alignment: center; }
                                 rm2-done-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -8750,8 +8781,8 @@ export component MainWindow inherits Window {
                         }
                         VerticalLayout {
                             horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: "pacman.conf Options"; font-size: Cat.fs14; font-weight: 700; color: Cat.text; }
-                            Text { text: "Toggle pacman behaviour flags"; font-size: Cat.fs11; color: Cat.subtext0; }
+                            Text { text: @tr("pacman.conf Options"); font-size: Cat.fs14; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Toggle pacman behaviour flags"); font-size: Cat.fs11; color: Cat.subtext0; }
                         }
                     }
                 }
@@ -8770,8 +8801,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "Color"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Colorize pacman output in terminal"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("Color"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Colorize pacman output in terminal"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8803,8 +8834,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "ILoveCandy"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Pac-Man progress bar easter egg"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("ILoveCandy"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Pac-Man progress bar easter egg"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8836,8 +8867,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "VerbosePkgLists"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Show old and new versions in package lists"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("VerbosePkgLists"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Show old and new versions in package lists"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8869,8 +8900,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "DisableDownloadTimeout"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "No timeout on slow mirrors"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("DisableDownloadTimeout"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("No timeout on slow mirrors"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8902,8 +8933,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "CheckSpace"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Verify disk space before installing (recommended)"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("CheckSpace"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Verify disk space before installing (recommended)"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8935,8 +8966,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "DisableSandbox"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Disable download sandbox (use if having issues)"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("DisableSandbox"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Disable download sandbox (use if having issues)"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -8968,8 +8999,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "NoProgressBar"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Suppress progress bar in terminal output"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("NoProgressBar"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Suppress progress bar in terminal output"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -9000,8 +9031,8 @@ export component MainWindow inherits Window {
                             alignment: stretch; spacing: 12px;
                             VerticalLayout {
                                 horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                Text { text: "UseSyslog"; font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
-                                Text { text: "Log pacman operations to syslog"; font-size: Cat.fs11; color: Cat.subtext0; }
+                                Text { text: @tr("UseSyslog"); font-size: Cat.fs13; font-weight: 600; color: Cat.text; }
+                                Text { text: @tr("Log pacman operations to syslog"); font-size: Cat.fs11; color: Cat.subtext0; }
                             }
                             VerticalLayout {
                                 alignment: center;
@@ -9033,8 +9064,8 @@ export component MainWindow inherits Window {
                     Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
                     VerticalLayout {
                         padding: 12px; spacing: 8px;
-                        Text { text: "CleanMethod"; font-size: Cat.fs12; font-weight: 700; color: Cat.subtext0; }
-                        Text { text: "Which cached packages to keep when cleaning cache"; font-size: Cat.fs11; color: Cat.overlay1; }
+                        Text { text: @tr("CleanMethod"); font-size: Cat.fs12; font-weight: 700; color: Cat.subtext0; }
+                        Text { text: @tr("Which cached packages to keep when cleaning cache"); font-size: Cat.fs11; color: Cat.overlay1; }
                         HorizontalLayout {
                             spacing: 8px;
                             Rectangle {
@@ -9043,7 +9074,7 @@ export component MainWindow inherits Window {
                                 border-width: 1px;
                                 border-color: opt-clean-method == 0 ? Cat.teal.with-alpha(0.6) : Cat.surface2;
                                 animate background { duration: 100ms; }
-                                Text { text: "KeepInstalled"; font-size: Cat.fs12; font-weight: 600; color: opt-clean-method == 0 ? Cat.teal : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("KeepInstalled"); font-size: Cat.fs12; font-weight: 600; color: opt-clean-method == 0 ? Cat.teal : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                                 TouchArea { mouse-cursor: pointer; clicked => { root.opt-clean-method = 0; } }
                             }
                             Rectangle {
@@ -9052,7 +9083,7 @@ export component MainWindow inherits Window {
                                 border-width: 1px;
                                 border-color: opt-clean-method == 1 ? Cat.teal.with-alpha(0.6) : Cat.surface2;
                                 animate background { duration: 100ms; }
-                                Text { text: "KeepCurrent"; font-size: Cat.fs12; font-weight: 600; color: opt-clean-method == 1 ? Cat.teal : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("KeepCurrent"); font-size: Cat.fs12; font-weight: 600; color: opt-clean-method == 1 ? Cat.teal : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                                 TouchArea { mouse-cursor: pointer; clicked => { root.opt-clean-method = 1; } }
                             }
                         }
@@ -9071,7 +9102,7 @@ export component MainWindow inherits Window {
                                 width: 80px; height: 32px; border-radius: 8px;
                                 background: opts-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
                                 animate background { duration: 80ms; }
-                                Text { text: "Cancel"; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Cancel"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
                                 opts-cancel-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -9087,7 +9118,7 @@ export component MainWindow inherits Window {
                                 width: 100px; height: 32px; border-radius: 8px;
                                 background: opts-apply-ta.has-hover ? Cat.teal.with-alpha(0.85) : Cat.teal.with-alpha(0.7);
                                 animate background { duration: 80ms; }
-                                Text { text: "Apply"; font-size: Cat.fs13; font-weight: 700; color: Cat.base; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Apply"); font-size: Cat.fs13; font-weight: 700; color: Cat.base; horizontal-alignment: center; vertical-alignment: center; }
                                 opts-apply-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -9142,7 +9173,7 @@ export component MainWindow inherits Window {
                         }
                     }
                     Text {
-                        text: "Package Required";
+                        text: @tr("Package Required");
                         font-size: Cat.fs16;
                         font-weight: 700;
                         color: Cat.yellow;
@@ -9201,13 +9232,13 @@ export component MainWindow inherits Window {
                         padding: 10px;
                         spacing: 3px;
                         Text {
-                            text: "Chaotic-AUR is enabled on this system.";
+                            text: @tr("Chaotic-AUR is enabled on this system.");
                             font-size: Cat.fs11;
                             color: Cat.green.with-alpha(0.85);
                             font-weight: 600;
                         }
                         Text {
-                            text: "Click Install Downgrade below to install it now.";
+                            text: @tr("Click Install Downgrade below to install it now.");
                             font-size: Cat.fs11;
                             color: Cat.subtext0;
                         }
@@ -9226,7 +9257,7 @@ export component MainWindow inherits Window {
                         padding: 10px;
                         spacing: 4px;
                         Text {
-                            text: "Install via your AUR helper:";
+                            text: @tr("Install via your AUR helper:");
                             font-size: Cat.fs11;
                             color: Cat.yellow.with-alpha(0.8);
                             font-weight: 600;
@@ -9256,7 +9287,7 @@ export component MainWindow inherits Window {
                     animate background { duration: 100ms; }
 
                     Text {
-                        text: "Install Downgrade";
+                        text: @tr("Install Downgrade");
                         font-size: Cat.fs13;
                         font-weight: 700;
                         color: Cat.green;
@@ -9310,8 +9341,8 @@ export component MainWindow inherits Window {
                             NavIcon { d: "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z"; icon-color: Cat.teal; width: 20px; height: 20px; }
                         }
                         VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: "Flatpak Remotes"; font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
-                            Text { text: "Add or remove Flatpak remote repositories"; font-size: Cat.fs11; color: Cat.subtext0; }
+                            Text { text: @tr("Flatpak Remotes"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Add or remove Flatpak remote repositories"); font-size: Cat.fs11; color: Cat.subtext0; }
                         }
                         VerticalLayout { alignment: center;
                             Rectangle {
@@ -9342,7 +9373,7 @@ export component MainWindow inherits Window {
                         if !flatpak-mgr-remotes-loading && flatpak-mgr-remotes.length == 0: Rectangle {
                             height: 60px;
                             Text {
-                                text: "No remotes configured";
+                                text: @tr("No remotes configured");
                                 font-size: Cat.fs13; color: Cat.overlay0;
                                 horizontal-alignment: center; vertical-alignment: center;
                                 width: 100%; height: 100%;
@@ -9394,7 +9425,7 @@ export component MainWindow inherits Window {
                     VerticalLayout {
                         padding: 12px; spacing: 8px;
 
-                        Text { text: "Add Remote"; font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
+                        Text { text: @tr("Add Remote"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
 
                         HorizontalLayout {
                             spacing: 6px;
@@ -9404,7 +9435,7 @@ export component MainWindow inherits Window {
                                 background: Cat.surface1;
                                 border-width: fr-name-in.has-focus ? 1px : 0px; border-color: Cat.teal.with-alpha(0.5);
                                 clip: true;
-                                if new-remote-name == "" && !fr-name-in.has-focus: Text { x: 8px; height: 100%; text: "Name"; font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                                if new-remote-name == "" && !fr-name-in.has-focus: Text { x: 8px; height: 100%; text: @tr("Name"); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
                                 fr-name-in := TextInput {
                                     x: 8px; width: parent.width - 16px; height: 100%;
                                     text <=> new-remote-name; font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
@@ -9417,7 +9448,7 @@ export component MainWindow inherits Window {
                                 background: Cat.surface1;
                                 border-width: fr-url-in.has-focus ? 1px : 0px; border-color: Cat.teal.with-alpha(0.5);
                                 clip: true;
-                                if new-remote-url == "" && !fr-url-in.has-focus: Text { x: 8px; height: 100%; text: "URL (https://...)"; font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                                if new-remote-url == "" && !fr-url-in.has-focus: Text { x: 8px; height: 100%; text: @tr("URL (https://...)"); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
                                 fr-url-in := TextInput {
                                     x: 8px; width: parent.width - 16px; height: 100%;
                                     text <=> new-remote-url; font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
@@ -9429,7 +9460,7 @@ export component MainWindow inherits Window {
                                 width: 60px; height: 30px; border-radius: 6px;
                                 background: fr-add-ta.has-hover ? Cat.teal.with-alpha(0.85) : Cat.teal;
                                 animate background { duration: 70ms; }
-                                Text { text: "Add"; font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Add"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
                                 fr-add-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
@@ -9449,6 +9480,25 @@ export component MainWindow inherits Window {
         }
     }
 
-
-}
+    // Nav tooltip — declared last so it renders above all other elements
+    if NavTooltip.text != "": Rectangle {
+        x: sidebar-vl.preferred-width + 10px;
+        y: NavTooltip.y;
+        width: nav-tt-lbl.preferred-width + 18px;
+        height: 28px;
+        background: Cat.surface2;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Cat.overlay0;
+        drop-shadow-color: Cat.crust.with-alpha(0.4);
+        drop-shadow-blur: 6px;
+        drop-shadow-offset-y: 2px;
+        nav-tt-lbl := Text {
+            text: NavTooltip.text;
+            font-size: Cat.fs13;
+            color: Cat.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
 }

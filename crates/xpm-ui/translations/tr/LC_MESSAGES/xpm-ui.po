@@ -1,0 +1,292 @@
+# Turkish translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: tr\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Install"
+msgstr "Kur"
+
+msgid "Remove"
+msgstr "Kaldır"
+
+msgid "Cancel"
+msgstr "İptal"
+
+msgid "Proceed"
+msgstr "Devam et"
+
+msgid "Apply"
+msgstr "Uygula"
+
+msgid "Apply Changes"
+msgstr "Değişiklikleri uygula"
+
+msgid "Save"
+msgstr "Kaydet"
+
+msgid "Done"
+msgstr "Tamam"
+
+msgid "Back"
+msgstr "Geri"
+
+msgid "Close"
+msgstr "Kapat"
+
+msgid "Clear"
+msgstr "Temizle"
+
+msgid "Browse"
+msgstr "Gözat"
+
+msgid "Installed"
+msgstr "Kurulu"
+
+msgid "Update"
+msgstr "Güncelle"
+
+msgid "Update All"
+msgstr "Hepsini güncelle"
+
+msgid "Updates"
+msgstr "Güncellemeler"
+
+msgid "Settings"
+msgstr "Ayarlar"
+
+msgid "Troubleshooting"
+msgstr "Sorun giderme"
+
+msgid "Add"
+msgstr "Ekle"
+
+msgid "Delete"
+msgstr "Sil"
+
+msgid "Search for packages"
+msgstr "Paket ara"
+
+msgid "Filter installed..."
+msgstr "Kurululara filtre uygula..."
+
+msgid "No packages found"
+msgstr "Paket bulunamadı"
+
+msgid "System is up to date"
+msgstr "Sistem güncel"
+
+msgid "Loading..."
+msgstr "Yükleniyor..."
+
+msgid "NATIVE PACKAGES"
+msgstr "YEREL PAKETLER"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK'LAR"
+
+msgid "LIBRARY"
+msgstr "KÜTÜPHANe"
+
+msgid "GENERAL"
+msgstr "GENEL"
+
+msgid "ABOUT"
+msgstr "HAKKINDA"
+
+msgid "SYSTEM"
+msgstr "SİSTEM"
+
+msgid "Name"
+msgstr "Ad"
+
+msgid "Version"
+msgstr "Sürüm"
+
+msgid "Repo"
+msgstr "Depo"
+
+msgid "Action"
+msgstr "İşlem"
+
+msgid "All"
+msgstr "Tümü"
+
+msgid "Add-Ons"
+msgstr "Eklentiler"
+
+msgid "Remove {0}?"
+msgstr "{0} kaldırılsın mı?"
+
+msgid "Orphan Manager"
+msgstr "Yetim yöneticisi"
+
+msgid "Orphaned"
+msgstr "Yetimler"
+
+msgid "Check for Updates"
+msgstr "Güncellemeleri denetle"
+
+msgid "Clean Cache"
+msgstr "Önbelleği temizle"
+
+msgid "Unlock DB"
+msgstr "DB kilidini aç"
+
+msgid "Pacman Packages"
+msgstr "Pacman paketleri"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak uygulamaları"
+
+msgid "Parallel Downloads"
+msgstr "Paralel indirmeler"
+
+msgid "Custom"
+msgstr "Özel"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "Kurulu ({0})"
+
+msgid "Available ({0})"
+msgstr "Mevcut ({0})"
+
+msgid "Depends On"
+msgstr "Bağımlı"
+
+msgid "Required By"
+msgstr "Gerektiren"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "yetimler"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux Paket Yöneticisi"
+
+msgid "READY"
+msgstr "HAZIR"
+
+msgid "Reboot System"
+msgstr "Sistemi yeniden başlat"
+
+msgid "Firmware Updates"
+msgstr "Aygıt yazılımı güncellemeleri"
+
+msgid "HOST"
+msgstr "SUNUCU"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "RAM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Ana Sayfa"
+
+msgid "Flatpaks"
+msgstr "Flatpak'lar"
+
+msgid "Packages"
+msgstr "Paketler"
+
+msgid "Arch News"
+msgstr "Arch Haberleri"
+
+msgid "Settings & Tweaks"
+msgstr "Ayarlar ve düzenlemeler"
+
+msgid "Refresh"
+msgstr "Yenile"
+
+msgid "Flatpak Support"
+msgstr "Flatpak Desteği"
+
+msgid "Check Updates on Startup"
+msgstr "Başlangıçta güncellemeleri denetle"
+
+msgid "Auto-clean Cache"
+msgstr "Önbelleği otomatik temizle"
+
+msgid "Notify on Updates"
+msgstr "Güncellemeleri bildir"
+
+msgid "File"
+msgstr "Dosya"
+
+msgid "Size"
+msgstr "Boyut"
+
+msgid "Update All ({0})"
+msgstr "Hepsini güncelle ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Flatpak'ları güncelle ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Eklentiler"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0} eklenti kur"
+msgstr[1] "{0} eklenti kur"
+
+msgid "Active"
+msgstr "Aktif"
+
+msgid "Inactive"
+msgstr "Etkin Değil"
+
+msgid "Enabled"
+msgstr "Etkin"
+
+msgid "Disabled"
+msgstr "Devre Dışı"
+
+msgid "Dep"
+msgstr "Bağ."
+
+msgid "Checking…"
+msgstr "Kontrol ediliyor…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Genel bakış, hızlı işlemler ve önbellek yönetimi"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Flatpak uygulamalarına göz at ve yükle"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Arch depolarından paketlere göz at ve yükle"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "En son Arch Linux haberlerini ve duyurularını görüntüle"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Yetim paketleri düzelt ve yoksayılan paketleri yönet"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Pacman ayarlarını, paralel indirmeleri ve tutulan paketleri yapılandır"
+
+msgid "View and install available package updates"
+msgstr "Mevcut paket güncellemelerini görüntüle ve yükle"
+
+msgid "Update Mirrorlists"
+msgstr "Yansıma listelerini güncelle"
+
+msgid "Re-rank fastest mirrors"
+msgstr "En hızlı yansımaları yeniden sırala"

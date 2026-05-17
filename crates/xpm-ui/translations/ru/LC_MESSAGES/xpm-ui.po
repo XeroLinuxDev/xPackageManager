@@ -1,0 +1,434 @@
+# Russian translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Install"
+msgstr "Установить"
+
+msgid "Remove"
+msgstr "Удалить"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Proceed"
+msgstr "Продолжить"
+
+msgid "Apply"
+msgstr "Применить"
+
+msgid "Apply Changes"
+msgstr "Применить изменения"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Done"
+msgstr "Готово"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Close"
+msgstr "Закрыть"
+
+msgid "Clear"
+msgstr "Очистить"
+
+msgid "Browse"
+msgstr "Обзор"
+
+msgid "Installed"
+msgstr "Установлено"
+
+msgid "Update"
+msgstr "Обновить"
+
+msgid "Update All"
+msgstr "Обновить всё"
+
+msgid "Updates"
+msgstr "Обновления"
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Troubleshooting"
+msgstr "Устранение проблем"
+
+msgid "Add"
+msgstr "Добавить"
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "Search for packages"
+msgstr "Поиск пакетов"
+
+msgid "Search all packages..."
+msgstr "Поиск по всем пакетам..."
+
+msgid "Filter installed..."
+msgstr "Фильтр установленных..."
+
+msgid "Filter installed packages..."
+msgstr "Фильтр установленных пакетов..."
+
+msgid "Filter installed Flatpaks..."
+msgstr "Фильтр установленных Flatpak..."
+
+msgid "Search Flathub apps..."
+msgstr "Поиск в Flathub..."
+
+msgid "No packages found"
+msgstr "Пакеты не найдены"
+
+msgid "No apps found."
+msgstr "Приложения не найдены."
+
+msgid "No installed flatpaks"
+msgstr "Нет установленных Flatpak"
+
+msgid "No activity found"
+msgstr "Активность не найдена"
+
+msgid "System is up to date"
+msgstr "Система актуальна"
+
+msgid "Loading..."
+msgstr "Загрузка..."
+
+msgid "Loading repositories..."
+msgstr "Загрузка репозиториев..."
+
+msgid "NATIVE PACKAGES"
+msgstr "НАТИВНЫЕ ПАКЕТЫ"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK"
+
+msgid "INSTALLED FLATPAKS"
+msgstr "УСТАНОВЛЕННЫЕ FLATPAK"
+
+msgid "LIBRARY"
+msgstr "БИБЛИОТЕКА"
+
+msgid "GENERAL"
+msgstr "ОБЩИЕ"
+
+msgid "REPO MANAGER"
+msgstr "МЕНЕДЖЕР РЕПО"
+
+msgid "ABOUT"
+msgstr "О ПРОГРАММЕ"
+
+msgid "SYSTEM OVERVIEW"
+msgstr "ОБЗОР СИСТЕМЫ"
+
+msgid "QUICK ACTIONS"
+msgstr "БЫСТРЫЕ ДЕЙСТВИЯ"
+
+msgid "SYSTEM"
+msgstr "СИСТЕМА"
+
+msgid "RECENT ACTIVITY"
+msgstr "ПОСЛЕДНЯЯ АКТИВНОСТЬ"
+
+msgid "Name"
+msgstr "Имя"
+
+msgid "Version"
+msgstr "Версия"
+
+msgid "Repo"
+msgstr "Репозиторий"
+
+msgid "Action"
+msgstr "Действие"
+
+msgid "Explicit"
+msgstr "Явные"
+
+msgid "Tree"
+msgstr "Дерево"
+
+msgid "All"
+msgstr "Все"
+
+msgid "All Apps"
+msgstr "Все приложения"
+
+msgid "Add-Ons"
+msgstr "Дополнения"
+
+msgid "Remove {0}?"
+msgstr "Удалить {0}?"
+
+msgid "Remove Only"
+msgstr "Только удалить"
+
+msgid "Remove + Data"
+msgstr "Удалить + данные"
+
+msgid "Remove Selected"
+msgstr "Удалить выбранное"
+
+msgid "Remove Orphaned Packages"
+msgstr "Удалить осиротевшие пакеты"
+
+msgid "Orphan Manager"
+msgstr "Менеджер осиротевших"
+
+msgid "Orphaned"
+msgstr "Осиротевшие"
+
+msgid "Conflict Detected"
+msgstr "Обнаружен конфликт"
+
+msgid "Force Overwrite"
+msgstr "Принудительная перезапись"
+
+msgid "DANGER — Read before proceeding"
+msgstr "ОПАСНО — Прочитайте перед продолжением"
+
+msgid "Check for Updates"
+msgstr "Проверить обновления"
+
+msgid "Clean Cache"
+msgstr "Очистить кэш"
+
+msgid "Update Mirrorlists"
+msgstr "Обновить зеркала"
+
+msgid "Fix GnuPG Keyring"
+msgstr "Исправить связку ключей GnuPG"
+
+msgid "Rebuild InitRamFS"
+msgstr "Пересобрать InitRamFS"
+
+msgid "Rebuild Grub"
+msgstr "Пересобрать GRUB"
+
+msgid "Unlock Pacman Database"
+msgstr "Разблокировать базу pacman"
+
+msgid "Unlock DB"
+msgstr "Разблокировать БД"
+
+msgid "Pacman Packages"
+msgstr "Пакеты Pacman"
+
+msgid "Flatpak Apps"
+msgstr "Приложения Flatpak"
+
+msgid "Parallel Downloads"
+msgstr "Параллельные загрузки"
+
+msgid "Custom"
+msgstr "Пользовательский"
+
+msgid "Enable / Disable"
+msgstr "Включить / Отключить"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Packages (space-separated)"
+msgstr "Пакеты (через пробел)"
+
+msgid "Installed ({0})"
+msgstr "Установлено ({0})"
+
+msgid "Available ({0})"
+msgstr "Доступно ({0})"
+
+msgid "Load {0} more packages"
+msgstr "Загрузить ещё {0} пакетов"
+
+msgid "Changes in version {0}"
+msgstr "Изменения в версии {0}"
+
+msgid "Nothing depends on {0}"
+msgstr "Ничто не зависит от {0}"
+
+msgid "Depends On"
+msgstr "Зависит от"
+
+msgid "Required By"
+msgstr "Требуется для"
+
+msgid "Optional Dependencies"
+msgstr "Опциональные зависимости"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "осиротевшие"
+
+msgid "installed"
+msgstr "установлено"
+
+msgid "missing"
+msgstr "отсутствует"
+
+msgid "optional"
+msgstr "опционально"
+
+msgid "hard"
+msgstr "обязательно"
+
+msgid "XeroLinux Package Manager"
+msgstr "Менеджер пакетов XeroLinux"
+
+msgid "XeroLinux Package Manager GUI"
+msgstr "Интерфейс менеджера пакетов XeroLinux"
+
+msgid "View Source"
+msgstr "Просмотр кода"
+
+msgid "I Understand, Proceed"
+msgstr "Понимаю, продолжить"
+
+msgid "Don't show this again"
+msgstr "Больше не показывать"
+
+msgid "READY"
+msgstr "ГОТОВО"
+
+msgid "Reboot System"
+msgstr "Перезагрузить систему"
+
+msgid "Type response and press Enter…"
+msgstr "Введите ответ и нажмите Enter…"
+
+msgid "Load All Installed Packages"
+msgstr "Загрузить все установленные пакеты"
+
+msgid "Firmware Updates"
+msgstr "Обновления прошивки"
+
+msgid "System Info"
+msgstr "Информация о системе"
+
+msgid "Export Package List"
+msgstr "Экспорт списка пакетов"
+
+msgid "Import Package List"
+msgstr "Импорт списка пакетов"
+
+msgid "Install Local Package"
+msgstr "Установить локальный пакет"
+
+msgid "HOST"
+msgstr "ХОСТ"
+
+msgid "CPU"
+msgstr "ЦПУ"
+
+msgid "MEM"
+msgstr "ПАМ"
+
+msgid "GPU"
+msgstr "ВПУ"
+
+
+msgid "Home"
+msgstr "Главная"
+
+msgid "Flatpaks"
+msgstr "Flatpak"
+
+msgid "Packages"
+msgstr "Пакеты"
+
+msgid "Arch News"
+msgstr "Новости Arch"
+
+msgid "Settings & Tweaks"
+msgstr "Настройки и доработки"
+
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "Flatpak Support"
+msgstr "Поддержка Flatpak"
+
+msgid "Check Updates on Startup"
+msgstr "Проверять обновления при запуске"
+
+msgid "Auto-clean Cache"
+msgstr "Автоочистка кэша"
+
+msgid "Notify on Updates"
+msgstr "Уведомлять об обновлениях"
+
+msgid "File"
+msgstr "Файл"
+
+msgid "Size"
+msgstr "Размер"
+
+msgid "Update All ({0})"
+msgstr "Обновить всё ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Обновить Flatpak ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Дополнения"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "Установить {0} дополнение"
+msgstr[1] "Установить {0} дополнения"
+msgstr[2] "Установить {0} дополнений"
+
+msgid "Active"
+msgstr "Активен"
+
+msgid "Inactive"
+msgstr "Неактивен"
+
+msgid "Enabled"
+msgstr "Включено"
+
+msgid "Disabled"
+msgstr "Отключено"
+
+msgid "Dep"
+msgstr "Завис."
+
+msgid "Checking…"
+msgstr "Проверка…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Обзор, быстрые действия и управление кешем"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Просмотр и установка приложений Flatpak"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Просмотр и установка пакетов из репозиториев Arch"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Просмотр последних новостей и объявлений Arch Linux"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Исправление осиротевших пакетов и управление игнорируемыми пакетами"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Настройка параметров pacman, параллельных загрузок и удерживаемых пакетов"
+
+msgid "View and install available package updates"
+msgstr "Просмотр и установка доступных обновлений пакетов"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Пересортировать быстрые зеркала"

@@ -1,0 +1,418 @@
+# Italian translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: it\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Install"
+msgstr "Installa"
+
+msgid "Remove"
+msgstr "Rimuovi"
+
+msgid "Cancel"
+msgstr "Annulla"
+
+msgid "Proceed"
+msgstr "Procedi"
+
+msgid "Apply"
+msgstr "Applica"
+
+msgid "Apply Changes"
+msgstr "Applica modifiche"
+
+msgid "Save"
+msgstr "Salva"
+
+msgid "Done"
+msgstr "Fine"
+
+msgid "Back"
+msgstr "Indietro"
+
+msgid "Close"
+msgstr "Chiudi"
+
+msgid "Clear"
+msgstr "Cancella"
+
+msgid "Browse"
+msgstr "Sfoglia"
+
+msgid "Installed"
+msgstr "Installato"
+
+msgid "Update"
+msgstr "Aggiorna"
+
+msgid "Update All"
+msgstr "Aggiorna tutto"
+
+msgid "Updates"
+msgstr "Aggiornamenti"
+
+msgid "Settings"
+msgstr "Impostazioni"
+
+msgid "Troubleshooting"
+msgstr "Risoluzione problemi"
+
+msgid "Add"
+msgstr "Aggiungi"
+
+msgid "Delete"
+msgstr "Elimina"
+
+msgid "Search for packages"
+msgstr "Cerca pacchetti"
+
+msgid "Search all packages..."
+msgstr "Cerca tutti i pacchetti..."
+
+msgid "Filter installed..."
+msgstr "Filtra installati..."
+
+msgid "Filter installed packages..."
+msgstr "Filtra pacchetti installati..."
+
+msgid "Filter installed Flatpaks..."
+msgstr "Filtra Flatpak installati..."
+
+msgid "Search Flathub apps..."
+msgstr "Cerca su Flathub..."
+
+msgid "No packages found"
+msgstr "Nessun pacchetto trovato"
+
+msgid "No apps found."
+msgstr "Nessuna app trovata."
+
+msgid "No installed flatpaks"
+msgstr "Nessun Flatpak installato"
+
+msgid "System is up to date"
+msgstr "Il sistema è aggiornato"
+
+msgid "Loading..."
+msgstr "Caricamento..."
+
+msgid "Loading repositories..."
+msgstr "Caricamento repository..."
+
+msgid "NATIVE PACKAGES"
+msgstr "PACCHETTI NATIVI"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK"
+
+msgid "INSTALLED FLATPAKS"
+msgstr "FLATPAK INSTALLATI"
+
+msgid "LIBRARY"
+msgstr "LIBRERIA"
+
+msgid "GENERAL"
+msgstr "GENERALE"
+
+msgid "REPO MANAGER"
+msgstr "GESTORE REPO"
+
+msgid "ABOUT"
+msgstr "INFORMAZIONI"
+
+msgid "SYSTEM OVERVIEW"
+msgstr "PANORAMICA SISTEMA"
+
+msgid "QUICK ACTIONS"
+msgstr "AZIONI RAPIDE"
+
+msgid "SYSTEM"
+msgstr "SISTEMA"
+
+msgid "RECENT ACTIVITY"
+msgstr "ATTIVITÀ RECENTE"
+
+msgid "Name"
+msgstr "Nome"
+
+msgid "Version"
+msgstr "Versione"
+
+msgid "Repo"
+msgstr "Repository"
+
+msgid "Action"
+msgstr "Azione"
+
+msgid "All"
+msgstr "Tutti"
+
+msgid "All Apps"
+msgstr "Tutte le app"
+
+msgid "Add-Ons"
+msgstr "Componenti aggiuntivi"
+
+msgid "Remove {0}?"
+msgstr "Rimuovere {0}?"
+
+msgid "Remove Only"
+msgstr "Solo rimuovi"
+
+msgid "Remove + Data"
+msgstr "Rimuovi + dati"
+
+msgid "Remove Selected"
+msgstr "Rimuovi selezionati"
+
+msgid "Remove Orphaned Packages"
+msgstr "Rimuovi pacchetti orfani"
+
+msgid "Orphan Manager"
+msgstr "Gestione orfani"
+
+msgid "Orphaned"
+msgstr "Orfani"
+
+msgid "Conflict Detected"
+msgstr "Conflitto rilevato"
+
+msgid "Force Overwrite"
+msgstr "Forza sovrascrittura"
+
+msgid "Check for Updates"
+msgstr "Cerca aggiornamenti"
+
+msgid "Clean Cache"
+msgstr "Pulisci cache"
+
+msgid "Update Mirrorlists"
+msgstr "Aggiorna mirror"
+
+msgid "Fix GnuPG Keyring"
+msgstr "Ripara keyring GnuPG"
+
+msgid "Rebuild InitRamFS"
+msgstr "Ricostruisci InitRamFS"
+
+msgid "Rebuild Grub"
+msgstr "Ricostruisci GRUB"
+
+msgid "Unlock Pacman Database"
+msgstr "Sblocca database pacman"
+
+msgid "Unlock DB"
+msgstr "Sblocca DB"
+
+msgid "Pacman Packages"
+msgstr "Pacchetti Pacman"
+
+msgid "Flatpak Apps"
+msgstr "App Flatpak"
+
+msgid "Parallel Downloads"
+msgstr "Download paralleli"
+
+msgid "Custom"
+msgstr "Personalizzato"
+
+msgid "Enable / Disable"
+msgstr "Abilita / Disabilita"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Packages (space-separated)"
+msgstr "Pacchetti (separati da spazio)"
+
+msgid "Installed ({0})"
+msgstr "Installati ({0})"
+
+msgid "Available ({0})"
+msgstr "Disponibili ({0})"
+
+msgid "Load {0} more packages"
+msgstr "Carica altri {0} pacchetti"
+
+msgid "Changes in version {0}"
+msgstr "Modifiche nella versione {0}"
+
+msgid "Nothing depends on {0}"
+msgstr "Niente dipende da {0}"
+
+msgid "Depends On"
+msgstr "Dipende da"
+
+msgid "Required By"
+msgstr "Richiesto da"
+
+msgid "Optional Dependencies"
+msgstr "Dipendenze opzionali"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "orfani"
+
+msgid "installed"
+msgstr "installato"
+
+msgid "missing"
+msgstr "mancante"
+
+msgid "optional"
+msgstr "opzionale"
+
+msgid "hard"
+msgstr "richiesto"
+
+msgid "XeroLinux Package Manager"
+msgstr "Gestore pacchetti XeroLinux"
+
+msgid "XeroLinux Package Manager GUI"
+msgstr "Interfaccia gestore pacchetti XeroLinux"
+
+msgid "View Source"
+msgstr "Vedi sorgente"
+
+msgid "I Understand, Proceed"
+msgstr "Capisco, procedi"
+
+msgid "Don't show this again"
+msgstr "Non mostrare più"
+
+msgid "READY"
+msgstr "PRONTO"
+
+msgid "Reboot System"
+msgstr "Riavvia sistema"
+
+msgid "Load All Installed Packages"
+msgstr "Carica tutti i pacchetti installati"
+
+msgid "Firmware Updates"
+msgstr "Aggiornamenti firmware"
+
+msgid "System Info"
+msgstr "Informazioni sistema"
+
+msgid "Export Package List"
+msgstr "Esporta lista pacchetti"
+
+msgid "Import Package List"
+msgstr "Importa lista pacchetti"
+
+msgid "Install Local Package"
+msgstr "Installa pacchetto locale"
+
+msgid "HOST"
+msgstr "HOST"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "MEM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Home"
+
+msgid "Flatpaks"
+msgstr "Flatpak"
+
+msgid "Packages"
+msgstr "Pacchetti"
+
+msgid "Arch News"
+msgstr "Notizie Arch"
+
+msgid "Settings & Tweaks"
+msgstr "Impostazioni e modifiche"
+
+msgid "Refresh"
+msgstr "Aggiorna"
+
+msgid "Flatpak Support"
+msgstr "Supporto Flatpak"
+
+msgid "Check Updates on Startup"
+msgstr "Cerca aggiornamenti all'avvio"
+
+msgid "Auto-clean Cache"
+msgstr "Pulizia automatica cache"
+
+msgid "Notify on Updates"
+msgstr "Notifica aggiornamenti"
+
+msgid "File"
+msgstr "File"
+
+msgid "Size"
+msgstr "Dimensione"
+
+msgid "Update All ({0})"
+msgstr "Aggiorna tutto ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Aggiorna Flatpak ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Componenti aggiuntivi"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "Installa {0} componente"
+msgstr[1] "Installa {0} componenti"
+
+msgid "Active"
+msgstr "Attivo"
+
+msgid "Inactive"
+msgstr "Inattivo"
+
+msgid "Enabled"
+msgstr "Abilitato"
+
+msgid "Disabled"
+msgstr "Disabilitato"
+
+msgid "Dep"
+msgstr "Dip."
+
+msgid "Checking…"
+msgstr "Controllo…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Panoramica, azioni rapide e gestione della cache"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Sfoglia e installa applicazioni Flatpak"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Sfoglia e installa pacchetti dai repository Arch"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Visualizza le ultime notizie e annunci di Arch Linux"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Ripara i pacchetti orfani e gestisci i pacchetti ignorati"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Configura impostazioni pacman, download paralleli e pacchetti trattenuti"
+
+msgid "View and install available package updates"
+msgstr "Visualizza e installa gli aggiornamenti dei pacchetti disponibili"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Riclassifica i mirror più veloci"

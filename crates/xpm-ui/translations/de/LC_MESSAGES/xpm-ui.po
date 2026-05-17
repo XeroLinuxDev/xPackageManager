@@ -1,0 +1,792 @@
+# German translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: de\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Install"
+msgstr "Installieren"
+
+msgid "Remove"
+msgstr "Entfernen"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Proceed"
+msgstr "Fortfahren"
+
+msgid "Apply"
+msgstr "Anwenden"
+
+msgid "Apply Changes"
+msgstr "Änderungen anwenden"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Done"
+msgstr "Fertig"
+
+msgid "Back"
+msgstr "Zurück"
+
+msgid "Close"
+msgstr "Schließen"
+
+msgid "Clear"
+msgstr "Löschen"
+
+msgid "Browse"
+msgstr "Durchsuchen"
+
+msgid "Installed"
+msgstr "Installiert"
+
+msgid "Update"
+msgstr "Aktualisieren"
+
+msgid "Update All"
+msgstr "Alle aktualisieren"
+
+msgid "Updates"
+msgstr "Aktualisierungen"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Troubleshooting"
+msgstr "Fehlerbehebung"
+
+msgid "Add"
+msgstr "Hinzufügen"
+
+msgid "Delete"
+msgstr "Löschen"
+
+msgid "Search for packages"
+msgstr "Pakete suchen"
+
+msgid "Search all packages..."
+msgstr "Alle Pakete suchen..."
+
+msgid "Filter installed..."
+msgstr "Installierte filtern..."
+
+msgid "Filter installed packages..."
+msgstr "Installierte Pakete filtern..."
+
+msgid "Filter installed Flatpaks..."
+msgstr "Installierte Flatpaks filtern..."
+
+msgid "Search Flathub apps..."
+msgstr "Flathub durchsuchen..."
+
+msgid "No packages found"
+msgstr "Keine Pakete gefunden"
+
+msgid "No apps found."
+msgstr "Keine Apps gefunden."
+
+msgid "No installed flatpaks"
+msgstr "Keine Flatpaks installiert"
+
+msgid "No activity found"
+msgstr "Keine Aktivität gefunden"
+
+msgid "No remotes configured"
+msgstr "Keine Remotes konfiguriert"
+
+msgid "No dependencies found."
+msgstr "Keine Abhängigkeiten gefunden."
+
+msgid "No news loaded. Press Refresh."
+msgstr "Keine Neuigkeiten geladen. Aktualisieren drücken."
+
+msgid "No supported firmware devices found"
+msgstr "Keine unterstützten Firmware-Geräte gefunden"
+
+msgid "System is up to date"
+msgstr "System ist aktuell"
+
+msgid "Loading..."
+msgstr "Lade..."
+
+msgid "Loading repositories..."
+msgstr "Lade Repositorien..."
+
+msgid "Parsing appstream metadata..."
+msgstr "Lese Appstream-Metadaten..."
+
+msgid "Indexing application catalogue"
+msgstr "Anwendungskatalog indizieren"
+
+msgid "Resolving…"
+msgstr "Auflösen…"
+
+msgid "Detecting firmware devices…"
+msgstr "Erkenne Firmware-Geräte…"
+
+msgid "NATIVE PACKAGES"
+msgstr "NATIVE PAKETE"
+
+msgid "FLATPAKS"
+msgstr "FLATPAKS"
+
+msgid "INSTALLED FLATPAKS"
+msgstr "INSTALLIERTE FLATPAKS"
+
+msgid "LIBRARY"
+msgstr "BIBLIOTHEK"
+
+msgid "GENERAL"
+msgstr "ALLGEMEIN"
+
+msgid "REPO MANAGER"
+msgstr "REPO-VERWALTUNG"
+
+msgid "FIRMWARE UPDATES"
+msgstr "FIRMWARE-UPDATES"
+
+msgid "ABOUT"
+msgstr "ÜBER"
+
+msgid "SYSTEM OVERVIEW"
+msgstr "SYSTEMÜBERSICHT"
+
+msgid "QUICK ACTIONS"
+msgstr "SCHNELLAKTIONEN"
+
+msgid "SYSTEM"
+msgstr "SYSTEM"
+
+msgid "RECENT ACTIVITY"
+msgstr "LETZTE AKTIVITÄT"
+
+msgid "PACMAN"
+msgstr "PACMAN"
+
+msgid "APPLICATION"
+msgstr "ANWENDUNG"
+
+msgid "STATUS"
+msgstr "STATUS"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Repo"
+msgstr "Repo"
+
+msgid "Action"
+msgstr "Aktion"
+
+msgid "Explicit"
+msgstr "Explizit"
+
+msgid "explicit"
+msgstr "explizit"
+
+msgid "Tree"
+msgstr "Baum"
+
+msgid "Downgrade"
+msgstr "Downgrade"
+
+msgid "All"
+msgstr "Alle"
+
+msgid "All Apps"
+msgstr "Alle Apps"
+
+msgid "Add-Ons"
+msgstr "Erweiterungen"
+
+msgid "Add-Ons & Extensions"
+msgstr "Erweiterungen"
+
+msgid "Available to Install"
+msgstr "Zum Installieren verfügbar"
+
+msgid "Already Installed"
+msgstr "Bereits installiert"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0} Erweiterung installieren"
+msgstr[1] "{0} Erweiterungen installieren"
+
+msgid "Remove {0}?"
+msgstr "{0} entfernen?"
+
+msgid "Remove + Data"
+msgstr "Entfernen + Daten"
+
+msgid "Remove Only"
+msgstr "Nur entfernen"
+
+msgid "Remove Orphaned Packages"
+msgstr "Verwaiste Pakete entfernen"
+
+msgid "Remove Selected"
+msgstr "Auswahl entfernen"
+
+msgid "Remove stale pacman DB lock file"
+msgstr "Veraltete pacman-Sperrdatei entfernen"
+
+msgid "Orphan Manager"
+msgstr "Waisen-Verwaltung"
+
+msgid "Orphaned"
+msgstr "Verwaist"
+
+msgid "Orphans are packages no longer required as dependencies. Some may still be needed by manually installed software or config. Removing them can break your system. Review carefully."
+msgstr "Verwaiste Pakete sind nicht mehr als Abhängigkeiten erforderlich. Einige könnten noch benötigt werden. Das Entfernen kann das System beschädigen. Sorgfältig prüfen."
+
+msgid "Review and remove orphaned packages"
+msgstr "Verwaiste Pakete prüfen und entfernen"
+
+msgid "Removing it may break these packages"
+msgstr "Das Entfernen kann diese Pakete beschädigen"
+
+msgid "Conflict Detected"
+msgstr "Konflikt erkannt"
+
+msgid "Force Overwrite"
+msgstr "Überschreiben erzwingen"
+
+msgid "DANGER — Read before proceeding"
+msgstr "GEFAHR — Vor dem Fortfahren lesen"
+
+msgid "Select / Deselect All"
+msgstr "Alle auswählen / abwählen"
+
+msgid "Check for Updates"
+msgstr "Nach Updates suchen"
+
+msgid "Clean Cache"
+msgstr "Cache leeren"
+
+msgid "Update Mirrorlists"
+msgstr "Spiegellisten aktualisieren"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Schnellste Spiegel neu sortieren"
+
+msgid "Fix GnuPG Keyring"
+msgstr "GnuPG-Schlüsselring reparieren"
+
+msgid "Rebuild InitRamFS"
+msgstr "InitRamFS neu erstellen"
+
+msgid "Rebuild Grub"
+msgstr "GRUB neu erstellen"
+
+msgid "Regenerate initramfs images via mkinitcpio"
+msgstr "Initramfs-Images über mkinitcpio neu erstellen"
+
+msgid "Regenerate GRUB bootloader config"
+msgstr "GRUB-Bootloader-Konfiguration neu erstellen"
+
+msgid "Reset and repopulate pacman keys"
+msgstr "Pacman-Schlüssel zurücksetzen und neu befüllen"
+
+msgid "Unlock Pacman Database"
+msgstr "Pacman-Datenbank entsperren"
+
+msgid "Unlock DB"
+msgstr "Entsperren"
+
+msgid "Unlock Database"
+msgstr "Datenbank entsperren"
+
+msgid "Only do this if pacman is NOT running. Removing the lock while pacman is active will corrupt your database."
+msgstr "Nur ausführen wenn pacman NICHT läuft. Das Entfernen der Sperre bei aktivem pacman beschädigt die Datenbank."
+
+msgid "Pacman Packages"
+msgstr "Pacman-Pakete"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak-Apps"
+
+msgid "Parallel Downloads"
+msgstr "Parallele Downloads"
+
+msgid "Current: {0}"
+msgstr "Aktuell: {0}"
+
+msgid "Custom"
+msgstr "Benutzerdefiniert"
+
+msgid "Enter number (e.g. 8)"
+msgstr "Zahl eingeben (z.B. 8)"
+
+msgid "Values above 25 may overwhelm mirrors and cause slower or failed downloads. Use at your own risk."
+msgstr "Werte über 25 können Spiegel überlasten. Auf eigenes Risiko."
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "(Don't Change. Advanced Users Only !)"
+msgstr "(Nicht ändern. Nur für Experten!)"
+
+msgid "Packages (space-separated)"
+msgstr "Pakete (leerzeichengetrennt)"
+
+msgid "Enable / Disable"
+msgstr "Aktivieren / Deaktivieren"
+
+msgid "Toggle repos on/off"
+msgstr "Repos ein-/ausschalten"
+
+msgid "pacman Options"
+msgstr "Pacman-Optionen"
+
+msgid "Configure pacman.conf flags"
+msgstr "Pacman.conf-Flags konfigurieren"
+
+msgid "Edit pacman.conf"
+msgstr "pacman.conf bearbeiten"
+
+msgid "Advanced manual edit (Terminal)"
+msgstr "Erweiterte manuelle Bearbeitung (Terminal)"
+
+msgid "Enable / Disable Repositories"
+msgstr "Repositorien aktivieren / deaktivieren"
+
+msgid "Add / Remove Repositories"
+msgstr "Repositorien hinzufügen / entfernen"
+
+msgid "Add New Repository"
+msgstr "Neues Repository hinzufügen"
+
+msgid "Changes are written directly to /etc/pacman.conf"
+msgstr "Änderungen werden direkt in /etc/pacman.conf geschrieben"
+
+msgid "After applying changes, run 'sudo pacman -Sy' to sync the updated repo list."
+msgstr "Nach Änderungen 'sudo pacman -Sy' ausführen um die Repo-Liste zu synchronisieren."
+
+msgid "Removing a repo permanently deletes its section from /etc/pacman.conf and cannot be undone. NOT intended for repos that use separate keyrings or mirrorlists — use 'Edit pacman.conf' for those."
+msgstr "Das Entfernen löscht den Abschnitt dauerhaft aus /etc/pacman.conf. NICHT für Repos mit separaten Schlüsselringen oder Spiegellisten gedacht."
+
+msgid "Delete '{0}'? This cannot be undone."
+msgstr "'{0}' löschen? Dies kann nicht rückgängig gemacht werden."
+
+msgid "Name (e.g. myrepo)"
+msgstr "Name (z.B. meinrepo)"
+
+msgid "Server URL or /etc/pacman.d/mirrorfile"
+msgstr "Server-URL oder /etc/pacman.d/mirrorfile"
+
+msgid "SigLevel ="
+msgstr "SigLevel ="
+
+msgid "Optional (e.g. Required DatabaseOptional)"
+msgstr "Optional (z.B. Required DatabaseOptional)"
+
+msgid "Flatpak Remotes"
+msgstr "Flatpak-Remotes"
+
+msgid "Add or remove Flatpak remote repositories"
+msgstr "Flatpak-Remote-Repos hinzufügen oder entfernen"
+
+msgid "Add Remote"
+msgstr "Remote hinzufügen"
+
+msgid "Enable Flatpak package management"
+msgstr "Flatpak-Paketverwaltung aktivieren"
+
+msgid "Automatically sync databases on launch"
+msgstr "Datenbanken beim Start automatisch synchronisieren"
+
+msgid "Run paccache after upgrade"
+msgstr "paccache nach Upgrade ausführen"
+
+msgid "Desktop notify-send on startup"
+msgstr "Desktop-Benachrichtigung beim Start"
+
+msgid "Manage Flatpak Remotes"
+msgstr "Flatpak-Remotes verwalten"
+
+msgid "Firmware Updates"
+msgstr "Firmware-Updates"
+
+msgid "fwupd could not detect any updatable hardware on this system."
+msgstr "fwupd konnte keine aktualisierbarer Hardware erkennen."
+
+msgid "Use at your own risk — if it ain't broke, don't mess with it. Firmware updates can brick hardware."
+msgstr "Auf eigenes Risiko — wenn es funktioniert, nicht anfassen. Firmware-Updates können Hardware beschädigen."
+
+msgid "Use at your own risk — these operations modify system files and may require a reboot."
+msgstr "Auf eigenes Risiko — diese Operationen ändern Systemdateien und erfordern möglicherweise einen Neustart."
+
+msgid "System & Pacman diagnostics — repair tools for common issues"
+msgstr "System- & Pacman-Diagnose — Reparaturwerkzeuge für häufige Probleme"
+
+msgid "System Info"
+msgstr "Systeminformationen"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux Paketverwaltung"
+
+msgid "XeroLinux Package Manager GUI"
+msgstr "XeroLinux Paketverwaltung GUI"
+
+msgid "Rust + Slint  /  pacman + flatpak"
+msgstr "Rust + Slint  /  pacman + flatpak"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "Waisen"
+
+msgid "installed"
+msgstr "installiert"
+
+msgid "missing"
+msgstr "fehlend"
+
+msgid "optional"
+msgstr "optional"
+
+msgid "hard"
+msgstr "erforderlich"
+
+msgid "Project Website"
+msgstr "Projektwebseite"
+
+msgid "Report an Issue"
+msgstr "Problem melden"
+
+msgid "Contribute Translations"
+msgstr "Übersetzungen beitragen"
+
+msgid "Browse Source Code"
+msgstr "Quellcode durchsuchen"
+
+msgid "GitHub"
+msgstr "GitHub"
+
+msgid "Ko-Fi"
+msgstr "Ko-Fi"
+
+msgid "Discord"
+msgstr "Discord"
+
+msgid "xpm  —  about"
+msgstr "xpm  —  über"
+
+msgid "View Source"
+msgstr "Quellcode ansehen"
+
+msgid "I Understand, Proceed"
+msgstr "Ich verstehe, fortfahren"
+
+msgid "Don't show this again"
+msgstr "Nicht mehr anzeigen"
+
+msgid "xPackageManager is built exclusively for XeroLinux"
+msgstr "xPackageManager ist ausschließlich für XeroLinux"
+
+msgid "⚠  UNSUPPORTED DISTRIBUTION"
+msgstr "⚠  NICHT UNTERSTÜTZTE DISTRIBUTION"
+
+msgid "This application was built specifically for XeroLinux.\n\nUsing it on any other Arch-based distribution is entirely at your own risk. No support, warranty, or guarantees of any kind are provided. \n\nFunctionality may be incomplete or incorrect on unsupported systems."
+msgstr "Diese Anwendung wurde speziell für XeroLinux entwickelt.\n\nDie Verwendung auf einer anderen Arch-basierten Distribution erfolgt auf eigenes Risiko. Kein Support, keine Garantie.\n\nFunktionalität kann auf nicht unterstützten Systemen unvollständig sein."
+
+msgid "READY"
+msgstr "BEREIT"
+
+msgid "▶  RUN"
+msgstr "▶  AUSFÜHREN"
+
+msgid "Show Details ↓"
+msgstr "Details anzeigen ↓"
+
+msgid "Type response and press Enter…"
+msgstr "Antwort eingeben und Enter drücken…"
+
+msgid "Reboot System"
+msgstr "System neu starten"
+
+msgid "Also remove leftover user data?"
+msgstr "Auch verbleibende Benutzerdaten entfernen?"
+
+msgid "Saved settings, files, and app data will be deleted."
+msgstr "Gespeicherte Einstellungen, Dateien und App-Daten werden gelöscht."
+
+msgid "This will uninstall the application from your system."
+msgstr "Dadurch wird die Anwendung von Ihrem System deinstalliert."
+
+msgid "Load All Installed Packages"
+msgstr "Alle installierten Pakete laden"
+
+msgid "Load {0} more packages"
+msgstr "{0} weitere Pakete laden"
+
+msgid "Installed ({0})"
+msgstr "Installiert ({0})"
+
+msgid "Available ({0})"
+msgstr "Verfügbar ({0})"
+
+msgid "Changes in version {0}"
+msgstr "Änderungen in Version {0}"
+
+msgid "Nothing depends on {0}"
+msgstr "Nichts hängt von {0} ab"
+
+msgid "Depends On"
+msgstr "Hängt ab von"
+
+msgid "Optional Dependencies"
+msgstr "Optionale Abhängigkeiten"
+
+msgid "Required By"
+msgstr "Benötigt von"
+
+msgid "Apps with add-ons are marked  + Add-ons. Install add-ons via the app's info page."
+msgstr "Apps mit Erweiterungen sind mit + Erweiterungen markiert. Über die Info-Seite der App installieren."
+
+msgid "Package Required"
+msgstr "Paket erforderlich"
+
+msgid "Chaotic-AUR is enabled on this system."
+msgstr "Chaotic-AUR ist auf diesem System aktiviert."
+
+msgid "Click Install Downgrade below to install it now."
+msgstr "Unten auf Downgrade installieren klicken um es jetzt zu installieren."
+
+msgid "Install via your AUR helper:"
+msgstr "Über Ihren AUR-Helfer installieren:"
+
+msgid "Install Downgrade"
+msgstr "Downgrade installieren"
+
+msgid "Install Local Package"
+msgstr "Lokales Paket installieren"
+
+msgid "Install packages from an exported list file"
+msgstr "Pakete aus einer exportierten Listendatei installieren"
+
+msgid "Save explicitly installed packages to a file"
+msgstr "Explizit installierte Pakete in Datei speichern"
+
+msgid "Export Package List"
+msgstr "Paketliste exportieren"
+
+msgid "Import Package List"
+msgstr "Paketliste importieren"
+
+msgid "Links"
+msgstr "Links"
+
+msgid "Read more"
+msgstr "Mehr lesen"
+
+msgid "Fetching Arch news..."
+msgstr "Arch-Neuigkeiten werden abgerufen..."
+
+msgid "pacman.conf Options"
+msgstr "pacman.conf-Optionen"
+
+msgid "Toggle pacman behaviour flags"
+msgstr "Pacman-Verhaltensflag umschalten"
+
+msgid "Color"
+msgstr "Farbe"
+
+msgid "Colorize pacman output in terminal"
+msgstr "Pacman-Ausgabe im Terminal einfärben"
+
+msgid "ILoveCandy"
+msgstr "ILoveCandy"
+
+msgid "Pac-Man progress bar easter egg"
+msgstr "Pac-Man-Fortschrittsleiste Easter Egg"
+
+msgid "VerbosePkgLists"
+msgstr "VerbosePkgLists"
+
+msgid "Show old and new versions in package lists"
+msgstr "Alte und neue Versionen in Paketlisten anzeigen"
+
+msgid "DisableDownloadTimeout"
+msgstr "DisableDownloadTimeout"
+
+msgid "DisableSandbox"
+msgstr "DisableSandbox"
+
+msgid "Disable download sandbox (use if having issues)"
+msgstr "Download-Sandbox deaktivieren (bei Problemen verwenden)"
+
+msgid "NoProgressBar"
+msgstr "NoProgressBar"
+
+msgid "Suppress progress bar in terminal output"
+msgstr "Fortschrittsleiste in Terminal-Ausgabe unterdrücken"
+
+msgid "UseSyslog"
+msgstr "UseSyslog"
+
+msgid "Log pacman operations to syslog"
+msgstr "Pacman-Operationen in Syslog protokollieren"
+
+msgid "CheckSpace"
+msgstr "CheckSpace"
+
+msgid "Verify disk space before installing (recommended)"
+msgstr "Festplattenplatz vor der Installation prüfen (empfohlen)"
+
+msgid "CleanMethod"
+msgstr "CleanMethod"
+
+msgid "Which cached packages to keep when cleaning cache"
+msgstr "Welche gecachten Pakete beim Cache-Leeren behalten"
+
+msgid "KeepInstalled"
+msgstr "KeepInstalled"
+
+msgid "KeepCurrent"
+msgstr "KeepCurrent"
+
+msgid "IgnorePkg"
+msgstr "IgnorePkg"
+
+msgid "# /etc/pacman.conf IgnorePkg"
+msgstr "# /etc/pacman.conf IgnorePkg"
+
+msgid "HOST"
+msgstr "HOST"
+
+msgid "OS "
+msgstr "OS "
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "RAM"
+
+msgid "UP "
+msgstr "UP "
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "DSK"
+msgstr "DSK"
+
+msgid "A.U.R support disabled for stability purposes. Use the Chaotic-AUR (on XeroLinux) for pre-built packages. Use"
+msgid_plural "paru packagename"
+msgstr[0] "AUR-Unterstützung aus Stabilitätsgründen deaktiviert. Verwenden Sie Chaotic-AUR (auf XeroLinux) für vorgefertigte Pakete. Verwenden Sie"
+msgstr[1] "paru paketname"
+msgstr[2] "im Terminal."
+
+msgid "URL (https://...)"
+msgstr "URL (https://...)"
+
+msgid "This package can be safely removed without breaking other packages."
+msgstr "Dieses Paket kann sicher entfernt werden ohne andere Pakete zu beschädigen."
+
+msgid "No timeout on slow mirrors"
+msgstr "Kein Timeout bei langsamen Spiegeln"
+
+
+msgid "Home"
+msgstr "Startseite"
+
+msgid "Flatpaks"
+msgstr "Flatpaks"
+
+msgid "Packages"
+msgstr "Pakete"
+
+msgid "Arch News"
+msgstr "Arch-Neuigkeiten"
+
+msgid "Settings & Tweaks"
+msgstr "Einstellungen & Anpassungen"
+
+msgid "Refresh"
+msgstr "Aktualisieren"
+
+msgid "Flatpak Support"
+msgstr "Flatpak-Unterstützung"
+
+msgid "Check Updates on Startup"
+msgstr "Updates beim Start suchen"
+
+msgid "Auto-clean Cache"
+msgstr "Cache automatisch leeren"
+
+msgid "Notify on Updates"
+msgstr "Updates benachrichtigen"
+
+msgid "File"
+msgstr "Datei"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "Update All ({0})"
+msgstr "Alle aktualisieren ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Flatpaks aktualisieren ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Erweiterungen"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0} Erweiterung installieren"
+msgstr[1] "{0} Erweiterungen installieren"
+
+msgid "Active"
+msgstr "Aktiv"
+
+msgid "Inactive"
+msgstr "Inaktiv"
+
+msgid "Enabled"
+msgstr "Aktiviert"
+
+msgid "Disabled"
+msgstr "Deaktiviert"
+
+msgid "Dep"
+msgstr "Abh."
+
+msgid "Checking…"
+msgstr "Prüfen…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Übersicht, Schnellaktionen und Cache-Verwaltung"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Flatpak-Anwendungen durchsuchen und installieren"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Pakete aus Arch-Repositories durchsuchen und installieren"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Neueste Arch Linux-Nachrichten und Ankündigungen anzeigen"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Verwaiste Pakete beheben und ignorierte Pakete verwalten"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Pacman-Einstellungen, parallele Downloads und gehaltene Pakete konfigurieren"
+
+msgid "View and install available package updates"
+msgstr "Verfügbare Paket-Updates anzeigen und installieren"

@@ -1,0 +1,292 @@
+# Swedish translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: sv\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Install"
+msgstr "Installera"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Proceed"
+msgstr "Fortsätt"
+
+msgid "Apply"
+msgstr "Tillämpa"
+
+msgid "Apply Changes"
+msgstr "Tillämpa ändringar"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Clear"
+msgstr "Rensa"
+
+msgid "Browse"
+msgstr "Bläddra"
+
+msgid "Installed"
+msgstr "Installerat"
+
+msgid "Update"
+msgstr "Uppdatera"
+
+msgid "Update All"
+msgstr "Uppdatera alla"
+
+msgid "Updates"
+msgstr "Uppdateringar"
+
+msgid "Settings"
+msgstr "Inställningar"
+
+msgid "Troubleshooting"
+msgstr "Felsökning"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Delete"
+msgstr "Ta bort"
+
+msgid "Search for packages"
+msgstr "Sök paket"
+
+msgid "Filter installed..."
+msgstr "Filtrera installerade..."
+
+msgid "No packages found"
+msgstr "Inga paket hittades"
+
+msgid "System is up to date"
+msgstr "Systemet är uppdaterat"
+
+msgid "Loading..."
+msgstr "Laddar..."
+
+msgid "NATIVE PACKAGES"
+msgstr "INHEMSKA PAKET"
+
+msgid "FLATPAKS"
+msgstr "FLATPAKS"
+
+msgid "LIBRARY"
+msgstr "BIBLIOTEK"
+
+msgid "GENERAL"
+msgstr "ALLMÄNT"
+
+msgid "ABOUT"
+msgstr "OM"
+
+msgid "SYSTEM"
+msgstr "SYSTEM"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Repo"
+msgstr "Förråd"
+
+msgid "Action"
+msgstr "Åtgärd"
+
+msgid "All"
+msgstr "Alla"
+
+msgid "Add-Ons"
+msgstr "Tillägg"
+
+msgid "Remove {0}?"
+msgstr "Ta bort {0}?"
+
+msgid "Orphan Manager"
+msgstr "Föräldralösahanterare"
+
+msgid "Orphaned"
+msgstr "Föräldralösa"
+
+msgid "Check for Updates"
+msgstr "Sök uppdateringar"
+
+msgid "Clean Cache"
+msgstr "Rensa cache"
+
+msgid "Unlock DB"
+msgstr "Lås upp DB"
+
+msgid "Pacman Packages"
+msgstr "Pacman-paket"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak-appar"
+
+msgid "Parallel Downloads"
+msgstr "Parallella nedladdningar"
+
+msgid "Custom"
+msgstr "Anpassad"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "Installerade ({0})"
+
+msgid "Available ({0})"
+msgstr "Tillgängliga ({0})"
+
+msgid "Depends On"
+msgstr "Beror på"
+
+msgid "Required By"
+msgstr "Krävs av"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "föräldralösa"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux pakethanterare"
+
+msgid "READY"
+msgstr "REDO"
+
+msgid "Reboot System"
+msgstr "Starta om system"
+
+msgid "Firmware Updates"
+msgstr "Firmware-uppdateringar"
+
+msgid "HOST"
+msgstr "VÄRD"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "MEM"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "Hem"
+
+msgid "Flatpaks"
+msgstr "Flatpaks"
+
+msgid "Packages"
+msgstr "Paket"
+
+msgid "Arch News"
+msgstr "Arch-nyheter"
+
+msgid "Settings & Tweaks"
+msgstr "Inställningar och justeringar"
+
+msgid "Refresh"
+msgstr "Uppdatera"
+
+msgid "Flatpak Support"
+msgstr "Flatpak-stöd"
+
+msgid "Check Updates on Startup"
+msgstr "Sök uppdateringar vid start"
+
+msgid "Auto-clean Cache"
+msgstr "Rensa cache automatiskt"
+
+msgid "Notify on Updates"
+msgstr "Meddela om uppdateringar"
+
+msgid "File"
+msgstr "Fil"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Update All ({0})"
+msgstr "Uppdatera alla ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Uppdatera Flatpaks ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ Tillägg"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "Installera {0} tillägg"
+msgstr[1] "Installera {0} tillägg"
+
+msgid "Active"
+msgstr "Aktiv"
+
+msgid "Inactive"
+msgstr "Inaktiv"
+
+msgid "Enabled"
+msgstr "Aktiverad"
+
+msgid "Disabled"
+msgstr "Inaktiverad"
+
+msgid "Dep"
+msgstr "Ber."
+
+msgid "Checking…"
+msgstr "Kontrollerar…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "Översikt, snabbåtgärder och cachehantering"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Bläddra och installera Flatpak-program"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Bläddra och installera paket från Arch-förråd"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "Visa senaste Arch Linux-nyheter och meddelanden"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "Åtgärda föräldralösa paket och hantera ignorerade paket"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "Konfigurera pacman-inställningar, parallella nedladdningar och kvarhållna paket"
+
+msgid "View and install available package updates"
+msgstr "Visa och installera tillgängliga paketuppdateringar"
+
+msgid "Update Mirrorlists"
+msgstr "Uppdatera spegellista"
+
+msgid "Re-rank fastest mirrors"
+msgstr "Rangordna snabbaste speglar"

@@ -1,0 +1,292 @@
+# Korean translation for xpm-ui
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ko\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Install"
+msgstr "설치"
+
+msgid "Remove"
+msgstr "제거"
+
+msgid "Cancel"
+msgstr "취소"
+
+msgid "Proceed"
+msgstr "계속"
+
+msgid "Apply"
+msgstr "적용"
+
+msgid "Apply Changes"
+msgstr "변경사항 적용"
+
+msgid "Save"
+msgstr "저장"
+
+msgid "Done"
+msgstr "완료"
+
+msgid "Back"
+msgstr "뒤로"
+
+msgid "Close"
+msgstr "닫기"
+
+msgid "Clear"
+msgstr "지우기"
+
+msgid "Browse"
+msgstr "탐색"
+
+msgid "Installed"
+msgstr "설치됨"
+
+msgid "Update"
+msgstr "업데이트"
+
+msgid "Update All"
+msgstr "모두 업데이트"
+
+msgid "Updates"
+msgstr "업데이트"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Troubleshooting"
+msgstr "문제 해결"
+
+msgid "Add"
+msgstr "추가"
+
+msgid "Delete"
+msgstr "삭제"
+
+msgid "Search for packages"
+msgstr "패키지 검색"
+
+msgid "Filter installed..."
+msgstr "설치된 항목 필터..."
+
+msgid "No packages found"
+msgstr "패키지를 찾을 수 없습니다"
+
+msgid "System is up to date"
+msgstr "시스템이 최신 상태입니다"
+
+msgid "Loading..."
+msgstr "로딩 중..."
+
+msgid "NATIVE PACKAGES"
+msgstr "네이티브 패키지"
+
+msgid "FLATPAKS"
+msgstr "FLATPAK"
+
+msgid "LIBRARY"
+msgstr "라이브러리"
+
+msgid "GENERAL"
+msgstr "일반"
+
+msgid "ABOUT"
+msgstr "정보"
+
+msgid "SYSTEM"
+msgstr "시스템"
+
+msgid "Name"
+msgstr "이름"
+
+msgid "Version"
+msgstr "버전"
+
+msgid "Repo"
+msgstr "저장소"
+
+msgid "Action"
+msgstr "작업"
+
+msgid "All"
+msgstr "전체"
+
+msgid "Add-Ons"
+msgstr "애드온"
+
+msgid "Remove {0}?"
+msgstr "{0}을(를) 제거하시겠습니까?"
+
+msgid "Orphan Manager"
+msgstr "고아 패키지 관리"
+
+msgid "Orphaned"
+msgstr "고아 패키지"
+
+msgid "Check for Updates"
+msgstr "업데이트 확인"
+
+msgid "Clean Cache"
+msgstr "캐시 정리"
+
+msgid "Unlock DB"
+msgstr "DB 잠금 해제"
+
+msgid "Pacman Packages"
+msgstr "Pacman 패키지"
+
+msgid "Flatpak Apps"
+msgstr "Flatpak 앱"
+
+msgid "Parallel Downloads"
+msgstr "병렬 다운로드"
+
+msgid "Custom"
+msgstr "사용자 지정"
+
+msgid "HoldPkg"
+msgstr "HoldPkg"
+
+msgid "Installed ({0})"
+msgstr "설치됨 ({0})"
+
+msgid "Available ({0})"
+msgstr "사용 가능 ({0})"
+
+msgid "Depends On"
+msgstr "의존"
+
+msgid "Required By"
+msgstr "필요로 함"
+
+msgid "pacman"
+msgstr "pacman"
+
+msgid "flatpak"
+msgstr "flatpak"
+
+msgid "orphans"
+msgstr "고아 패키지"
+
+msgid "XeroLinux Package Manager"
+msgstr "XeroLinux 패키지 관리자"
+
+msgid "READY"
+msgstr "준비"
+
+msgid "Reboot System"
+msgstr "시스템 재시작"
+
+msgid "Firmware Updates"
+msgstr "펌웨어 업데이트"
+
+msgid "HOST"
+msgstr "호스트"
+
+msgid "CPU"
+msgstr "CPU"
+
+msgid "MEM"
+msgstr "메모리"
+
+msgid "GPU"
+msgstr "GPU"
+
+
+msgid "Home"
+msgstr "홈"
+
+msgid "Flatpaks"
+msgstr "Flatpak"
+
+msgid "Packages"
+msgstr "패키지"
+
+msgid "Arch News"
+msgstr "Arch 뉴스"
+
+msgid "Settings & Tweaks"
+msgstr "설정 및 조정"
+
+msgid "Refresh"
+msgstr "새로 고침"
+
+msgid "Flatpak Support"
+msgstr "Flatpak 지원"
+
+msgid "Check Updates on Startup"
+msgstr "시작 시 업데이트 확인"
+
+msgid "Auto-clean Cache"
+msgstr "캐시 자동 정리"
+
+msgid "Notify on Updates"
+msgstr "업데이트 알림"
+
+msgid "File"
+msgstr "파일"
+
+msgid "Size"
+msgstr "크기"
+
+msgid "Update All ({0})"
+msgstr "모두 업데이트 ({0})"
+
+msgid "Update Flatpaks ({0})"
+msgstr "Flatpak 업데이트 ({0})"
+
+msgid "+ Add-ons"
+msgstr "+ 애드온"
+
+msgid "Install {0} Add-On"
+msgid_plural "Install {0} Add-Ons"
+msgstr[0] "{0}개 애드온 설치"
+msgstr[1] "{0}개 애드온 설치"
+
+msgid "Active"
+msgstr "활성"
+
+msgid "Inactive"
+msgstr "비활성"
+
+msgid "Enabled"
+msgstr "활성화됨"
+
+msgid "Disabled"
+msgstr "비활성화"
+
+msgid "Dep"
+msgstr "의존"
+
+msgid "Checking…"
+msgstr "확인 중…"
+
+msgid "Overview, quick actions and cache management"
+msgstr "개요, 빠른 작업 및 캐시 관리"
+
+msgid "Browse and install Flatpak applications"
+msgstr "Flatpak 애플리케이션 탐색 및 설치"
+
+msgid "Browse and install packages from Arch repositories"
+msgstr "Arch 저장소에서 패키지 탐색 및 설치"
+
+msgid "View latest Arch Linux news and announcements"
+msgstr "최신 Arch Linux 뉴스 및 공지 보기"
+
+msgid "Fix orphaned packages and manage ignored packages"
+msgstr "고아 패키지 수정 및 무시된 패키지 관리"
+
+msgid "Configure pacman settings, parallel downloads and held packages"
+msgstr "pacman 설정, 병렬 다운로드 및 보류된 패키지 구성"
+
+msgid "View and install available package updates"
+msgstr "사용 가능한 패키지 업데이트 보기 및 설치"
+
+msgid "Update Mirrorlists"
+msgstr "미러 목록 업데이트"
+
+msgid "Re-rank fastest mirrors"
+msgstr "빠른 미러 재정렬"
