@@ -109,13 +109,16 @@ cd xPackageManager/packaging/ && makepkg -rsifcd
 
 ## Changelog
 
-### v0.5.0
-- **Settings — **HoldPkg**
-- **Settings — Cache Auto-Clean**
-- **Settings — Desktop Notifications**
-- **Settings — Flatpak Remote Manager**
+### v0.5.1
+
+- **App Translations**
+- **Settings** — HoldPkg
+- **Settings** — Cache Auto-Clean
+- **Settings** — Desktop Notifications
+- **Settings** — Flatpak Remote Manager
 
 ### v0.4.0
+
 - Flatpak detail view with add-ons modal (AppStream XML parsing)
 - Dependency tree view
 - Activity log
