@@ -514,15 +514,15 @@ component CategoryPill inherits Rectangle {
     in property <bool> active: false;
     callback clicked();
 
-    height: 25px;
-    width: pill-lbl.preferred-width + 20px;
-    border-radius: 14px;
+    height: pill-lbl.preferred-height + 10px;
+    width: pill-lbl.preferred-width + 22px;
+    border-radius: 10px;
     background: active ? Cat.mauve : (pill-t.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.6));
     animate background { duration: 80ms; }
 
     pill-lbl := Text {
         text: label;
-        font-size: Cat.fs14;
+        font-size: Cat.fs15;
         font-weight: active ? 700 : 400;
         color: active ? Cat.crust : Cat.subtext0;
         horizontal-alignment: center;
@@ -542,6 +542,7 @@ component RepoRow inherits Rectangle {
     callback install();
     callback remove();
     callback show-tree();
+    callback show-info();
     callback toggle-selected(bool);
 
     height: 52px;
@@ -589,9 +590,9 @@ component RepoRow inherits Rectangle {
             }
         }
 
-        // Action buttons — 160px (Tree + Install/Remove side by side)
+        // Action buttons — 235px (Tree + Info + Install/Remove side by side)
         VerticalLayout {
-            alignment: center; width: 160px;
+            alignment: center; width: 235px;
             HorizontalLayout {
                 spacing: 6px;
                 // Tree button
@@ -602,6 +603,15 @@ component RepoRow inherits Rectangle {
                     animate background { duration: 60ms; }
                     VerticalLayout { alignment: center; Text { text: @tr("Tree"); font-size: Cat.fs15; font-weight: 600; color: Cat.teal; horizontal-alignment: center; } }
                     rr-tree-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-tree(); } }
+                }
+                // Info button
+                Rectangle {
+                    width: 64px; height: 32px; border-radius: 6px;
+                    background: rr-info-ta.has-hover ? Cat.blue.with-alpha(0.25) : Cat.blue.with-alpha(0.12);
+                    border-width: 1px; border-color: Cat.blue.with-alpha(0.35);
+                    animate background { duration: 60ms; }
+                    VerticalLayout { alignment: center; Text { text: @tr("Info"); font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; } }
+                    rr-info-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-info(); } }
                 }
                 // Install / Remove button
                 if !pkg.installed: Rectangle {
@@ -949,6 +959,13 @@ export component MainWindow inherits Window {
     in-out property <bool> dep-tree-loading: false;
     in-out property <int> dep-tree-tab: 0;
     callback load-dep-tree(string);
+
+    // Package info modal
+    in-out property <bool> pkg-info-open: false;
+    in-out property <string> pkg-info-name: "";
+    in-out property <string> pkg-info-files: "";
+    in-out property <bool> pkg-info-loading: false;
+    callback load-pkg-info(string);
 
     // Repos browser (view 7/8)
     in-out property <[string]> pacman-repos: [];
@@ -1420,7 +1437,9 @@ export component MainWindow inherits Window {
                 Rectangle { horizontal-stretch: 1; }
 
                 if (view == 0 || view == 1 || view == 8) || (view == 10 && !show-flatpak-detail): Text {
-                    text: get-list().length + " packages";
+                    text: view == 10
+                        ? (flatpak-total-matches + " packages")
+                        : (get-list().length + " packages");
                     font-size: Cat.fs13;
                     color: Cat.overlay0;
                     vertical-alignment: center;
@@ -1457,21 +1476,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Flatpaks view — update flatpaks button
-                if view == 10 && flatpak-update-count > 0: Btn {
-                    label: @tr("Update Flatpaks ({0})", flatpak-update-count);
-                    primary: true;
-                    enabled: !busy;
-                    clicked => { root.update-all-flatpaks(); }
-                }
 
-                // Browse Repos view — update native packages button
-                if (view == 7 || view == 8) && native-update-count > 0: Btn {
-                    label: @tr("Update All ({0})", native-update-count);
-                    primary: true;
-                    enabled: !busy;
-                    clicked => { root.update-all(); }
-                }
 
                 if view == 0: Btn {
                     label: @tr("Refresh");
@@ -1489,49 +1494,51 @@ export component MainWindow inherits Window {
 
             // ── Pinned search bars for Native Packages (view 0) ─────────────
             if view == 0: VerticalLayout {
-                spacing: 4px;
-                padding-bottom: 4px;
+                spacing: 0px;
 
                 // Bar 1: Filter installed (instant client-side)
                 Rectangle {
-                    height: 29px;
+                    height: 62px;
+                    background: transparent;
 
                     TouchArea { clicked => { inst-ti.focus(); } }
 
                     Rectangle {
-                        y: 0;
-                        width: parent.width;
-                        height: 29px;
-                        border-radius: 16px;
-                        background: Cat.surface0;
-                        border-width: inst-ti.has-focus ? 1px : 0px;
-                        border-color: Cat.blue.with-alpha(0.4);
+                        x: 14px;
+                        y: 10px;
+                        width: parent.width - 28px;
+                        height: 42px;
+                        border-radius: 10px;
+                        background: inst-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                        border-width: 1.5px;
+                        border-color: inst-ti.has-focus ? Cat.blue.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                         clip: true;
-                        animate border-width { duration: 80ms; }
+                        animate background { duration: 80ms; }
+                        animate border-color { duration: 80ms; }
 
                         HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            spacing: 8px;
+                            padding-left: 16px;
+                            padding-right: 14px;
+                            spacing: 12px;
 
                             VerticalLayout {
                                 alignment: center;
                                 NavIcon {
                                     d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                    icon-color: inst-ti.has-focus ? Cat.blue.with-alpha(0.9) : Cat.overlay1;
-                                    width: 13px;
-                                    height: 13px;
+                                    icon-color: inst-ti.has-focus ? Cat.blue : Cat.subtext0;
+                                    width: 16px;
+                                    height: 16px;
                                 }
                             }
 
                             Rectangle {
                                 horizontal-stretch: 1;
-                                height: 29px;
+                                height: 42px;
 
                                 inst-ti := TextInput {
                                     width: 100%; height: 100%;
                                     text <=> installed-filter-text;
-                                    font-size: Cat.fs12;
+                                    font-size: Cat.fs15;
                                     color: Cat.text;
                                     single-line: true;
                                     vertical-alignment: center;
@@ -1544,8 +1551,8 @@ export component MainWindow inherits Window {
                                 if installed-filter-text == "" && !inst-ti.has-focus: Text {
                                     width: 100%; height: 100%;
                                     text: @tr("Filter installed...");
-                                    font-size: Cat.fs12;
-                                    color: Cat.overlay0;
+                                    font-size: Cat.fs15;
+                                    color: Cat.subtext0.with-alpha(0.5);
                                     vertical-alignment: center;
                                 }
                             }
@@ -1553,9 +1560,10 @@ export component MainWindow inherits Window {
                             if installed-filter-text != "": VerticalLayout {
                                 alignment: center;
                                 Rectangle {
-                                    width: 18px; height: 18px; border-radius: 9px;
-                                    background: clr-touch.has-hover ? Cat.surface1 : transparent;
-                                    NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 10px; height: 10px; x: 4px; y: 4px; }
+                                    width: 20px; height: 20px; border-radius: 10px;
+                                    background: clr-touch.has-hover ? Cat.surface2 : Cat.surface1;
+                                    animate background { duration: 60ms; }
+                                    NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.subtext0; width: 10px; height: 10px; x: 5px; y: 5px; }
                                     clr-touch := TouchArea {
                                         mouse-cursor: pointer;
                                         clicked => { installed-filter-text = ""; root.filter-installed(""); }
@@ -1568,44 +1576,47 @@ export component MainWindow inherits Window {
 
                 // Bar 2: Search all packages in repos
                 Rectangle {
-                    height: 29px;
+                    height: 62px;
+                    background: transparent;
 
                     TouchArea { clicked => { all-pkg-ti.focus(); } }
 
                     Rectangle {
-                        y: 0;
-                        width: parent.width;
-                        height: 29px;
-                        border-radius: 16px;
-                        background: Cat.surface0;
-                        border-width: all-pkg-ti.has-focus ? 1px : 0px;
-                        border-color: Cat.mauve.with-alpha(0.4);
+                        x: 14px;
+                        y: 10px;
+                        width: parent.width - 28px;
+                        height: 42px;
+                        border-radius: 10px;
+                        background: all-pkg-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                        border-width: 1.5px;
+                        border-color: all-pkg-ti.has-focus ? Cat.mauve.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                         clip: true;
-                        animate border-width { duration: 80ms; }
+                        animate background { duration: 80ms; }
+                        animate border-color { duration: 80ms; }
 
                         HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            spacing: 8px;
+                            padding-left: 16px;
+                            padding-right: 14px;
+                            spacing: 12px;
 
                             VerticalLayout {
                                 alignment: center;
                                 NavIcon {
                                     d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                    icon-color: all-pkg-ti.has-focus ? Cat.mauve.with-alpha(0.9) : Cat.overlay1;
-                                    width: 13px;
-                                    height: 13px;
+                                    icon-color: all-pkg-ti.has-focus ? Cat.mauve : Cat.subtext0;
+                                    width: 16px;
+                                    height: 16px;
                                 }
                             }
 
                             Rectangle {
                                 horizontal-stretch: 1;
-                                height: 29px;
+                                height: 42px;
 
                                 all-pkg-ti := TextInput {
                                     width: 100%; height: 100%;
                                     text <=> search-text;
-                                    font-size: Cat.fs12;
+                                    font-size: Cat.fs15;
                                     color: Cat.text;
                                     single-line: true;
                                     vertical-alignment: center;
@@ -1622,8 +1633,8 @@ export component MainWindow inherits Window {
                                 if search-text == "" && !all-pkg-ti.has-focus: Text {
                                     width: 100%; height: 100%;
                                     text: @tr("Search all packages...");
-                                    font-size: Cat.fs12;
-                                    color: Cat.overlay0;
+                                    font-size: Cat.fs15;
+                                    color: Cat.subtext0.with-alpha(0.5);
                                     vertical-alignment: center;
                                 }
                             }
@@ -1631,9 +1642,10 @@ export component MainWindow inherits Window {
                             if search-text != "": VerticalLayout {
                                 alignment: center;
                                 Rectangle {
-                                    width: 18px; height: 18px; border-radius: 9px;
-                                    background: all-clr.has-hover ? Cat.surface1 : transparent;
-                                    NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 10px; height: 10px; x: 4px; y: 4px; }
+                                    width: 20px; height: 20px; border-radius: 10px;
+                                    background: all-clr.has-hover ? Cat.surface2 : Cat.surface1;
+                                    animate background { duration: 60ms; }
+                                    NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.subtext0; width: 10px; height: 10px; x: 5px; y: 5px; }
                                     all-clr := TouchArea {
                                         mouse-cursor: pointer;
                                         clicked => { search-text = ""; }
@@ -1888,52 +1900,53 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                // ── Pill search bar (same style as Repos) ──────────────────────────
+                // ── Search bar ────────────────────────────────────────────
                 Rectangle {
-                    height: 52px;
+                    height: 62px;
                     background: transparent;
 
                     TouchArea { clicked => { fk-ti.focus(); } }
 
                     Rectangle {
                         x: 14px;
-                        y: 11px;
+                        y: 10px;
                         width: parent.width - 28px;
-                        height: 32px;
-                        border-radius: 18px;
-                        background: Cat.surface0;
-                        border-width: fk-ti.has-focus ? 1px : 0px;
-                        border-color: Cat.mauve.with-alpha(0.4);
+                        height: 42px;
+                        border-radius: 10px;
+                        background: fk-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                        border-width: 1.5px;
+                        border-color: fk-ti.has-focus ? Cat.blue.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                         clip: true;
-                        animate border-width { duration: 80ms; }
+                        animate background { duration: 80ms; }
+                        animate border-color { duration: 80ms; }
 
                         HorizontalLayout {
-                            padding-left: 14px;
+                            padding-left: 16px;
                             padding-right: 14px;
-                            spacing: 10px;
+                            spacing: 12px;
 
                             VerticalLayout {
                                 alignment: center;
                                 NavIcon {
                                     d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                    icon-color: fk-ti.has-focus ? Cat.mauve.with-alpha(0.9) : Cat.overlay1;
-                                    width: 14px;
-                                    height: 14px;
+                                    icon-color: fk-ti.has-focus ? Cat.blue : Cat.subtext0;
+                                    width: 16px;
+                                    height: 16px;
                                 }
                             }
 
                             Rectangle {
                                 horizontal-stretch: 1;
-                                height: 32px;
+                                height: 42px;
 
                                 fk-ti := TextInput {
                                     width: 100%; height: 100%;
                                     text <=> flatpak-search;
-                                    font-size: Cat.fs14;
+                                    font-size: Cat.fs15;
                                     color: Cat.text;
                                     single-line: true;
                                     vertical-alignment: center;
-                                    selection-background-color: Cat.mauve.with-alpha(0.3);
+                                    selection-background-color: Cat.blue.with-alpha(0.3);
                                     selection-foreground-color: Cat.text;
                                     accepted => {
                                         show-flatpak-detail = false;
@@ -1948,8 +1961,8 @@ export component MainWindow inherits Window {
                                 if flatpak-search == "" && !fk-ti.has-focus: Text {
                                     width: 100%; height: 100%;
                                     text: @tr("Search Flathub apps...");
-                                    font-size: Cat.fs14;
-                                    color: Cat.overlay0;
+                                    font-size: Cat.fs15;
+                                    color: Cat.subtext0.with-alpha(0.5);
                                     vertical-alignment: center;
                                 }
                             }
@@ -1979,31 +1992,36 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Add-ons info banner ──────────────────────────────────────────────
-                if !show-flatpak-detail: Rectangle {
-                    height: 25px;
-                    background: Cat.mauve.with-alpha(0.06);
-                    border-width: 0px;
+                // ── Add-ons info pill ────────────────────────────────────────────────
+                if !show-flatpak-detail: HorizontalLayout {
+                    height: 34px;
+                    alignment: center;
 
-                    HorizontalLayout {
-                        padding-left: 14px; padding-right: 14px; spacing: 6px; alignment: center;
-                        VerticalLayout { alignment: center;
-                            NavIcon {
-                                d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
-                                icon-color: Cat.mauve.with-alpha(0.6);
-                                width: 12px; height: 12px;
+                    Rectangle {
+                        height: 26px;
+                        width: addon-pill-lbl.preferred-width + addon-pill-icon.width + 24px;
+                        border-radius: 8px;
+                        background: Cat.mauve.with-alpha(0.1);
+                        border-width: 1px;
+                        border-color: Cat.mauve.with-alpha(0.2);
+
+                        HorizontalLayout {
+                            padding-left: 10px; padding-right: 10px; spacing: 6px; alignment: center;
+                            VerticalLayout { alignment: center;
+                                addon-pill-icon := NavIcon {
+                                    d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
+                                    icon-color: Cat.mauve.with-alpha(0.7);
+                                    width: 13px; height: 13px;
+                                }
+                            }
+                            addon-pill-lbl := Text {
+                                text: @tr("Apps with add-ons are marked  + Add-ons. Install add-ons via the app's info page.");
+                                font-size: Cat.fs13;
+                                color: Cat.mauve.with-alpha(0.85);
+                                vertical-alignment: center;
                             }
                         }
-                        Text {
-                            text: @tr("Apps with add-ons are marked  + Add-ons. Install add-ons via the app's info page.");
-                            font-size: Cat.fs10;
-                            color: Cat.mauve.with-alpha(0.75);
-                            vertical-alignment: center;
-                            horizontal-stretch: 1;
-                        }
                     }
-
-                    Rectangle { y: parent.height - 1px; height: 1px; width: 100%; background: Cat.surface0.with-alpha(0.5); }
                 }
 
                 // ── Loading — geeky terminal card ───────────────────────────────────
@@ -2246,7 +2264,7 @@ export component MainWindow inherits Window {
                                         border-radius: 10px;
                                         background: inst-touch.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.88);
                                         animate background { duration: 80ms; }
-                                        fp-inst-lbl := Text { text: @tr("Install"); font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                                        fp-inst-lbl := Text { text: @tr("Install"); font-size: Cat.fs16; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                                         inst-touch := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => {
@@ -2261,7 +2279,7 @@ export component MainWindow inherits Window {
                                         border-radius: 10px;
                                         background: rm-touch.has-hover ? Cat.red : Cat.red.with-alpha(0.85);
                                         animate background { duration: 80ms; }
-                                        fp-rm-lbl := Text { text: @tr("Remove"); font-size: Cat.fs15; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                                        fp-rm-lbl := Text { text: @tr("Remove"); font-size: Cat.fs16; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                                         rm-touch := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => {
@@ -2511,14 +2529,6 @@ export component MainWindow inherits Window {
                                 vertical-alignment: center;
                             }
 
-                            if flatpak-total-matches > 0 && flatpak-total-matches > remote-apps.length: Text {
-                                text: remote-apps.length + " / " + flatpak-total-matches;
-                                font-size: Cat.fs13;
-                                color: Cat.overlay0;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
-                            }
-
                             Text {
                                 text: @tr("STATUS");
                                 font-size: Cat.fs10;
@@ -2628,17 +2638,6 @@ export component MainWindow inherits Window {
                                         }
                                         HorizontalLayout {
                                             spacing: 6px;
-                                            Text {
-                                                text: pkg.name;
-                                                font-size: Cat.fs14;
-                                                color: Cat.overlay0;
-                                                overflow: elide;
-                                            }
-                                            if pkg.description != "": Text {
-                                                text: "·";
-                                                font-size: Cat.fs14;
-                                                color: Cat.overlay0;
-                                            }
                                             if pkg.description != "": Text {
                                                 text: pkg.description;
                                                 font-size: Cat.fs14;
@@ -2671,8 +2670,8 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
-                                            width: pkg.installed ? 72px : 86px;
-                                            height: 25px;
+                                            width: pkg.installed ? 80px : 96px;
+                                            height: 28px;
                                             border-radius: 6px;
                                             background: pkg.installed
                                                 ? Cat.red.with-alpha(0.15)
@@ -2680,7 +2679,7 @@ export component MainWindow inherits Window {
 
                                             Text {
                                                 text: pkg.installed ? "Remove" : "Info / Install";
-                                                font-size: pkg.installed ? 11px : 10px;
+                                                font-size: Cat.fs13;
                                                 font-weight: 600;
                                                 color: pkg.installed ? Cat.red : Cat.mauve;
                                                 horizontal-alignment: center;
@@ -2800,46 +2799,47 @@ export component MainWindow inherits Window {
 
                     // Search bar for installed flatpaks
                     Rectangle {
-                        height: 54px;
+                        height: 62px;
                         background: transparent;
 
                         TouchArea { clicked => { ifk-search-ti.focus(); } }
 
                         Rectangle {
                             x: 14px;
-                            y: 9px;
+                            y: 10px;
                             width: parent.width - 28px;
-                            height: 32px;
-                            border-radius: 18px;
-                            background: Cat.surface0;
-                            border-width: ifk-search-ti.has-focus ? 1px : 0px;
-                            border-color: Cat.green.with-alpha(0.4);
+                            height: 42px;
+                            border-radius: 10px;
+                            background: ifk-search-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                            border-width: 1.5px;
+                            border-color: ifk-search-ti.has-focus ? Cat.green.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                             clip: true;
-                            animate border-width { duration: 80ms; }
+                            animate background { duration: 80ms; }
+                            animate border-color { duration: 80ms; }
 
                             HorizontalLayout {
-                                padding-left: 14px;
+                                padding-left: 16px;
                                 padding-right: 14px;
-                                spacing: 10px;
+                                spacing: 12px;
 
                                 VerticalLayout {
                                     alignment: center;
                                     NavIcon {
                                         d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                        icon-color: ifk-search-ti.has-focus ? Cat.green.with-alpha(0.9) : Cat.overlay1;
-                                        width: 13px;
-                                        height: 13px;
+                                        icon-color: ifk-search-ti.has-focus ? Cat.green : Cat.subtext0;
+                                        width: 16px;
+                                        height: 16px;
                                     }
                                 }
 
                                 Rectangle {
                                     horizontal-stretch: 1;
-                                    height: 32px;
+                                    height: 42px;
 
                                     ifk-search-ti := TextInput {
                                         width: 100%; height: 100%;
                                         text <=> installed-flatpak-filter;
-                                        font-size: Cat.fs13;
+                                        font-size: Cat.fs15;
                                         color: Cat.text;
                                         single-line: true;
                                         vertical-alignment: center;
@@ -2851,8 +2851,8 @@ export component MainWindow inherits Window {
                                     if installed-flatpak-filter == "" && !ifk-search-ti.has-focus: Text {
                                         width: 100%; height: 100%;
                                         text: @tr("Filter installed Flatpaks...");
-                                        font-size: Cat.fs13;
-                                        color: Cat.overlay0;
+                                        font-size: Cat.fs15;
+                                        color: Cat.subtext0.with-alpha(0.5);
                                         vertical-alignment: center;
                                     }
                                 }
@@ -2860,9 +2860,10 @@ export component MainWindow inherits Window {
                                 if installed-flatpak-filter != "": VerticalLayout {
                                     alignment: center;
                                     Rectangle {
-                                        width: 18px; height: 18px; border-radius: 9px;
-                                        background: ifk-clr.has-hover ? Cat.surface1 : transparent;
-                                        NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 10px; height: 10px; x: 4px; y: 4px; }
+                                        width: 20px; height: 20px; border-radius: 10px;
+                                        background: ifk-clr.has-hover ? Cat.surface2 : Cat.surface1;
+                                        animate background { duration: 60ms; }
+                                        NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.subtext0; width: 10px; height: 10px; x: 5px; y: 5px; }
                                         ifk-clr := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { installed-flatpak-filter = ""; root.filter-installed-flatpaks(""); }
@@ -2974,13 +2975,6 @@ export component MainWindow inherits Window {
                                             font-size: Cat.fs14;
                                             font-weight: 600;
                                             color: Cat.text;
-                                            overflow: elide;
-                                        }
-
-                                        Text {
-                                            text: pkg.name;
-                                            font-size: Cat.fs14;
-                                            color: Cat.overlay0;
                                             overflow: elide;
                                         }
                                     }
@@ -3132,48 +3126,49 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                // ── Pill-shaped search bar ─────────────────────────────────
+                // ── Search bar ────────────────────────────────────────────
                 Rectangle {
-                    height: 52px;
+                    height: 62px;
                     background: transparent;
 
                     TouchArea { clicked => { rs-ti.focus(); } }
 
                     Rectangle {
                         x: 14px;
-                        y: 11px;
+                        y: 10px;
                         width: parent.width - 28px;
-                        height: 32px;
-                        border-radius: 18px;
-                        background: Cat.surface0;
-                        border-width: rs-ti.has-focus ? 1px : 0px;
-                        border-color: Cat.blue.with-alpha(0.4);
+                        height: 42px;
+                        border-radius: 10px;
+                        background: rs-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                        border-width: 1.5px;
+                        border-color: rs-ti.has-focus ? Cat.blue.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                         clip: true;
-                        animate border-width { duration: 80ms; }
+                        animate background { duration: 80ms; }
+                        animate border-color { duration: 80ms; }
 
                         HorizontalLayout {
-                            padding-left: 14px;
+                            padding-left: 16px;
                             padding-right: 14px;
-                            spacing: 10px;
+                            spacing: 12px;
 
                             VerticalLayout {
                                 alignment: center;
                                 NavIcon {
                                     d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                    icon-color: rs-ti.has-focus ? Cat.blue.with-alpha(0.9) : Cat.overlay1;
-                                    width: 14px;
-                                    height: 14px;
+                                    icon-color: rs-ti.has-focus ? Cat.blue : Cat.subtext0;
+                                    width: 16px;
+                                    height: 16px;
                                 }
                             }
 
                             Rectangle {
                                 horizontal-stretch: 1;
-                                height: 32px;
+                                height: 42px;
 
                                 rs-ti := TextInput {
                                     width: 100%; height: 100%;
                                     text <=> repo-search;
-                                    font-size: Cat.fs14;
+                                    font-size: Cat.fs15;
                                     color: Cat.text;
                                     single-line: true;
                                     vertical-alignment: center;
@@ -3186,8 +3181,8 @@ export component MainWindow inherits Window {
                                 if repo-search == "" && !rs-ti.has-focus: Text {
                                     width: 100%; height: 100%;
                                     text: selected-repo != "" ? "Search in " + selected-repo + "..." : "Search all packages...";
-                                    font-size: Cat.fs14;
-                                    color: Cat.overlay0;
+                                    font-size: Cat.fs15;
+                                    color: Cat.subtext0.with-alpha(0.5);
                                     vertical-alignment: center;
                                 }
                             }
@@ -3324,6 +3319,13 @@ export component MainWindow inherits Window {
                                 view = 12;
                                 root.load-dep-tree(p.name);
                             }
+                            show-info => {
+                                pkg-info-name = p.name;
+                                pkg-info-files = "";
+                                pkg-info-loading = true;
+                                pkg-info-open = true;
+                                root.load-pkg-info(p.name);
+                            }
                         }
                     }
 
@@ -3444,46 +3446,47 @@ export component MainWindow inherits Window {
 
                     // Search bar for installed native packages
                     Rectangle {
-                        height: 54px;
+                        height: 62px;
                         background: transparent;
 
                         TouchArea { clicked => { ni-search-ti.focus(); } }
 
                         Rectangle {
                             x: 14px;
-                            y: 9px;
+                            y: 10px;
                             width: parent.width - 28px;
-                            height: 32px;
-                            border-radius: 18px;
-                            background: Cat.surface0;
-                            border-width: ni-search-ti.has-focus ? 1px : 0px;
-                            border-color: Cat.mauve.with-alpha(0.4);
+                            height: 42px;
+                            border-radius: 10px;
+                            background: ni-search-ti.has-focus ? Cat.surface1 : Cat.surface0;
+                            border-width: 1.5px;
+                            border-color: ni-search-ti.has-focus ? Cat.mauve.with-alpha(0.7) : Cat.overlay0.with-alpha(0.25);
                             clip: true;
-                            animate border-width { duration: 80ms; }
+                            animate background { duration: 80ms; }
+                            animate border-color { duration: 80ms; }
 
                             HorizontalLayout {
-                                padding-left: 14px;
+                                padding-left: 16px;
                                 padding-right: 14px;
-                                spacing: 10px;
+                                spacing: 12px;
 
                                 VerticalLayout {
                                     alignment: center;
                                     NavIcon {
                                         d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0";
-                                        icon-color: ni-search-ti.has-focus ? Cat.mauve.with-alpha(0.9) : Cat.overlay1;
-                                        width: 13px;
-                                        height: 13px;
+                                        icon-color: ni-search-ti.has-focus ? Cat.mauve : Cat.subtext0;
+                                        width: 16px;
+                                        height: 16px;
                                     }
                                 }
 
                                 Rectangle {
                                     horizontal-stretch: 1;
-                                    height: 32px;
+                                    height: 42px;
 
                                     ni-search-ti := TextInput {
                                         width: 100%; height: 100%;
                                         text <=> installed-grouped-filter;
-                                        font-size: Cat.fs13;
+                                        font-size: Cat.fs15;
                                         color: Cat.text;
                                         single-line: true;
                                         vertical-alignment: center;
@@ -3496,8 +3499,8 @@ export component MainWindow inherits Window {
                                     if installed-grouped-filter == "" && !ni-search-ti.has-focus: Text {
                                         width: 100%; height: 100%;
                                         text: @tr("Filter installed packages...");
-                                        font-size: Cat.fs13;
-                                        color: Cat.overlay0;
+                                        font-size: Cat.fs15;
+                                        color: Cat.subtext0.with-alpha(0.5);
                                         vertical-alignment: center;
                                     }
                                 }
@@ -3505,9 +3508,10 @@ export component MainWindow inherits Window {
                                 if installed-grouped-filter != "": VerticalLayout {
                                     alignment: center;
                                     Rectangle {
-                                        width: 18px; height: 18px; border-radius: 9px;
-                                        background: ni-clr.has-hover ? Cat.surface1 : transparent;
-                                        NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 10px; height: 10px; x: 4px; y: 4px; }
+                                        width: 20px; height: 20px; border-radius: 10px;
+                                        background: ni-clr.has-hover ? Cat.surface2 : Cat.surface1;
+                                        animate background { duration: 60ms; }
+                                        NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.subtext0; width: 10px; height: 10px; x: 5px; y: 5px; }
                                         ni-clr := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { installed-grouped-filter = ""; root.filter-installed-grouped(""); }
@@ -7303,6 +7307,105 @@ export component MainWindow inherits Window {
                                 root.fp-confirm-open = false;
                                 root.remove-flatpak(root.fp-confirm-id, true);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Package Info Modal ───────────────────────────────────────────────────
+    if pkg-info-open: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.72);
+        TouchArea { clicked => { root.pkg-info-open = false; } }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 620px;
+            height: 560px;
+            background: Cat.base;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: Cat.blue.with-alpha(0.25);
+            drop-shadow-blur: 32px;
+            drop-shadow-color: Cat.crust.with-alpha(0.65);
+            drop-shadow-offset-y: 8px;
+            clip: true;
+
+            VerticalLayout {
+
+                // ── Header ─────────────────────────────────────────────────
+                Rectangle {
+                    height: 68px;
+                    background: Cat.mantle;
+
+                    HorizontalLayout {
+                        padding-left: 20px; padding-right: 12px;
+                        spacing: 12px;
+
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 36px; height: 36px; border-radius: 10px;
+                                background: Cat.blue.with-alpha(0.12);
+                                NavIcon {
+                                    d: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 16v-4M12 8h.01";
+                                    icon-color: Cat.blue;
+                                    width: 18px; height: 18px;
+                                    x: 9px; y: 9px;
+                                }
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center; horizontal-stretch: 1; spacing: 3px;
+                            Text { text: pkg-info-name; font-size: Cat.fs16; font-weight: 700; color: Cat.text; overflow: elide; }
+                            Text { text: @tr("Installed files"); font-size: Cat.fs13; color: Cat.overlay1; }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 30px; height: 30px; border-radius: 8px;
+                                background: pi-close-ta.has-hover ? Cat.surface1 : transparent;
+                                animate background { duration: 60ms; }
+                                NavIcon {
+                                    d: "M18 6L6 18M6 6l12 12";
+                                    icon-color: Cat.overlay1;
+                                    width: 14px; height: 14px;
+                                    x: 8px; y: 8px;
+                                }
+                                pi-close-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.pkg-info-open = false; }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { y: parent.height - 1px; height: 1px; width: 100%; background: Cat.surface0.with-alpha(0.6); }
+                }
+
+                // ── Loading spinner ─────────────────────────────────────────
+                if pkg-info-loading: VerticalLayout {
+                    vertical-stretch: 1; alignment: center; spacing: 12px;
+                    HorizontalLayout { alignment: center; Spinner { width: 28px; height: 28px; indeterminate: true; } }
+                    Text { text: @tr("Loading…"); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
+                }
+
+                // ── File list ───────────────────────────────────────────────
+                if !pkg-info-loading: ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 16px;
+                        Text {
+                            text: pkg-info-files;
+                            font-size: Cat.fs13;
+                            font-family: "JetBrains Mono";
+                            color: Cat.text;
+                            wrap: word-wrap;
                         }
                     }
                 }

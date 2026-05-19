@@ -148,6 +148,7 @@ enum UiMessage {
     FirmwareCheckFailed(String),
     FirmwareRefreshDone(bool),
     UpdateCacheSize(String),
+    PkgInfoLoaded(String),
 }
 
 #[derive(Clone)]
@@ -1853,17 +1854,15 @@ fn flip_installed_in_model(
     ModelRc::new(VecModel::from(updated))
 }
 
-fn package_to_ui(pkg: &xpm_core::package::Package, has_update: bool, desktop_map: &HashMap<String, String>) -> PackageData {
+fn package_to_ui(pkg: &xpm_core::package::Package, has_update: bool) -> PackageData {
     let backend = match pkg.backend {
         xpm_core::package::PackageBackend::Pacman => 0,
         xpm_core::package::PackageBackend::Flatpak => 1,
     };
 
-    let display_name = humanize_package_name(&pkg.name, desktop_map);
-
     PackageData {
         name: SharedString::from(pkg.name.as_str()),
-        display_name: SharedString::from(&display_name),
+        display_name: SharedString::from(pkg.name.as_str()),
         version: SharedString::from(pkg.version.to_string().as_str()),
         description: SharedString::from(pkg.description.as_str()),
         repository: SharedString::from(pkg.repository.as_str()),
@@ -3020,19 +3019,19 @@ fn main() {
                     }
                     UiMessage::RepoPackagesLoaded(pkgs) => {
                         *repo_full_timer.borrow_mut() = pkgs.clone();
-                        const INITIAL_LIMIT: usize = 150;
-                        let has_more = pkgs.len() > INITIAL_LIMIT;
-                        let extra = pkgs.len().saturating_sub(INITIAL_LIMIT) as i32;
-                        let displayed = if has_more { pkgs[..INITIAL_LIMIT].to_vec() } else { pkgs };
-                        window.set_repo_packages(ModelRc::new(VecModel::from(displayed)));
-                        window.set_repo_has_more(has_more);
-                        window.set_repo_extra_count(extra);
+                        window.set_repo_packages(ModelRc::new(VecModel::from(pkgs)));
+                        window.set_repo_has_more(false);
+                        window.set_repo_extra_count(0);
                         window.set_repo_loading(false);
                         window.set_repo_search(SharedString::from(""));
                     }
                     UiMessage::RepoPkgDetail(desc) => {
                         window.set_repo_detail_description(SharedString::from(&desc));
                         window.set_repo_detail_loading(false);
+                    }
+                    UiMessage::PkgInfoLoaded(files) => {
+                        window.set_pkg_info_files(SharedString::from(&files));
+                        window.set_pkg_info_loading(false);
                     }
                     UiMessage::InstalledFlatpaksLoaded(pkgs) => {
                         *full_installed_flatpaks_timer.borrow_mut() = pkgs.clone();
@@ -4961,13 +4960,10 @@ fn main() {
         let tx = tx_repos.clone();
         thread::spawn(move || {
             let repos = load_pacman_repos();
-            let first = repos.first().cloned();
             let _ = tx.send(UiMessage::PacmanReposLoaded(repos));
-            // Auto-load first repo immediately
-            if let Some(repo) = first {
-                let pkgs = load_repo_packages(&repo);
-                let _ = tx.send(UiMessage::RepoPackagesLoaded(pkgs));
-            }
+            // Auto-load ALL repos so the "All" tab is ready immediately
+            let pkgs = load_repo_packages("");
+            let _ = tx.send(UiMessage::RepoPackagesLoaded(pkgs));
         });
     });
 
@@ -4984,10 +4980,14 @@ fn main() {
         }
     });
 
+    let repo_browse_clear = repo_packages_full.clone();
     window.on_browse_repo(move |repo| {
         let tx = tx_repo_pkgs.clone();
         let repo_str = repo.to_string();
         info!("Browse repo: {}", repo_str);
+        // Clear stale data immediately so filter can't search previous repo's packages
+        // while the new load is in progress
+        *repo_browse_clear.borrow_mut() = Vec::new();
         if let Some(w) = window_weak_repo.upgrade() {
             w.set_repo_loading(true);
             w.set_show_repo_detail(false);
@@ -5004,18 +5004,80 @@ fn main() {
     window.on_filter_repo(move |search| {
         let q = search.to_string().to_lowercase();
         let full = repo_full_filter.borrow();
-        let filtered: Vec<PackageData> = if q.is_empty() {
+        let mut filtered: Vec<PackageData> = if q.is_empty() {
             full.clone()
         } else {
             full.iter().filter(|p| {
                 p.name.to_lowercase().contains(&q)
-                    || p.display_name.to_lowercase().contains(&q)
                     || p.description.to_lowercase().contains(&q)
             }).cloned().collect()
         };
+        if !q.is_empty() {
+            filtered.sort_by_key(|p| {
+                let name = p.name.to_lowercase();
+                if name == q { 0u8 }
+                else if name.starts_with(&q) { 1 }
+                else if name.contains(&q) { 2 }
+                else { 3 }
+            });
+        }
         if let Some(w) = win_filter_repo.upgrade() {
             w.set_repo_packages(ModelRc::new(VecModel::from(filtered)));
+            // Hide "Load more" while a filter is active — it would overwrite filtered results
+            if !q.is_empty() {
+                w.set_repo_has_more(false);
+                w.set_repo_extra_count(0);
+            }
         }
+    });
+
+    // Package info modal: run pacman -Ql (installed) or pacman -Fl (file db)
+    let tx_pkg_info = tx.clone();
+    let window_weak_pi = window.as_weak();
+    window.on_load_pkg_info(move |name| {
+        let tx = tx_pkg_info.clone();
+        let n = name.to_string();
+        if let Some(w) = window_weak_pi.upgrade() {
+            w.set_pkg_info_loading(true);
+            w.set_pkg_info_files(SharedString::from(""));
+        }
+        thread::spawn(move || {
+            let ql = std::process::Command::new("pacman")
+                .args(["-Ql", &n])
+                .output();
+            let text = match ql {
+                Ok(o) if o.status.success() && !o.stdout.is_empty() => {
+                    // Strip package name prefix from each line: "pkg /path" → "/path"
+                    String::from_utf8_lossy(&o.stdout)
+                        .lines()
+                        .filter_map(|l| l.splitn(2, ' ').nth(1))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+                _ => {
+                    // Not installed — try file database
+                    let fl = std::process::Command::new("pacman")
+                        .args(["-Fl", &n])
+                        .output();
+                    match fl {
+                        Ok(o) if o.status.success() && !o.stdout.is_empty() => {
+                            // Strip "pkg usr/lib/..." → "/usr/lib/..." (add leading /)
+                            String::from_utf8_lossy(&o.stdout)
+                                .lines()
+                                .filter_map(|l| {
+                                    let mut parts = l.splitn(2, ' ');
+                                    parts.next();
+                                    parts.next().map(|p| format!("/{}", p))
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        }
+                        _ => "File database not synced.\nRun: sudo pacman -Fy".to_string(),
+                    }
+                }
+            };
+            let _ = tx.send(UiMessage::PkgInfoLoaded(text));
+        });
     });
 
     // Repo package detail: run pacman -Si <pkg>
@@ -5442,9 +5504,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     let installed_fut = alpm.list_installed();
     let orphans_fut = alpm.list_orphans();
     let flatpak_installed_fut = flatpak.list_installed();
-    // desktop_map: reads .desktop files only (fast). pacman -Ql removed.
-    // flatpak_map (appstream XML) removed - appdata_name already in list_installed().
-    let desktop_map_fut = tokio::task::spawn_blocking(build_desktop_name_map);
 
     let flatpak_updates_fut = if check_updates { Some(flatpak.list_updates()) } else { None };
     let checkupdates_fut = if check_updates {
@@ -5460,12 +5519,10 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
         installed_res,
          orphans_res,
          flatpak_installed_res,
-         desktop_map_res,
     ) = tokio::join!(
         installed_fut,
         orphans_fut,
         flatpak_installed_fut,
-        desktop_map_fut,
     );
 
     let flatpak_updates = if let Some(fut) = flatpak_updates_fut {
@@ -5478,7 +5535,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     let installed_pacman = installed_res.unwrap_or_else(|e| { error!("Failed to list installed: {}", e); Vec::new() });
     let orphan_count = orphans_res.map(|o| o.len()).unwrap_or(0);
     let flatpak_packages = flatpak_installed_res.unwrap_or_else(|e| { error!("Failed to list flatpak installed: {}", e); Vec::new() });
-    let desktop_map = desktop_map_res.unwrap_or_default();
 
     // Compute cache size quickly in background (non-blocking estimate)
     let cache_size = tokio::task::spawn_blocking(|| {
@@ -5527,7 +5583,7 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
 
     let installed_ui: Vec<PackageData> = installed_pacman
     .iter()
-    .map(|p| package_to_ui(p, update_names.contains(&p.name), &desktop_map))
+    .map(|p| package_to_ui(p, update_names.contains(&p.name)))
     .collect();
 
     let updates_ui: Vec<PackageData> = updates.iter().map(update_to_ui).collect();
@@ -5886,15 +5942,12 @@ async fn search_packages_async(
     let pacman_results = alpm_result.unwrap_or_default();
     let (flatpak_apps, flatpak_installed) = fk_result.unwrap_or_default();
 
-    let desktop_map = build_desktop_name_map();
-
     let mut results: Vec<PackageData> = pacman_results
         .iter()
         .map(|r| {
-            let display_name = humanize_package_name(&r.name, &desktop_map);
             PackageData {
                 name: SharedString::from(r.name.as_str()),
-                display_name: SharedString::from(&display_name),
+                display_name: SharedString::from(r.name.as_str()),
                 version: SharedString::from(r.version.to_string().as_str()),
                 description: SharedString::from(r.description.as_str()),
                 repository: SharedString::from(r.repository.as_str()),
@@ -5938,64 +5991,18 @@ async fn search_packages_async(
         })
         .collect();
 
+    // Sort pacman results by relevance: exact > prefix > name-contains > desc-only
+    results.sort_by_key(|p| {
+        let name = p.name.to_lowercase();
+        if name == q_lower { 0u8 }
+        else if name.starts_with(&q_lower) { 1 }
+        else if name.contains(&q_lower) { 2 }
+        else { 3 }
+    });
+
     results.extend(fk);
-    results.truncate(150);
+    results.truncate(200);
     let _ = tx.send(UiMessage::SearchResults(results));
-}
-
-fn build_desktop_name_map() -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    let dirs = ["/usr/share/applications"];
-    for dir in &dirs {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "desktop") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        let mut name = String::new();
-                        let mut exec = String::new();
-                        let mut no_display = false;
-                        for line in content.lines() {
-                            if line.starts_with("Name=") && !line.contains('[') {
-                                name = line.strip_prefix("Name=").unwrap_or("").to_string();
-                            } else if line.starts_with("Exec=") {
-                                exec = line.strip_prefix("Exec=").unwrap_or("")
-                                    .split_whitespace().next().unwrap_or("")
-                                    .rsplit('/').next().unwrap_or("").to_string();
-                            } else if line.starts_with("NoDisplay=true") {
-                                no_display = true;
-                            }
-                        }
-                        if !name.is_empty() && !no_display {
-                            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                                map.insert(stem.to_lowercase(), name.clone());
-                            }
-                            if !exec.is_empty() {
-                                map.entry(exec.to_lowercase()).or_insert(name);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    map
-}
-
-fn humanize_package_name(name: &str, desktop_map: &HashMap<String, String>) -> String {
-    if let Some(human_name) = desktop_map.get(&name.to_lowercase()) {
-        return human_name.clone();
-    }
-    name.split('-')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().to_string() + chars.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 // ─── Package cache ────────────────────────────────────────────────────────────
@@ -6669,8 +6676,6 @@ fn apps_to_package_data(
     let search_lower = search.to_lowercase();
     apps.iter()
         .filter(|app| {
-            // Skip add-on entries themselves (they extend another app)
-            if !app.extends.is_empty() { return false; }
             // Category filter
             if !category_filter.is_empty() && category_filter != "All"
                 && !app.categories.iter().any(|c| c == category_filter) {
@@ -6765,7 +6770,7 @@ fn load_repo_descriptions(repo: &str) -> std::collections::HashMap<String, Strin
                     let r = parts.next()?;
                     let n = parts.next()?;
                     let d = parts.next().unwrap_or("").trim();
-                    if r == repo && !d.is_empty() {
+                    if (repo.is_empty() || r == repo) && !d.is_empty() {
                         Some((n.to_string(), d.to_string()))
                     } else {
                         None
@@ -6779,7 +6784,6 @@ fn load_repo_descriptions(repo: &str) -> std::collections::HashMap<String, Strin
 
 fn load_repo_packages(repo: &str) -> Vec<PackageData> {
     let desc_map = load_repo_descriptions(repo);
-    let desktop_map = build_desktop_name_map();
     let mut cmd = std::process::Command::new("pacman");
     cmd.arg("-Sl");
     if !repo.is_empty() { cmd.arg(repo); }
@@ -6795,11 +6799,10 @@ fn load_repo_packages(repo: &str) -> Vec<PackageData> {
                     let name = parts[1];
                     let version = parts[2];
                     let installed = parts.get(3).is_some_and(|s| *s == "[installed]");
-                    let display_name = humanize_package_name(name, &desktop_map);
                     let description = desc_map.get(name).cloned().unwrap_or_default();
                     Some(PackageData {
                         name: SharedString::from(name),
-                        display_name: SharedString::from(&display_name),
+                        display_name: SharedString::from(name),
                         version: SharedString::from(version),
                         description: SharedString::from(&description),
                         repository: SharedString::from(repo_name),
