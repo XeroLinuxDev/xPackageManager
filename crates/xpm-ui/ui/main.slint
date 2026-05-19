@@ -963,9 +963,11 @@ export component MainWindow inherits Window {
     // Package info modal
     in-out property <bool> pkg-info-open: false;
     in-out property <string> pkg-info-name: "";
+    in-out property <string> pkg-info-subtitle: "Installed files";
     in-out property <string> pkg-info-files: "";
     in-out property <bool> pkg-info-loading: false;
     callback load-pkg-info(string);
+    callback load-flatpak-info(string);
 
     // Repos browser (view 7/8)
     in-out property <[string]> pacman-repos: [];
@@ -2997,6 +2999,32 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
+                                    // Info button
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 64px;
+                                            height: 32px;
+                                            border-radius: 6px;
+                                            background: ifk-info-touch.has-hover ? Cat.blue.with-alpha(0.25) : Cat.blue.with-alpha(0.12);
+                                            border-width: 1px;
+                                            border-color: Cat.blue.with-alpha(0.35);
+                                            animate background { duration: 60ms; }
+                                            VerticalLayout { alignment: center; Text { text: @tr("Info"); font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; } }
+                                            ifk-info-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    pkg-info-name = pkg.display-name;
+                                                    pkg-info-subtitle = @tr("Installed files");
+                                                    pkg-info-files = "";
+                                                    pkg-info-loading = true;
+                                                    pkg-info-open = true;
+                                                    root.load-flatpak-info(pkg.name);
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Remove button
                                     VerticalLayout {
                                         alignment: center;
@@ -3321,6 +3349,7 @@ export component MainWindow inherits Window {
                             }
                             show-info => {
                                 pkg-info-name = p.name;
+                                pkg-info-subtitle = @tr("Installed files");
                                 pkg-info-files = "";
                                 pkg-info-loading = true;
                                 pkg-info-open = true;
@@ -7362,7 +7391,7 @@ export component MainWindow inherits Window {
                         VerticalLayout {
                             alignment: center; horizontal-stretch: 1; spacing: 3px;
                             Text { text: pkg-info-name; font-size: Cat.fs16; font-weight: 700; color: Cat.text; overflow: elide; }
-                            Text { text: @tr("Installed files"); font-size: Cat.fs13; color: Cat.overlay1; }
+                            Text { text: pkg-info-subtitle; font-size: Cat.fs13; color: Cat.overlay1; }
                         }
 
                         VerticalLayout {

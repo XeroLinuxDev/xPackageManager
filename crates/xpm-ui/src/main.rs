@@ -5080,6 +5080,49 @@ fn main() {
         });
     });
 
+    // Flatpak info modal: list installed files via flatpak info --show-location + find
+    let tx_fk_info = tx.clone();
+    let window_weak_fki = window.as_weak();
+    window.on_load_flatpak_info(move |app_id| {
+        let tx = tx_fk_info.clone();
+        let id = app_id.to_string();
+        if let Some(w) = window_weak_fki.upgrade() {
+            w.set_pkg_info_loading(true);
+            w.set_pkg_info_files(SharedString::from(""));
+        }
+        thread::spawn(move || {
+            let text = match std::process::Command::new("flatpak")
+                .args(["info", "--show-location", &id])
+                .output()
+            {
+                Ok(loc) => {
+                    let base = String::from_utf8_lossy(&loc.stdout).trim().to_string();
+                    if base.is_empty() {
+                        format!("Could not locate install path for {}", id)
+                    } else {
+                        let files_path = format!("{}/files", base);
+                        match std::process::Command::new("find")
+                            .args([&files_path, "!", "-type", "d"])
+                            .output()
+                        {
+                            Ok(f) => {
+                                let raw = String::from_utf8_lossy(&f.stdout).trim().to_string();
+                                if raw.is_empty() {
+                                    format!("No files found under {}", files_path)
+                                } else {
+                                    raw
+                                }
+                            }
+                            Err(_) => format!("Could not list files under {}", files_path),
+                        }
+                    }
+                }
+                Err(_) => format!("Could not locate install path for {}", id),
+            };
+            let _ = tx.send(UiMessage::PkgInfoLoaded(text));
+        });
+    });
+
     // Repo package detail: run pacman -Si <pkg>
     let tx_repo_detail = tx.clone();
     let window_weak_rd = window.as_weak();
