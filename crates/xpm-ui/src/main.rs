@@ -2562,6 +2562,7 @@ fn main() {
     };
 
     let window = MainWindow::new().expect("Failed to create window");
+    window.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
 
     // Apply locale after component creation (GLOBAL_CONTEXT required by select_bundled_translation)
     if let Some(locale) = sys_locale::get_locale() {
@@ -4205,6 +4206,17 @@ fn main() {
                 .unwrap_or(0);
             let _ = tx.send(UiMessage::UpdateCacheSize(format_size(bytes)));
         });
+    });
+
+    window.on_clean_app_cache(move || {
+        info!("Clean app cache and restart");
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        let cache_dir = format!("{}/.local/share/xpm", home);
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = std::process::Command::new(exe).spawn();
+        }
+        std::process::exit(0);
     });
 
     // Toggle individual orphan checkbox

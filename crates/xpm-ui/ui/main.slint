@@ -800,6 +800,7 @@ export component MainWindow inherits Window {
     in-out property <int> selected-index: -1;
     in-out property <bool> loading: false;
     in-out property <bool> busy: false;
+    in-out property <string> app-version: "0.5.4";
     in-out property <string> status-message: "Ready";
     in-out property <int> progress: 0;
     in-out property <StatsData> stats;
@@ -1029,6 +1030,7 @@ export component MainWindow inherits Window {
 
     callback install-dep-package(string);
     callback clean-package-cache;
+    callback clean-app-cache;
     callback load-orphan-list;
     in-out property <bool> show-orphan-dialog: false;
     in-out property <[PackageData]> orphan-list: [];
@@ -4478,8 +4480,8 @@ export component MainWindow inherits Window {
                                         }
 
                                         Text {
-                                            text: @tr("xpm  —  about");
-                                            font-size: Cat.fs12; font-family: "monospace";
+                                            text: "XPM  —  Version " + app-version;
+                                            font-size: Cat.fs14; font-family: "monospace";
                                             color: Cat.overlay0;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
@@ -4504,17 +4506,12 @@ export component MainWindow inherits Window {
                                         spacing: 2px;
                                         Text {
                                             text: @tr("XeroLinux Package Manager");
-                                            font-size: Cat.fs13; font-family: "monospace"; font-weight: 700;
+                                            font-size: Cat.fs15; font-family: "monospace"; font-weight: 700;
                                             color: Cat.text; horizontal-alignment: center;
                                         }
                                         Text {
-                                            text: @tr("Rust + Slint  /  pacman + flatpak");
-                                            font-size: Cat.fs10; font-family: "monospace";
-                                            color: Cat.overlay1; horizontal-alignment: center;
-                                        }
-                                        Text {
                                             text: "\u{25A0} " + stats.pacman-count + " " + @tr("pacman") + "   \u{25A0} " + stats.flatpak-count + " " + @tr("flatpak") + "   \u{25A0} " + stats.orphan-count + " " + @tr("orphans");
-                                            font-size: Cat.fs11; font-family: "monospace";
+                                            font-size: Cat.fs13; font-family: "monospace";
                                             color: Cat.mauve.with-alpha(0.65); horizontal-alignment: center;
                                         }
                                     }
@@ -5974,13 +5971,12 @@ export component MainWindow inherits Window {
                                 horizontal-stretch: 1;
                                 height: 66px;
                                 border-radius: 10px;
-                                background: home-sync-touch.has-hover ? Cat.mauve.with-alpha(0.18) : Cat.surface0.with-alpha(0.4);
-                                opacity: busy ? 0.5 : 1.0;
+                                background: home-appcache-touch.has-hover ? Cat.peach.with-alpha(0.18) : Cat.surface0.with-alpha(0.4);
                                 animate background { duration: 100ms; }
 
-                                home-sync-touch := TouchArea {
-                                    mouse-cursor: busy ? default : pointer;
-                                    clicked => { if !busy { root.sync-databases(); } }
+                                home-appcache-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.clean-app-cache(); }
                                 }
 
                                 VerticalLayout {
@@ -5990,14 +5986,13 @@ export component MainWindow inherits Window {
                                     spacing: 3px;
 
                                     Text {
-                                        text: @tr("Check for Updates");
+                                        text: @tr("Clean App Cache");
                                         font-size: Cat.fs14;
                                         font-weight: 600;
-                                        color: Cat.mauve;
+                                        color: Cat.peach;
                                     }
-                                    if loading: Rectangle { width: 110px; height: 11px; border-radius: 3px; background: Cat.overlay0.with-alpha(0.1); }
-                                    if !loading: Text {
-                                        text: stats.update-count > 0 ? stats.update-count + " updates pending" : "System is up to date";
+                                    Text {
+                                        text: @tr("Clear index & restart");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay0;
                                     }

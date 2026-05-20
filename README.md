@@ -116,6 +116,11 @@ cd packaging/ && makepkg -rsifcd
 
 ## Changelog
 
+### v0.5.4
+
+- Cleaned up translations and optimized app more.
+- **Sync & Update** card replaced with **Clean Cache & Reload**
+
 ### v0.5.3
 
 - **App Info** Button
