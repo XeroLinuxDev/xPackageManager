@@ -4191,10 +4191,9 @@ fn main() {
         thread::spawn(move || {
             // yes | pacman -Scc answers both confirmation prompts (-Scc asks twice).
             // --noconfirm is unreliable for -Scc in PTY context.
-            let script = "yes 2>/dev/null | LANG=C pacman -Scc; \
-                          echo ''; \
-                          echo 'Removing leftover download dirs (pacman bug workaround)...'; \
-                          rm -rfv /var/cache/pacman/pkg/download-* 2>/dev/null && echo 'Done.' || echo 'No download dirs found.'";
+            let script = "rm -rf /var/cache/pacman/pkg/download-* 2>/dev/null; \
+                          yes 2>/dev/null | LANG=C pacman -Scc; \
+                          echo 'Done.'";
             run_in_terminal(&tx, "Cleaning Package Cache", "pkexec", &["bash", "-c", script], &input, &pid);
             // Recompute cache size and update the home-page stat tile
             let bytes = std::process::Command::new("du")
