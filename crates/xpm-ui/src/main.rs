@@ -4190,7 +4190,7 @@ fn main() {
         thread::spawn(move || {
             // yes | pacman -Scc answers both confirmation prompts (-Scc asks twice).
             // --noconfirm is unreliable for -Scc in PTY context.
-            let script = "yes | LANG=C pacman -Scc 2>/dev/null; \
+            let script = "yes 2>/dev/null | LANG=C pacman -Scc; \
                           echo ''; \
                           echo 'Removing leftover download dirs (pacman bug workaround)...'; \
                           rm -rfv /var/cache/pacman/pkg/download-* 2>/dev/null && echo 'Done.' || echo 'No download dirs found.'";
@@ -6382,10 +6382,16 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         in_id = true;
                     }
                     b"name" if in_component && !in_developer && !in_description && !in_categories => {
-                        in_name = true;
+                        // Skip translated names — only accept the unlocalized default (English)
+                        let has_lang = e.attributes().flatten()
+                            .any(|a| a.key.as_ref() == b"xml:lang");
+                        if !has_lang { in_name = true; }
                     }
                     b"summary" if in_component && !in_developer && !in_description => {
-                        in_summary = true;
+                        // Skip translated summaries — only accept the unlocalized default (English)
+                        let has_lang = e.attributes().flatten()
+                            .any(|a| a.key.as_ref() == b"xml:lang");
+                        if !has_lang { in_summary = true; }
                     }
                     b"description" if in_component && !in_screenshots && !in_releases => {
                         in_description = true;

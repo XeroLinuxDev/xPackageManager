@@ -105,9 +105,22 @@ cd xPackageManager/packaging/ && makepkg -rsifcd
 
 > This will require you to manually do a git pull and rebuild with every update...
 
+- To Update :
+
+```bash
+cd xPackageManager/ && git pull
+cd packaging/ && makepkg -rsifcd
+```
+
 ---
 
 ## Changelog
+
+### v0.5.3
+
+- **App Info** Button
+- **Search** — Fixed search backend.
+- Pkg Name *Humanization* removed was causing issues.
 
 ### v0.5.1
 
