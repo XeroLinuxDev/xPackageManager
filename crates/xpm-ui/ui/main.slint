@@ -188,6 +188,36 @@ global NavTooltip {
     in-out property <length> y: 0px;
 }
 
+// Filled amber warning badge (rounded triangle + bold "!"). Color-emoji isn't
+// rendered by the femtovg backend, so we draw it for a crisp, consistent look.
+component WarnBadge inherits Rectangle {
+    in property <length> size: 18px;
+    in property <color> fill: #f5a623;
+    width: size;
+    height: size;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        // Rounded-corner triangle.
+        commands: "M10.3 3.2 a2 2 0 0 1 3.4 0 L23 19.5 a2 2 0 0 1 -1.7 3 H2.7 a2 2 0 0 1 -1.7 -3 Z";
+        fill: root.fill;
+    }
+    Text {
+        text: "!";
+        font-size: size * 0.6;
+        font-weight: 900;
+        color: #2b2b2b;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        y: size * 0.14;
+        width: 100%;
+    }
+}
+
 component NavIcon inherits Rectangle {
     in property <brush> icon-color: Cat.text;
     in property <string> d;
@@ -1197,7 +1227,6 @@ export component MainWindow inherits Window {
     property <string> icon-flatpak: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
     property <string> icon-rss: "M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M5 19h.01";
     property <string> icon-zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8";
-    property <string> icon-alert-triangle: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01";
     property <string> icon-info: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2M12 8h.01M11 12h1v4h1";
     property <string> icon-chevron-right: "M9 18l6-6-6-6";
     property <string> icon-trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6";
@@ -3166,10 +3195,10 @@ export component MainWindow inherits Window {
                             padding-top: 8px;
                             padding-bottom: 8px;
                             spacing: 8px;
-                            VerticalLayout { alignment: center; NavIcon { d: icon-alert-triangle; icon-color: Cat.red; width: 15px; height: 15px; } }
+                            VerticalLayout { alignment: center; WarnBadge { size: 20px; } }
                             Text {
-                                text: @tr("AppImages are not maintained or supported by us — use at your own risk. A warning triangle on an installed app means it does not support updating (reinstall manually for newer versions).");
-                                font-size: Cat.fs12;
+                                text: @tr("AppImages are not maintained or supported by us, use at your own risk. Updates are manual due to the nature of AppImages. Click either Update or Reinstall to update them.");
+                                font-size: Cat.fs14;
                                 color: Cat.red;
                                 vertical-alignment: center;
                             }
@@ -3423,7 +3452,7 @@ export component MainWindow inherits Window {
                                         Rectangle {
                                             width: 28px; height: 28px; border-radius: 6px;
                                             background: warn-ta.has-hover ? Cat.yellow.with-alpha(0.18) : transparent;
-                                            NavIcon { d: icon-alert-triangle; icon-color: Cat.yellow; width: 18px; height: 18px; x: 5px; y: 5px; }
+                                            WarnBadge { size: 18px; x: 5px; y: 5px; }
                                             warn-ta := TouchArea { mouse-cursor: pointer; }
                                             if warn-ta.has-hover || warn-ta.pressed: Rectangle {
                                                 x: -warn-tt-lbl.preferred-width - 28px;
@@ -5516,7 +5545,7 @@ export component MainWindow inherits Window {
                                 spacing: 8px; alignment: center;
 
                                 VerticalLayout { alignment: center;
-                                    NavIcon { d: icon-alert-triangle; icon-color: Cat.yellow; width: 13px; height: 13px; }
+                                    WarnBadge { size: 15px; }
                                 }
                                 Text {
                                     text: @tr("Use at your own risk — if it ain't broke, don't mess with it. Firmware updates can brick hardware.");

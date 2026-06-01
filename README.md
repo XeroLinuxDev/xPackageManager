@@ -1,6 +1,6 @@
 # xPackageManager
 
-A package manager GUI for Arch Linux managing **pacman** and **Flatpak** from one interface. Built with Rust and [Slint](https://slint.dev). 
+A package manager GUI for Arch Linux managing **pacman**, **Flatpak** and **AppImage** from one interface. Built with Rust and [Slint](https://slint.dev). 
 
 > No AUR support by design. XeroLinux ships Chaotic-AUR repo with pre-compiled AUR packages.
 
@@ -24,6 +24,14 @@ A package manager GUI for Arch Linux managing **pacman** and **Flatpak** from on
 - App detail page: icon, screenshots, description, changelog, links
 - Add-ons modal per app (install / remove)
 - Installed Flatpaks tab with remove support
+
+**AppImage** *(optional, off by default)*
+
+- Catalog browse from configurable feed-JSON sources (default: AppImageHub)
+- Install from catalog, direct `.AppImage` URL, or local file
+- Desktop/menu integration with extracted icon
+- Configurable install location; named source manager (popup)
+- Install ↔ Remove toggle; Reinstall for apps without embedded update support
 
 **Updates**
 
@@ -115,6 +123,11 @@ cd packaging/ && makepkg -rsifcd
 ---
 
 ## Changelog
+
+### v0.6.0
+
+- **AppImage support** (optional, off by default): catalog browse, install from catalog/URL/file, desktop integration with icons, configurable install location, named source manager, Install↔Remove + Reinstall.
+- Disk-cached catalog feed for faster page loads; atomic manifest writes.
 
 ### v0.5.4
 
