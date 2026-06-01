@@ -156,6 +156,7 @@ fn vercmp(a: &str, b: &str) -> Ordering {
 pub enum PackageBackend {
     Pacman,
     Flatpak,
+    AppImage,
 }
 
 impl fmt::Display for PackageBackend {
@@ -163,6 +164,7 @@ impl fmt::Display for PackageBackend {
         match self {
             PackageBackend::Pacman => write!(f, "pacman"),
             PackageBackend::Flatpak => write!(f, "flatpak"),
+            PackageBackend::AppImage => write!(f, "appimage"),
         }
     }
 }

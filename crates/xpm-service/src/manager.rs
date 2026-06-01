@@ -10,6 +10,7 @@ use xpm_core::{
     package::{Package, PackageBackend, PackageInfo, SearchResult, UpdateInfo},
     source::PackageSource,
 };
+use xpm_appimage::AppImageBackend;
 use xpm_flatpak::FlatpakBackend;
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,7 @@ pub enum ProgressMessage {
 pub struct PackageManager {
     alpm: Option<Arc<AlpmBackend>>,
     flatpak: Option<Arc<FlatpakBackend>>,
+    appimage: Option<Arc<AppImageBackend>>,
     state: Arc<RwLock<AppState>>,
     _progress_tracker: Arc<Mutex<ProgressTracker>>,
     progress_tx: broadcast::Sender<ProgressMessage>,
@@ -54,9 +56,21 @@ impl PackageManager {
             }
         };
 
+        let appimage = match AppImageBackend::new() {
+            Ok(backend) => {
+                info!("AppImage backend initialized");
+                Some(Arc::new(backend))
+            }
+            Err(e) => {
+                error!("Failed to initialize AppImage: {}", e);
+                None
+            }
+        };
+
         Ok(Self {
             alpm,
             flatpak,
+            appimage,
             state: Arc::new(RwLock::new(AppState::new())),
             _progress_tracker: Arc::new(Mutex::new(ProgressTracker::new())),
             progress_tx,
@@ -83,6 +97,11 @@ impl PackageManager {
                 .as_ref()
                 .map(|b| b.as_ref() as &dyn PackageSource)
                 .ok_or_else(|| Error::BackendUnavailable("Flatpak".into())),
+            PackageBackend::AppImage => self
+                .appimage
+                .as_ref()
+                .map(|b| b.as_ref() as &dyn PackageSource)
+                .ok_or_else(|| Error::BackendUnavailable("AppImage".into())),
         }
     }
 

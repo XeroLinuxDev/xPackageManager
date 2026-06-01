@@ -6140,6 +6140,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "xpm-appimage"
+version = "0.5.4"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "xpm-core",
+]
+
+[[package]]
 name = "xpm-core"
 version = "0.5.4"
 dependencies = [
@@ -6170,6 +6183,7 @@ dependencies = [
  "tokio",
  "tracing",
  "xpm-alpm",
+ "xpm-appimage",
  "xpm-core",
  "xpm-flatpak",
 ]
@@ -6191,6 +6205,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "xpm-alpm",
+ "xpm-appimage",
  "xpm-core",
  "xpm-flatpak",
  "xpm-service",

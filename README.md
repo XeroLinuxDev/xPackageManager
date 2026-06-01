@@ -93,7 +93,7 @@ sudo pacman -Syy xpm-gui
 - Dependencies :
 
 ```bash
-sudo pacman -S rust cargo flatpak alpm
+sudo pacman -S rust cargo flatpak alpm curl fuse2
 ```
 
 - Build & Install :

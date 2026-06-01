@@ -15,6 +15,7 @@ xpm-core.workspace = true
 xpm-service.workspace = true
 xpm-alpm.workspace = true
 xpm-flatpak.workspace = true
+xpm-appimage.workspace = true
 slint.workspace = true
 tokio.workspace = true
 tracing.workspace = true

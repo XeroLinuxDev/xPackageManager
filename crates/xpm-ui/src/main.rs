@@ -20,6 +20,7 @@ use tracing_subscriber::FmtSubscriber;
 use xpm_alpm::AlpmBackend;
 use xpm_core::source::PackageSource;
 use xpm_flatpak::FlatpakBackend;
+use xpm_appimage::{AppImageBackend, AppImageEntry, CatalogEntry};
 
 slint::include_modules!();
 
@@ -149,6 +150,11 @@ enum UiMessage {
     FirmwareRefreshDone(bool),
     UpdateCacheSize(String),
     PkgInfoLoaded(String),
+    InstalledAppImagesLoaded(Vec<PackageData>),
+    AppImageCatalogReady,
+    AppImageCatalogLoading(bool),
+    AppImageIconReady { github: String, path: String },
+    AppImageCardsRefresh,
 }
 
 #[derive(Clone)]
@@ -585,6 +591,26 @@ struct AppConfig {
     notify_on_updates: bool,
     #[serde(default)]
     auto_clean_cache: bool,
+    #[serde(default)]
+    appimage_enabled: bool,
+    #[serde(default)]
+    appimage_dir: String,
+    #[serde(default)]
+    appimage_feeds: Vec<AppImageFeed>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct AppImageFeed {
+    name: String,
+    url: String,
+}
+
+// The default catalog source (community AppImageHub feed).
+fn default_appimage_feeds() -> Vec<AppImageFeed> {
+    vec![AppImageFeed {
+        name: "AppImageHub".to_string(),
+        url: "https://appimage.github.io/feed.json".to_string(),
+    }]
 }
 
 fn default_parallel_downloads() -> u32 { 5 }
@@ -601,6 +627,9 @@ impl Default for AppConfig {
             font_scale: 1.0,
             notify_on_updates: false,
             auto_clean_cache: false,
+            appimage_enabled: false,
+            appimage_dir: String::new(),
+            appimage_feeds: default_appimage_feeds(),
         }
     }
 }
@@ -643,6 +672,13 @@ fn build_config(window: &MainWindow) -> AppConfig {
         font_scale: window.global::<Cat>().get_font_scale(),
         notify_on_updates: window.get_setting_notify_on_updates(),
         auto_clean_cache: window.get_setting_auto_clean_cache(),
+        appimage_enabled: window.get_setting_appimage_enabled(),
+        appimage_dir: window.get_setting_appimage_dir().to_string(),
+        appimage_feeds: window
+            .get_appimage_sources()
+            .iter()
+            .map(|s| AppImageFeed { name: s.name.to_string(), url: s.url.to_string() })
+            .collect(),
     }
 }
 
@@ -724,6 +760,244 @@ fn format_size(bytes: u64) -> String {
     } else {
         format!("{} B", bytes)
     }
+}
+
+// ─── AppImage helpers ─────────────────────────────────────────────────────────
+
+fn appimage_entry_to_ui(entry: &AppImageEntry) -> PackageData {
+    let src = entry.source_url.clone().unwrap_or_default();
+    PackageData {
+        name: SharedString::from(entry.name.as_str()),
+        display_name: SharedString::from(entry.display_name.as_str()),
+        version: SharedString::from(entry.version.as_str()),
+        description: SharedString::from(src.as_str()),
+        repository: SharedString::from("appimage"),
+        backend: 3,
+        installed: true,
+        // For AppImage rows, `has_update` carries *update capability* (not a
+        // pending update): false => the page renders a warning triangle.
+        has_update: entry.supports_update,
+        installed_size: SharedString::from(format_size(entry.size)),
+        licenses: SharedString::from(""),
+        url: SharedString::from(src.as_str()),
+        dependencies: SharedString::from(""),
+        required_by: SharedString::from(""),
+        selected: false,
+        explicit: false,
+    }
+}
+
+// ─── AppImage catalog icon cache ──────────────────────────────────────────────
+
+fn appimage_icon_dir() -> std::path::PathBuf {
+    let base = std::env::var("XDG_CACHE_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            format!("{}/.cache", home)
+        });
+    std::path::PathBuf::from(base).join("xpm/appimage-icons")
+}
+
+fn icon_cache_path(github: &str, icon_url: &str) -> std::path::PathBuf {
+    let slug: String = github
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let ext = icon_url.rsplit('.').next().filter(|e| e.len() <= 4).unwrap_or("png");
+    appimage_icon_dir().join(format!("{}.{}", slug, ext))
+}
+
+/// Map of installed catalog apps: github repo (lowercase) -> manifest id.
+fn installed_github_map() -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Ok(backend) = AppImageBackend::new() {
+        for e in backend.list_entries() {
+            if let Some(gh) = &e.github {
+                map.insert(gh.to_lowercase(), e.name.clone());
+            }
+        }
+    }
+    map
+}
+
+// Build a catalog card. `github` is the install id; icon loads on demand.
+fn catalog_entry_to_card(
+    entry: &CatalogEntry,
+    installed: &std::collections::HashMap<String, String>,
+) -> AppImageCard {
+    let installed_id = installed.get(&entry.github.to_lowercase()).cloned();
+    let desc = if entry.description.is_empty() {
+        entry.categories.join(", ")
+    } else {
+        entry.description.clone()
+    };
+    let initial = entry
+        .name
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().next().unwrap_or(c).to_string())
+        .unwrap_or_default();
+    let category = entry.categories.first().cloned().unwrap_or_default();
+
+    // Use a cached icon immediately if present.
+    let (icon, has_icon) = match &entry.icon_url {
+        Some(url) => {
+            let path = icon_cache_path(&entry.github, url);
+            if path.exists() {
+                match slint::Image::load_from_path(&path) {
+                    Ok(img) => (img, true),
+                    Err(_) => (slint::Image::default(), false),
+                }
+            } else {
+                (slint::Image::default(), false)
+            }
+        }
+        None => (slint::Image::default(), false),
+    };
+
+    AppImageCard {
+        github: SharedString::from(entry.github.as_str()),
+        name: SharedString::from(entry.name.as_str()),
+        description: SharedString::from(desc.as_str()),
+        initial: SharedString::from(initial.as_str()),
+        category: SharedString::from(category.as_str()),
+        icon,
+        has_icon,
+        installed: installed_id.is_some(),
+        installed_id: SharedString::from(installed_id.unwrap_or_default().as_str()),
+    }
+}
+
+/// Filter the catalog by a query against name/description. Returns the rendered
+/// (capped) cards and the total number of matches.
+fn filter_catalog(
+    catalog: &[CatalogEntry],
+    query: &str,
+    installed: &std::collections::HashMap<String, String>,
+) -> (Vec<AppImageCard>, usize) {
+    const CAP: usize = 500;
+    let q = query.trim().to_lowercase();
+    let matches: Vec<&CatalogEntry> = catalog
+        .iter()
+        .filter(|e| {
+            q.is_empty()
+                || e.name.to_lowercase().contains(&q)
+                || e.description.to_lowercase().contains(&q)
+        })
+        .collect();
+    let total = matches.len();
+    let cards = matches
+        .into_iter()
+        .take(CAP)
+        .map(|e| catalog_entry_to_card(e, installed))
+        .collect();
+    (cards, total)
+}
+
+/// Open a native file chooser for an AppImage. Tries kdialog, falls back to zenity.
+fn pick_appimage_file() -> Option<String> {
+    let out = std::process::Command::new("kdialog")
+        .args(["--getopenfilename", ".", "AppImage (*.AppImage *.appimage)"])
+        .output();
+    if let Ok(o) = out {
+        if o.status.success() {
+            let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !p.is_empty() {
+                return Some(p);
+            }
+        }
+    }
+    let out = std::process::Command::new("zenity")
+        .args([
+            "--file-selection",
+            "--title=Select AppImage",
+            "--file-filter=AppImage | *.AppImage *.appimage",
+        ])
+        .output();
+    if let Ok(o) = out {
+        if o.status.success() {
+            let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !p.is_empty() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// Open a native folder chooser. Tries kdialog, falls back to zenity.
+fn pick_directory() -> Option<String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
+    let out = std::process::Command::new("kdialog")
+        .args(["--getexistingdirectory", &home])
+        .output();
+    if let Ok(o) = out {
+        if o.status.success() {
+            let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !p.is_empty() {
+                return Some(p);
+            }
+        }
+    }
+    let out = std::process::Command::new("zenity")
+        .args(["--file-selection", "--directory", "--title=Select AppImage folder"])
+        .output();
+    if let Ok(o) = out {
+        if o.status.success() {
+            let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !p.is_empty() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// Run an AppImage operation on the calling (background) thread, streaming log
+/// output into the progress popup and refreshing the installed list afterward.
+fn run_appimage_op<F>(tx: &mpsc::Sender<UiMessage>, title: &str, dir: Option<String>, op: F)
+where
+    F: FnOnce(&AppImageBackend, &dyn Fn(&str)) -> xpm_core::error::Result<()>,
+{
+    let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
+    let _ = tx.send(UiMessage::ProgressAutoExpand);
+    let _ = tx.send(UiMessage::ProgressShowClose);
+
+    let backend = match AppImageBackend::with_dir(dir.map(std::path::PathBuf::from)) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = tx.send(UiMessage::ProgressOutput(format!("Error: {}\n", e)));
+            let _ = tx.send(UiMessage::OperationDone(false));
+            return;
+        }
+    };
+
+    let buf = std::rc::Rc::new(RefCell::new(String::new()));
+    let log_tx = tx.clone();
+    let log_buf = buf.clone();
+    let log = move |line: &str| {
+        log_buf.borrow_mut().push_str(line);
+        let _ = log_tx.send(UiMessage::ProgressOutput(log_buf.borrow().clone()));
+    };
+
+    let res = op(&backend, &log);
+    match res {
+        Ok(()) => {
+            let _ = tx.send(UiMessage::OperationDone(true));
+        }
+        Err(e) => {
+            buf.borrow_mut().push_str(&format!("\nError: {}\n", e));
+            let _ = tx.send(UiMessage::ProgressOutput(buf.borrow().clone()));
+            let _ = tx.send(UiMessage::OperationDone(false));
+        }
+    }
+
+    let ui: Vec<PackageData> = backend.list_entries().iter().map(appimage_entry_to_ui).collect();
+    let _ = tx.send(UiMessage::InstalledAppImagesLoaded(ui));
+    // Refresh catalog cards so Install↔Remove reflects the change.
+    let _ = tx.send(UiMessage::AppImageCardsRefresh);
 }
 
 /// Strip ANSI/VT100 escape sequences, preserving all other characters including \r and \n.
@@ -1858,6 +2132,7 @@ fn package_to_ui(pkg: &xpm_core::package::Package, has_update: bool) -> PackageD
     let backend = match pkg.backend {
         xpm_core::package::PackageBackend::Pacman => 0,
         xpm_core::package::PackageBackend::Flatpak => 1,
+        xpm_core::package::PackageBackend::AppImage => 3,
     };
 
     PackageData {
@@ -1886,6 +2161,7 @@ fn update_to_ui(update: &xpm_core::package::UpdateInfo) -> PackageData {
     let backend = match update.backend {
         xpm_core::package::PackageBackend::Pacman => 0,
         xpm_core::package::PackageBackend::Flatpak => 1,
+        xpm_core::package::PackageBackend::AppImage => 3,
     };
 
     let version_str = format!(
@@ -2579,6 +2855,15 @@ fn main() {
     let (tx, rx) = mpsc::channel::<UiMessage>();
     let rx = Rc::new(RefCell::new(rx));
 
+    // AppImage catalog cache (Send-safe raw entries). Cards (which hold a
+    // non-Send slint::Image) are always built on the UI thread from this.
+    let appimage_catalog: Arc<Mutex<Vec<CatalogEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    // User-configured AppImage install/download dir ("" = default). Shared so
+    // background ops read the current value at run time.
+    let appimage_dir_state: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    // Configured catalog sources (named feeds). Shared with the fetch thread.
+    let appimage_sources_state: Arc<Mutex<Vec<AppImageFeed>>> = Arc::new(Mutex::new(Vec::new()));
+
     listen_for_instance_signals(window.as_weak());
 
     let terminal_input_sender: Arc<Mutex<Option<mpsc::Sender<String>>>> = Arc::new(Mutex::new(None));
@@ -2646,6 +2931,7 @@ fn main() {
     let flatpak_store_timer = flatpak_app_store.clone();
     let log_model_timer = log_model.clone();
     let notified_updates = Rc::new(std::cell::Cell::new(false));
+    let cat_dispatch = appimage_catalog.clone();
 
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
         if let Some(window) = window_weak.upgrade() {
@@ -3037,6 +3323,47 @@ fn main() {
                     UiMessage::InstalledFlatpaksLoaded(pkgs) => {
                         *full_installed_flatpaks_timer.borrow_mut() = pkgs.clone();
                         window.set_installed_flatpaks(ModelRc::new(VecModel::from(pkgs)));
+                    }
+                    UiMessage::InstalledAppImagesLoaded(pkgs) => {
+                        window.set_installed_appimages(ModelRc::new(VecModel::from(pkgs)));
+                    }
+                    UiMessage::AppImageCatalogReady => {
+                        let (cards, total) = filter_catalog(
+                            &cat_dispatch.lock().unwrap(),
+                            window.get_appimage_search().as_str(),
+                            &installed_github_map(),
+                        );
+                        window.set_appimage_catalog_loading(false);
+                        window.set_appimage_catalog_total(total as i32);
+                        window.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
+                    }
+                    UiMessage::AppImageCardsRefresh => {
+                        // Rebuild cards so Install/Remove reflects the latest state.
+                        let (cards, total) = filter_catalog(
+                            &cat_dispatch.lock().unwrap(),
+                            window.get_appimage_search().as_str(),
+                            &installed_github_map(),
+                        );
+                        window.set_appimage_catalog_total(total as i32);
+                        window.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
+                    }
+                    UiMessage::AppImageCatalogLoading(v) => {
+                        window.set_appimage_catalog_loading(v);
+                    }
+                    UiMessage::AppImageIconReady { github, path } => {
+                        if let Ok(img) = slint::Image::load_from_path(std::path::Path::new(&path)) {
+                            let model = window.get_catalog_appimages();
+                            for idx in 0..model.row_count() {
+                                if let Some(mut card) = model.row_data(idx) {
+                                    if card.github == github {
+                                        card.icon = img;
+                                        card.has_icon = true;
+                                        model.set_row_data(idx, card);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                     UiMessage::DepTreeLoaded { deps, reqby, root_version } => {
                         window.set_dep_tree_loading(false);
@@ -4514,6 +4841,283 @@ fn main() {
         }
     });
 
+    // ─── AppImage callbacks ──────────────────────────────────────────────────
+    let tx_ai_load = tx.clone();
+    window.on_load_installed_appimages(move || {
+        let tx = tx_ai_load.clone();
+        thread::spawn(move || {
+            if let Ok(backend) = AppImageBackend::new() {
+                let ui: Vec<PackageData> =
+                    backend.list_entries().iter().map(appimage_entry_to_ui).collect();
+                let _ = tx.send(UiMessage::InstalledAppImagesLoaded(ui));
+            }
+        });
+    });
+
+    let tx_ai_file = tx.clone();
+    let dir_ai_file = appimage_dir_state.clone();
+    window.on_install_appimage_file(move || {
+        let tx = tx_ai_file.clone();
+        let dir = dir_ai_file.lock().unwrap().clone();
+        thread::spawn(move || {
+            let Some(path) = pick_appimage_file() else { return };
+            let title = format!("Installing {}", path);
+            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+                backend.install(&path, log).map(|_| ())
+            });
+        });
+    });
+
+    let tx_ai_url = tx.clone();
+    let dir_ai_url = appimage_dir_state.clone();
+    window.on_install_appimage_url(move |url| {
+        let url = url.trim().to_string();
+        if url.is_empty() {
+            return;
+        }
+        let tx = tx_ai_url.clone();
+        let dir = dir_ai_url.lock().unwrap().clone();
+        thread::spawn(move || {
+            let title = format!("Installing {}", url);
+            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+                backend.install(&url, log).map(|_| ())
+            });
+        });
+    });
+
+    let tx_ai_remove = tx.clone();
+    window.on_remove_appimage(move |name| {
+        let name = name.to_string();
+        let tx = tx_ai_remove.clone();
+        thread::spawn(move || {
+            let title = format!("Removing {}", name);
+            run_appimage_op(&tx, &title, None, |backend, log| backend.remove_app(&name, log));
+        });
+    });
+
+    let tx_ai_update = tx.clone();
+    let dir_ai_update = appimage_dir_state.clone();
+    window.on_update_appimage(move |name| {
+        let name = name.to_string();
+        let tx = tx_ai_update.clone();
+        let dir = dir_ai_update.lock().unwrap().clone();
+        thread::spawn(move || {
+            let title = format!("Updating {}", name);
+            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+                backend.update_app(&name, log).map(|_| ())
+            });
+        });
+    });
+
+    let tx_ai_reinstall = tx.clone();
+    let dir_ai_reinstall = appimage_dir_state.clone();
+    window.on_reinstall_appimage(move |name| {
+        let name = name.to_string();
+        let tx = tx_ai_reinstall.clone();
+        let dir = dir_ai_reinstall.lock().unwrap().clone();
+        thread::spawn(move || {
+            let title = format!("Reinstalling {}", name);
+            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+                backend.reinstall_app(&name, log).map(|_| ())
+            });
+        });
+    });
+
+    // Default browse source: the AppImageHub feed, plus any user-added sources.
+    let tx_ai_cat = tx.clone();
+    let cat_load = appimage_catalog.clone();
+    let sources_load = appimage_sources_state.clone();
+    window.on_load_appimage_catalog(move || {
+        if !cat_load.lock().unwrap().is_empty() {
+            return;
+        }
+        let tx = tx_ai_cat.clone();
+        let cache = cat_load.clone();
+        let urls: Vec<String> =
+            sources_load.lock().unwrap().iter().map(|f| f.url.clone()).collect();
+        let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
+        // Fetch off-thread (Send-safe entries only); cards are built on the UI
+        // thread when AppImageCatalogReady is handled.
+        thread::spawn(move || {
+            let entries = xpm_appimage::catalog::fetch_sources(&urls);
+            *cache.lock().unwrap() = entries;
+            let _ = tx.send(UiMessage::AppImageCatalogReady);
+        });
+    });
+
+    let cat_filter = appimage_catalog.clone();
+    let win_ai_filter = window.as_weak();
+    window.on_filter_appimage_catalog(move |query| {
+        if let Some(w) = win_ai_filter.upgrade() {
+            let (cards, total) =
+                filter_catalog(&cat_filter.lock().unwrap(), query.as_str(), &installed_github_map());
+            w.set_appimage_catalog_total(total as i32);
+            w.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
+        }
+    });
+
+    let tx_ai_cat_install = tx.clone();
+    let dir_ai_cat = appimage_dir_state.clone();
+    window.on_install_appimage_catalog(move |github| {
+        let github = github.to_string();
+        let tx = tx_ai_cat_install.clone();
+        let dir = dir_ai_cat.lock().unwrap().clone();
+        thread::spawn(move || {
+            let title = format!("Installing {}", github);
+            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+                backend.install_from_github(&github, log).map(|_| ())
+            });
+        });
+    });
+
+    // Change AppImage install/download directory (folder picker).
+    let dir_state_change = appimage_dir_state.clone();
+    let win_ai_dir = window.as_weak();
+    window.on_change_appimage_dir(move || {
+        let dir_state = dir_state_change.clone();
+        let win = win_ai_dir.clone();
+        thread::spawn(move || {
+            if let Some(path) = pick_directory() {
+                *dir_state.lock().unwrap() = path.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = win.upgrade() {
+                        w.set_setting_appimage_dir(SharedString::from(path.as_str()));
+                        w.invoke_save_settings();
+                    }
+                });
+            }
+        });
+    });
+
+    // Reset AppImage install dir to the default.
+    let dir_state_reset = appimage_dir_state.clone();
+    let win_ai_dir_reset = window.as_weak();
+    window.on_reset_appimage_dir(move || {
+        *dir_state_reset.lock().unwrap() = String::new();
+        if let Some(w) = win_ai_dir_reset.upgrade() {
+            w.set_setting_appimage_dir(SharedString::from(""));
+            w.invoke_save_settings();
+        }
+    });
+
+    // Add / remove named catalog sources. Rebuilds the list, clears the cached
+    // catalog, persists, and refetches.
+    let apply_sources = {
+        let src_state = appimage_sources_state.clone();
+        let cat = appimage_catalog.clone();
+        move |w: &MainWindow, feeds: Vec<AppImageFeed>| {
+            *src_state.lock().unwrap() = feeds.clone();
+            let model: Vec<AppImageSource> = feeds
+                .iter()
+                .map(|f| AppImageSource {
+                    name: SharedString::from(f.name.as_str()),
+                    url: SharedString::from(f.url.as_str()),
+                })
+                .collect();
+            w.set_appimage_sources(ModelRc::new(VecModel::from(model)));
+            cat.lock().unwrap().clear();
+            w.set_catalog_appimages(ModelRc::new(VecModel::from(Vec::<AppImageCard>::new())));
+            w.invoke_save_settings();
+            w.invoke_load_appimage_catalog();
+        }
+    };
+
+    let src_add = appimage_sources_state.clone();
+    let win_src_add = window.as_weak();
+    let apply_add = apply_sources.clone();
+    window.on_add_appimage_source(move |name, url| {
+        let url = url.trim().to_string();
+        let mut name = name.trim().to_string();
+        if url.is_empty() || !(url.starts_with("http://") || url.starts_with("https://")) {
+            return;
+        }
+        if name.is_empty() {
+            name = "Source".to_string();
+        }
+        let mut list = src_add.lock().unwrap().clone();
+        if list.iter().any(|f| f.url == url) {
+            return;
+        }
+        list.push(AppImageFeed { name, url });
+        if let Some(w) = win_src_add.upgrade() {
+            apply_add(&w, list);
+        }
+    });
+
+    let src_rm = appimage_sources_state.clone();
+    let win_src_rm = window.as_weak();
+    let apply_rm = apply_sources.clone();
+    window.on_remove_appimage_source(move |name| {
+        let name = name.to_string();
+        let list: Vec<AppImageFeed> =
+            src_rm.lock().unwrap().iter().filter(|f| f.name != name).cloned().collect();
+        if let Some(w) = win_src_rm.upgrade() {
+            apply_rm(&w, list);
+        }
+    });
+
+    // On-demand catalog icon loader: a small worker pool downloads remote icons
+    // into a local cache, then pushes the image into the matching row.
+    let icon_jobs: mpsc::Sender<(String, String, std::path::PathBuf)> = {
+        let (job_tx, job_rx) = mpsc::channel::<(String, String, std::path::PathBuf)>();
+        let job_rx = Arc::new(Mutex::new(job_rx));
+        for _ in 0..6 {
+            let rx = job_rx.clone();
+            let tx_done = tx.clone();
+            thread::spawn(move || loop {
+                let job = { rx.lock().unwrap().recv() };
+                let Ok((github, url, path)) = job else { break };
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let ok = std::process::Command::new("curl")
+                    .args(["-fsSL", "--max-time", "20", "-o"])
+                    .arg(&path)
+                    .arg(&url)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                if ok && path.exists() {
+                    let _ = tx_done.send(UiMessage::AppImageIconReady {
+                        github,
+                        path: path.to_string_lossy().to_string(),
+                    });
+                }
+            });
+        }
+        job_tx
+    };
+
+    let icon_inflight: Arc<Mutex<std::collections::HashSet<String>>> =
+        Arc::new(Mutex::new(std::collections::HashSet::new()));
+    let cat_icon = appimage_catalog.clone();
+    let tx_icon_imm = tx.clone();
+    window.on_load_appimage_icon(move |github| {
+        let github = github.to_string();
+        // Resolve the icon URL from the cached catalog.
+        let url = {
+            let cat = cat_icon.lock().unwrap();
+            cat.iter().find(|e| e.github == github).and_then(|e| e.icon_url.clone())
+        };
+        let Some(url) = url else { return };
+        let path = icon_cache_path(&github, &url);
+        if path.exists() {
+            let _ = tx_icon_imm.send(UiMessage::AppImageIconReady {
+                github,
+                path: path.to_string_lossy().to_string(),
+            });
+            return;
+        }
+        // Dedupe in-flight requests.
+        {
+            let mut set = icon_inflight.lock().unwrap();
+            if !set.insert(github.clone()) {
+                return;
+            }
+        }
+        let _ = icon_jobs.send((github, url, path));
+    });
+
     let tx_export = tx.clone();
     let export_input = terminal_input_sender.clone();
     let export_pid = terminal_child_pid.clone();
@@ -5484,7 +6088,36 @@ fn main() {
     });
 
     window.set_setting_flatpak_enabled(config.flatpak_enabled);
+    window.set_setting_appimage_enabled(config.appimage_enabled);
+    window.set_setting_appimage_dir(SharedString::from(config.appimage_dir.as_str()));
+    *appimage_dir_state.lock().unwrap() = config.appimage_dir.clone();
+    let initial_feeds = if config.appimage_feeds.is_empty() {
+        default_appimage_feeds()
+    } else {
+        config.appimage_feeds.clone()
+    };
+    *appimage_sources_state.lock().unwrap() = initial_feeds.clone();
+    window.set_appimage_sources(ModelRc::new(VecModel::from(
+        initial_feeds
+            .iter()
+            .map(|f| AppImageSource {
+                name: SharedString::from(f.name.as_str()),
+                url: SharedString::from(f.url.as_str()),
+            })
+            .collect::<Vec<_>>(),
+    )));
     window.set_setting_check_updates_on_start(config.check_updates_on_start);
+    // Preload the installed AppImage list when the feature is enabled.
+    if config.appimage_enabled {
+        let tx_ai_init = tx.clone();
+        thread::spawn(move || {
+            if let Ok(backend) = AppImageBackend::new() {
+                let ui: Vec<PackageData> =
+                    backend.list_entries().iter().map(appimage_entry_to_ui).collect();
+                let _ = tx_ai_init.send(UiMessage::InstalledAppImagesLoaded(ui));
+            }
+        });
+    }
     window.set_setting_notify_on_updates(config.notify_on_updates);
     window.set_setting_auto_clean_cache(config.auto_clean_cache);
     // Prefer actual value from /etc/pacman.conf over stored config
