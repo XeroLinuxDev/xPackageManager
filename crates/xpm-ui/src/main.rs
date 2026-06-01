@@ -150,7 +150,7 @@ enum UiMessage {
     FirmwareRefreshDone(bool),
     UpdateCacheSize(String),
     PkgInfoLoaded(String),
-    InstalledAppImagesLoaded(Vec<PackageData>),
+    InstalledAppImagesLoaded(Vec<AppImageEntry>),
     AppImageCatalogReady,
     AppImageCatalogLoading(bool),
     AppImageIconReady { github: String, path: String },
@@ -609,7 +609,7 @@ struct AppImageFeed {
 fn default_appimage_feeds() -> Vec<AppImageFeed> {
     vec![AppImageFeed {
         name: "AppImageHub".to_string(),
-        url: "https://appimage.github.io/feed.json".to_string(),
+        url: xpm_appimage::catalog::FEED_URL.to_string(),
     }]
 }
 
@@ -764,26 +764,38 @@ fn format_size(bytes: u64) -> String {
 
 // ─── AppImage helpers ─────────────────────────────────────────────────────────
 
-fn appimage_entry_to_ui(entry: &AppImageEntry) -> PackageData {
-    let src = entry.source_url.clone().unwrap_or_default();
-    PackageData {
-        name: SharedString::from(entry.name.as_str()),
-        display_name: SharedString::from(entry.display_name.as_str()),
-        version: SharedString::from(entry.version.as_str()),
-        description: SharedString::from(src.as_str()),
-        repository: SharedString::from("appimage"),
-        backend: 3,
-        installed: true,
-        // For AppImage rows, `has_update` carries *update capability* (not a
-        // pending update): false => the page renders a warning triangle.
-        has_update: entry.supports_update,
-        installed_size: SharedString::from(format_size(entry.size)),
-        licenses: SharedString::from(""),
-        url: SharedString::from(src.as_str()),
-        dependencies: SharedString::from(""),
-        required_by: SharedString::from(""),
-        selected: false,
-        explicit: false,
+// Build an installed-row card with the locally-stored icon. MUST run on the UI
+// thread (slint::Image is !Send) — call from the dispatch loop, not a worker.
+fn entry_to_installed_card(entry: &AppImageEntry) -> AppImageInstalled {
+    let (icon, has_icon) = match &entry.icon_path {
+        Some(p) if std::path::Path::new(p).exists() => {
+            match slint::Image::load_from_path(std::path::Path::new(p)) {
+                Ok(img) => (img, true),
+                Err(_) => (slint::Image::default(), false),
+            }
+        }
+        _ => (slint::Image::default(), false),
+    };
+    let size = format_size(entry.size);
+    let detail = if entry.version == "unknown" || entry.version.is_empty() {
+        size
+    } else {
+        format!("{}  •  {}", entry.version, size)
+    };
+    let initial = entry
+        .display_name
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().next().unwrap_or(c).to_string())
+        .unwrap_or_default();
+    AppImageInstalled {
+        id: SharedString::from(entry.name.as_str()),
+        name: SharedString::from(entry.display_name.as_str()),
+        detail: SharedString::from(detail.as_str()),
+        supports_update: entry.supports_update,
+        initial: SharedString::from(initial.as_str()),
+        icon,
+        has_icon,
     }
 }
 
@@ -841,30 +853,16 @@ fn catalog_entry_to_card(
         .unwrap_or_default();
     let category = entry.categories.first().cloned().unwrap_or_default();
 
-    // Use a cached icon immediately if present.
-    let (icon, has_icon) = match &entry.icon_url {
-        Some(url) => {
-            let path = icon_cache_path(&entry.github, url);
-            if path.exists() {
-                match slint::Image::load_from_path(&path) {
-                    Ok(img) => (img, true),
-                    Err(_) => (slint::Image::default(), false),
-                }
-            } else {
-                (slint::Image::default(), false)
-            }
-        }
-        None => (slint::Image::default(), false),
-    };
-
+    // Icon is loaded lazily by the per-row loader (handles cache + download), so
+    // building cards stays cheap — no synchronous image decode here.
     AppImageCard {
         github: SharedString::from(entry.github.as_str()),
         name: SharedString::from(entry.name.as_str()),
         description: SharedString::from(desc.as_str()),
         initial: SharedString::from(initial.as_str()),
         category: SharedString::from(category.as_str()),
-        icon,
-        has_icon,
+        icon: slint::Image::default(),
+        has_icon: false,
         installed: installed_id.is_some(),
         installed_id: SharedString::from(installed_id.unwrap_or_default().as_str()),
     }
@@ -877,7 +875,8 @@ fn filter_catalog(
     query: &str,
     installed: &std::collections::HashMap<String, String>,
 ) -> (Vec<AppImageCard>, usize) {
-    const CAP: usize = 500;
+    // Cap rendered rows for snappy first paint; "Showing N of M" hints to search.
+    const CAP: usize = 150;
     let q = query.trim().to_lowercase();
     let matches: Vec<&CatalogEntry> = catalog
         .iter()
@@ -994,8 +993,7 @@ where
         }
     }
 
-    let ui: Vec<PackageData> = backend.list_entries().iter().map(appimage_entry_to_ui).collect();
-    let _ = tx.send(UiMessage::InstalledAppImagesLoaded(ui));
+    let _ = tx.send(UiMessage::InstalledAppImagesLoaded(backend.list_entries()));
     // Refresh catalog cards so Install↔Remove reflects the change.
     let _ = tx.send(UiMessage::AppImageCardsRefresh);
 }
@@ -3324,8 +3322,10 @@ fn main() {
                         *full_installed_flatpaks_timer.borrow_mut() = pkgs.clone();
                         window.set_installed_flatpaks(ModelRc::new(VecModel::from(pkgs)));
                     }
-                    UiMessage::InstalledAppImagesLoaded(pkgs) => {
-                        window.set_installed_appimages(ModelRc::new(VecModel::from(pkgs)));
+                    UiMessage::InstalledAppImagesLoaded(entries) => {
+                        let cards: Vec<AppImageInstalled> =
+                            entries.iter().map(entry_to_installed_card).collect();
+                        window.set_installed_appimages(ModelRc::new(VecModel::from(cards)));
                     }
                     UiMessage::AppImageCatalogReady => {
                         let (cards, total) = filter_catalog(
@@ -4847,9 +4847,7 @@ fn main() {
         let tx = tx_ai_load.clone();
         thread::spawn(move || {
             if let Ok(backend) = AppImageBackend::new() {
-                let ui: Vec<PackageData> =
-                    backend.list_entries().iter().map(appimage_entry_to_ui).collect();
-                let _ = tx.send(UiMessage::InstalledAppImagesLoaded(ui));
+                let _ = tx.send(UiMessage::InstalledAppImagesLoaded(backend.list_entries()));
             }
         });
     });
@@ -6112,11 +6110,15 @@ fn main() {
         let tx_ai_init = tx.clone();
         thread::spawn(move || {
             if let Ok(backend) = AppImageBackend::new() {
-                let ui: Vec<PackageData> =
-                    backend.list_entries().iter().map(appimage_entry_to_ui).collect();
-                let _ = tx_ai_init.send(UiMessage::InstalledAppImagesLoaded(ui));
+                let entries = backend.list_entries();
+                info!("AppImage startup preload: {} installed", entries.len());
+                let _ = tx_ai_init.send(UiMessage::InstalledAppImagesLoaded(entries));
+            } else {
+                error!("AppImage startup preload: backend init failed");
             }
         });
+    } else {
+        info!("AppImage startup preload skipped (feature disabled in config)");
     }
     window.set_setting_notify_on_updates(config.notify_on_updates);
     window.set_setting_auto_clean_cache(config.auto_clean_cache);

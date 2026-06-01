@@ -40,11 +40,6 @@ impl AppImageBackend {
         Ok(Self { install_dir })
     }
 
-    /// The default install directory, for display in settings.
-    pub fn default_dir() -> std::path::PathBuf {
-        manifest::store_dir()
-    }
-
     /// Synchronous manifest read for callers that aren't on an async runtime.
     pub fn list_entries(&self) -> Vec<AppImageEntry> {
         manifest::load()

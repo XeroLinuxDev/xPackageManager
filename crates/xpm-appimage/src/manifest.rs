@@ -62,22 +62,35 @@ pub fn manifest_path() -> PathBuf {
     store_dir().join("manifest.json")
 }
 
-/// Read the manifest from disk. Missing or corrupt file => empty list.
+/// Read the manifest from disk. Missing file => empty list. A present-but-corrupt
+/// file is backed up (not silently dropped) so a later save can't clobber it.
 pub fn load() -> Vec<AppImageEntry> {
     let path = manifest_path();
-    match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-        Err(_) => Vec::new(),
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    match serde_json::from_str(&content) {
+        Ok(entries) => entries,
+        Err(e) => {
+            tracing::error!("AppImage manifest corrupt ({}); backing up", e);
+            let _ = std::fs::rename(&path, path.with_extension("json.corrupt"));
+            Vec::new()
+        }
     }
 }
 
-/// Persist the manifest, creating the store dir if needed.
+/// Persist the manifest atomically (write temp + rename) so an interrupted or
+/// crashed write can never leave a truncated/empty manifest.
 pub fn save(entries: &[AppImageEntry]) -> std::io::Result<()> {
     let dir = store_dir();
     std::fs::create_dir_all(&dir)?;
     let json = serde_json::to_string_pretty(entries)
         .unwrap_or_else(|_| "[]".to_string());
-    std::fs::write(manifest_path(), json)
+    let path = manifest_path();
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &path)
 }
 
 /// Turn an arbitrary display/file name into a safe slug for file names and ids.

@@ -33,6 +33,17 @@ export struct AppImageCard {
 
 export struct AppImageSource { name: string, url: string }
 
+// Installed AppImage row — carries the locally-stored icon image.
+export struct AppImageInstalled {
+    id: string,
+    name: string,
+    detail: string,
+    supports-update: bool,
+    initial: string,
+    icon: image,
+    has-icon: bool,
+}
+
 export struct StatsData {
     pacman-count: int,
     flatpak-count: int,
@@ -842,7 +853,7 @@ export component MainWindow inherits Window {
     // AppImage
     in-out property <bool> setting-appimage-enabled: false;
     in-out property <string> setting-appimage-dir: "";
-    in-out property <[PackageData]> installed-appimages: [];
+    in-out property <[AppImageInstalled]> installed-appimages: [];
     in-out property <[AppImageCard]> catalog-appimages: [];
     in-out property <string> appimage-url-input: "";
     in-out property <string> appimage-search: "";
@@ -3323,6 +3334,7 @@ export component MainWindow inherits Window {
                             spacing: 0;
                             for card[i] in catalog-appimages: Rectangle {
                                 height: 60px;
+                                clip: true;
                                 background: cat-row-ta.has-hover ? Cat.surface0.with-alpha(0.5) : transparent;
                                 init => { root.load-appimage-icon(card.github); }
                                 cat-row-ta := TouchArea { }
@@ -3382,31 +3394,31 @@ export component MainWindow inherits Window {
                             spacing: 0;
                             for pkg[i] in installed-appimages: Rectangle {
                                 height: 64px;
+                                clip: true;
                                 background: ai-row-ta.has-hover ? Cat.surface0.with-alpha(0.5) : transparent;
                                 ai-row-ta := TouchArea { }
                                 HorizontalLayout {
                                     padding-left: 12px;
                                     padding-right: 12px;
                                     spacing: 12px;
-                                    VerticalLayout { alignment: center; NavIcon { d: icon-image; icon-color: Cat.blue; width: 26px; height: 26px; } }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        if pkg.has-icon: Image { source: pkg.icon; width: 40px; height: 40px; image-fit: contain; }
+                                        if !pkg.has-icon: AppAvatar { initial: pkg.initial; category: ""; width: 40px; height: 40px; border-radius: 10px; }
+                                    }
                                     VerticalLayout {
                                         alignment: center;
                                         horizontal-stretch: 1;
                                         spacing: 2px;
-                                        Text { text: pkg.display-name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
-                                        Text {
-                                            text: pkg.version == "unknown" ? pkg.installed-size : pkg.version + "  •  " + pkg.installed-size;
-                                            font-size: Cat.fs11;
-                                            color: Cat.subtext0;
-                                            overflow: elide;
-                                        }
+                                        Text { text: pkg.name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
+                                        Text { text: pkg.detail; font-size: Cat.fs11; color: Cat.subtext0; overflow: elide; }
                                     }
-                                    if pkg.has-update: VerticalLayout {
+                                    if pkg.supports-update: VerticalLayout {
                                         alignment: center;
-                                        Btn { label: @tr("Update"); primary: true; width: 86px; horizontal-stretch: 0; clicked => { root.update-appimage(pkg.name); } }
+                                        Btn { label: @tr("Update"); primary: true; width: 86px; horizontal-stretch: 0; clicked => { root.update-appimage(pkg.id); } }
                                     }
                                     // No embedded update support: warning icon (tooltip) + Reinstall.
-                                    if !pkg.has-update: VerticalLayout {
+                                    if !pkg.supports-update: VerticalLayout {
                                         alignment: center;
                                         Rectangle {
                                             width: 28px; height: 28px; border-radius: 6px;
@@ -3437,8 +3449,8 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                     }
-                                    if !pkg.has-update: VerticalLayout { alignment: center; Btn { label: @tr("Reinstall"); primary: true; width: 88px; horizontal-stretch: 0; clicked => { root.reinstall-appimage(pkg.name); } } }
-                                    VerticalLayout { alignment: center; Btn { label: @tr("Remove"); danger: true; width: 86px; horizontal-stretch: 0; clicked => { root.remove-appimage(pkg.name); } } }
+                                    if !pkg.supports-update: VerticalLayout { alignment: center; Btn { label: @tr("Reinstall"); primary: true; width: 88px; horizontal-stretch: 0; clicked => { root.reinstall-appimage(pkg.id); } } }
+                                    VerticalLayout { alignment: center; Btn { label: @tr("Remove"); danger: true; width: 86px; horizontal-stretch: 0; clicked => { root.remove-appimage(pkg.id); } } }
                                 }
                                 Rectangle { x: 12px; y: parent.height - 1px; width: parent.width - 24px; height: 1px; background: Cat.surface0; opacity: 0.5; }
                             }

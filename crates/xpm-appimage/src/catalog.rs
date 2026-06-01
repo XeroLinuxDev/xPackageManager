@@ -22,6 +22,43 @@ pub struct CatalogEntry {
     pub icon_url: Option<String>,
 }
 
+/// Feed descriptions often contain raw AppStream HTML (`<p>`, `<ul>`, `<li>`)
+/// with newlines. Strip tags, decode common entities, collapse whitespace to a
+/// single line, and cap length so catalog rows stay one tidy line.
+fn sanitize_description(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut in_tag = false;
+    for c in raw.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => {
+                in_tag = false;
+                out.push(' '); // tag boundary => space, avoids word-joining
+            }
+            _ if in_tag => {}
+            '\n' | '\r' | '\t' => out.push(' '),
+            _ => out.push(c),
+        }
+    }
+    let out = out
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'");
+    // Collapse runs of whitespace.
+    let collapsed = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Cap to keep rows tidy.
+    const MAX: usize = 160;
+    if collapsed.chars().count() > MAX {
+        let truncated: String = collapsed.chars().take(MAX).collect();
+        format!("{}…", truncated.trim_end())
+    } else {
+        collapsed
+    }
+}
+
 fn which(cmd: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path).map(|d| d.join(cmd)).find(|p| p.is_file())
@@ -45,16 +82,11 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Fetch and parse the catalog. Sorted by name; only GitHub-backed apps kept.
+/// Fetch and merge multiple feed-JSON sources. Per-source errors are logged and
+/// skipped; entries are de-duplicated by GitHub repo (case-insensitive), then name.
 ///
 /// The feed is messy — keys may be present-but-null and arrays may contain null
 /// elements — so we traverse a `Value` tolerantly rather than via typed structs.
-pub fn fetch() -> Result<Vec<CatalogEntry>> {
-    Ok(fetch_sources(&[FEED_URL.to_string()]))
-}
-
-/// Fetch and merge multiple feed-JSON sources. Per-source errors are logged and
-/// skipped; entries are de-duplicated by GitHub repo (case-insensitive), then name.
 pub fn fetch_sources(urls: &[String]) -> Vec<CatalogEntry> {
     let mut merged: Vec<CatalogEntry> = Vec::new();
     let mut seen_repo = std::collections::HashSet::new();
@@ -78,13 +110,52 @@ pub fn fetch_sources(urls: &[String]) -> Vec<CatalogEntry> {
             Err(err) => tracing::warn!("AppImage source failed ({}): {}", url, err),
         }
     }
-    merged.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    merged.sort_by_key(|e| e.name.to_lowercase());
     merged
 }
 
-/// Fetch and parse a single feed-JSON source.
-pub fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
+const FEED_CACHE_SECS: u64 = 6 * 3600;
+
+fn feed_cache_path(url: &str) -> PathBuf {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            PathBuf::from(home).join(".cache")
+        });
+    let slug: String = url.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    base.join("xpm/appimage-feeds").join(format!("{}.json", slug))
+}
+
+/// Return the feed body from a fresh on-disk cache, else download and cache it.
+/// Disk cache makes repeat page loads instant (no network round-trip).
+fn cached_feed_body(url: &str) -> Result<String> {
+    let cache = feed_cache_path(url);
+    if let Ok(meta) = std::fs::metadata(&cache) {
+        let fresh = meta
+            .modified()
+            .ok()
+            .and_then(|m| m.elapsed().ok())
+            .map(|age| age.as_secs() < FEED_CACHE_SECS)
+            .unwrap_or(false);
+        if fresh {
+            if let Ok(body) = std::fs::read_to_string(&cache) {
+                return Ok(body);
+            }
+        }
+    }
     let body = curl_text(url, Some("application/json"))?;
+    if let Some(parent) = cache.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&cache, &body);
+    Ok(body)
+}
+
+/// Fetch and parse a single feed-JSON source (disk-cached).
+fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
+    let body = cached_feed_body(url)?;
     let root: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| Error::Other(format!("Bad feed JSON: {}", e)))?;
 
@@ -115,11 +186,9 @@ pub fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
             });
         let Some(github) = github else { continue };
 
-        let description = item
-            .get("description")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
+        let description = sanitize_description(
+            item.get("description").and_then(|v| v.as_str()).unwrap_or_default(),
+        );
 
         let categories: Vec<String> = item
             .get("categories")
@@ -141,7 +210,7 @@ pub fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
 
         entries.push(CatalogEntry { name, description, categories, github, icon_url });
     }
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    entries.sort_by_key(|e| e.name.to_lowercase());
     Ok(entries)
 }
 
