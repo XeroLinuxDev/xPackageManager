@@ -1,7 +1,7 @@
 # Maintainer: Your Name <your.email@example.com>
 pkgname=xpm-gui
 pkgver=0.6.0
-pkgrel=2
+pkgrel=3
 pkgdesc="A modern package manager for Arch Linux supporting pacman, Flatpak and AppImage"
 arch=('x86_64')
 url="https://github.com/example/xpackagemanager"
@@ -16,6 +16,8 @@ depends=(
     'freetype2'
     'qt6-base'
     'curl'
+    'downgrade'
+    'appimageupdate-git'
     'desktop-file-utils'
     'fuse2'
     'fuse3'
@@ -29,8 +31,6 @@ makedepends=(
 optdepends=(
     'sccache: faster incremental Rust builds'
     'mold: faster linker (cuts link time significantly)'
-    'downgrade: package downgrade support'
-    'appimageupdatetool: in-place AppImage updates via embedded update info'
     'kdialog: native file picker for AppImage install (KDE)'
 )
 provides=('xpackagemanager')
