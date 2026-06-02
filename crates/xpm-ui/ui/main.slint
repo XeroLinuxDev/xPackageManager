@@ -3172,7 +3172,7 @@ export component MainWindow inherits Window {
                             spacing: 8px;
                             VerticalLayout { alignment: center; WarnBadge { size: 20px; } }
                             ai-warn-text := Text {
-                                text: @tr("AppImages are not maintained or supported by us, use at your own risk. Updates are manual due to the nature of AppImages. Click either Update or Reinstall to update them.");
+                                text: @tr("AppImages aren't supported by us — use at your own risk. Updates are manual.");
                                 font-size: Cat.fs14;
                                 color: Cat.red;
                                 vertical-alignment: center;
@@ -4984,7 +4984,7 @@ export component MainWindow inherits Window {
 
                         // ── Geeky about card ──────────────────────────────────
                         Rectangle {
-                            height: 140px;
+                            height: 212px;
                             border-radius: 12px;
                             background: Cat.crust;
                             border-width: 1px;
@@ -5101,6 +5101,57 @@ export component MainWindow inherits Window {
                                                 Text { text: @tr("Discord"); font-size: Cat.fs11; font-weight: 700; color: #5865f2; vertical-alignment: center; }
                                             }
                                             disc-ta := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://discord.gg/5sqxTSuKZu"); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: Cat.surface0; }
+
+                                    // Credits
+                                    VerticalLayout {
+                                        spacing: 5px;
+                                        Text {
+                                            text: @tr("CREDITS");
+                                            font-size: Cat.fs10; font-weight: 800; letter-spacing: 1px;
+                                            color: Cat.overlay0; horizontal-alignment: center;
+                                        }
+                                        // AppImage Update All : Ivan-HC (link)
+                                        HorizontalLayout {
+                                            alignment: center; spacing: 5px;
+                                            Text {
+                                                text: @tr("AppImage Update All:");
+                                                font-size: Cat.fs12; color: Cat.subtext0; vertical-alignment: center;
+                                            }
+                                            Rectangle {
+                                                width: cred-ivan-lbl.preferred-width + 4px;
+                                                height: 18px;
+                                                cred-ivan-lbl := Text {
+                                                    text: "Ivan-HC";
+                                                    font-size: Cat.fs12; font-weight: 700;
+                                                    color: cred-ivan-ta.has-hover ? Cat.blue : Cat.mauve;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                }
+                                                cred-ivan-ta := TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.open-url("https://github.com/ivan-hc/AM"); }
+                                                }
+                                            }
+                                        }
+                                        // AppImage Idea : Sharktooth (nagged for it) 😂
+                                        HorizontalLayout {
+                                            alignment: center; spacing: 5px;
+                                            Text {
+                                                text: @tr("AppImage Idea:");
+                                                font-size: Cat.fs12; color: Cat.subtext0; vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: "Sharktooth";
+                                                font-size: Cat.fs12; font-weight: 700; color: Cat.text; vertical-alignment: center;
+                                            }
+                                            Text {
+                                                text: @tr("(nagged for it) 😂");
+                                                font-size: Cat.fs11; color: Cat.overlay0; vertical-alignment: center;
+                                            }
                                         }
                                     }
                                 }
@@ -6331,7 +6382,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 aur-pill-text := Text {
-                                    text: @tr("A.U.R support disabled for stability purposes. Use the Chaotic-AUR (on XeroLinux) for pre-built packages. Use | paru packagename | in Terminal instead.");
+                                    text: @tr("No AUR support. Chaotic-AUR (XeroLinux) or | paru <pkg> | instead.");
                                     font-size: Cat.fs13;
                                     color: Cat.yellow;
                                     vertical-alignment: center;
