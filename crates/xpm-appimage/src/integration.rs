@@ -3,7 +3,7 @@
 //! Extracts the bundled `.desktop` and icon from an AppImage and writes a
 //! patched desktop entry into `~/.local/share/applications` so the app shows
 //! up in the launcher/menu. Best-effort: integration failures never abort an
-//! install — the AppImage stays runnable, it just may lack a menu entry/icon.
+//! install - the AppImage stays runnable, it just may lack a menu entry/icon.
 
 use crate::manifest;
 use std::path::{Path, PathBuf};

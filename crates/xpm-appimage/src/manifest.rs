@@ -43,17 +43,17 @@ fn data_home() -> PathBuf {
     PathBuf::from(home).join(".local/share")
 }
 
-/// `~/.local/share/xpm/appimages` — where stored AppImages and the manifest live.
+/// `~/.local/share/xpm/appimages` - where stored AppImages and the manifest live.
 pub fn store_dir() -> PathBuf {
     data_home().join("xpm/appimages")
 }
 
-/// `~/.local/share/applications` — XDG desktop entries.
+/// `~/.local/share/applications` - XDG desktop entries.
 pub fn applications_dir() -> PathBuf {
     data_home().join("applications")
 }
 
-/// `~/.local/share/icons` — integrated icons.
+/// `~/.local/share/icons` - integrated icons.
 pub fn icons_dir() -> PathBuf {
     data_home().join("icons")
 }

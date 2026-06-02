@@ -1,4 +1,4 @@
-import { ListView, ScrollView, Spinner, Palette } from "std-widgets.slint";
+import { ListView, ScrollView, Palette } from "std-widgets.slint";
 
 export struct PackageData {
     name: string,
@@ -18,7 +18,7 @@ export struct PackageData {
     explicit: bool,
 }
 
-// Catalog row for AppImages — carries a runtime-loaded icon image.
+// Catalog row for AppImages - carries a runtime-loaded icon image.
 export struct AppImageCard {
     github: string,
     name: string,
@@ -33,7 +33,7 @@ export struct AppImageCard {
 
 export struct AppImageSource { name: string, url: string }
 
-// Installed AppImage row — carries the locally-stored icon image.
+// Installed AppImage row - carries the locally-stored icon image.
 export struct AppImageInstalled {
     id: string,
     name: string,
@@ -134,12 +134,12 @@ export struct FwupdDevice {
 }
 
 export global Cat {
-    // Core backgrounds — all derived from Palette.background (reliable on all systems)
-    // Palette.control-background is NOT used — it returns light colors on some Qt configs
+    // Core backgrounds - all derived from Palette.background (reliable on all systems)
+    // Palette.control-background is NOT used - it returns light colors on some Qt configs
     out property <color> base: Palette.background;
     out property <color> mantle: Palette.background.darker(0.06);
     out property <color> crust: Palette.background.darker(0.14);
-    // Surfaces — stepped brightness from base
+    // Surfaces - stepped brightness from base
     out property <color> surface0: Palette.background.brighter(0.08);
     out property <color> surface1: Palette.background.brighter(0.16);
     out property <color> surface2: Palette.background.brighter(0.26);
@@ -150,11 +150,11 @@ export global Cat {
     out property <color> subtext0: Palette.foreground.with-alpha(0.8);
     out property <color> subtext1: Palette.foreground.with-alpha(0.9);
     out property <color> text: Palette.foreground;
-    // Accent — purple
+    // Accent - purple
     out property <color> mauve: #c6a0f6;
     out property <color> blue: #8aadf4;
     out property <color> lavender: #b7bdf8;
-    // Semantic colors — keep consistent across themes
+    // Semantic colors - keep consistent across themes
     out property <color> red: #e06c75;
     out property <color> green: #98c379;
     out property <color> yellow: #e5c07b;
@@ -167,7 +167,7 @@ export global Cat {
     out property <color> sky: #56b6c2;
     out property <color> maroon: #be5046;
 
-    // Font scale — multiplied into every font-size across the app
+    // Font scale - multiplied into every font-size across the app
     in-out property <float> font-scale: 1.0;
     out property <length> fs9:  9px  * font-scale;
     out property <length> fs10: 10px * font-scale;
@@ -269,6 +269,33 @@ component Btn inherits Rectangle {
     btn-touch := TouchArea {
         mouse-cursor: enabled ? pointer : default;
         clicked => { if enabled { root.clicked(); } }
+    }
+}
+
+// Animated loading indicator - a ring of dots with a "comet" brightness tail
+// that sweeps around continuously (driven by animation-tick(); no geometry
+// rotation since Rectangle can't rotate). Replaces the stock Spinner so loading
+// looks consistent everywhere. Scales to `diameter`.
+component LoadingCircle inherits Rectangle {
+    in property <length> diameter: 28px;
+    in property <color> dot-color: Cat.mauve;
+    width: diameter;
+    height: diameter;
+
+    // Moving head position around the 8-dot ring (~1 rev/sec).
+    property <float> phase: mod(animation-tick() / 125ms, 8.0);
+
+    for i in 8: Rectangle {
+        // Circular distance behind the head → fades the tail.
+        property <float> rel: mod(i - root.phase + 8.0, 8.0);
+        property <angle> a: (i / 8.0) * 360deg;
+        width: root.diameter * 0.17;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: root.dot-color;
+        opacity: 0.15 + 0.85 * ((8.0 - rel) / 8.0);
+        x: root.width / 2 - self.width / 2 + (root.width * 0.38) * cos(a);
+        y: root.height / 2 - self.height / 2 + (root.height * 0.38) * sin(a);
     }
 }
 
@@ -631,13 +658,13 @@ component RepoRow inherits Rectangle {
             if pkg.description != "": Text { text: pkg.description; font-size: Cat.fs14; color: Cat.overlay0; overflow: elide; }
         }
 
-        // Version — 120px
+        // Version - 120px
         Rectangle {
             width: 120px;
             Text { text: pkg.version; font-size: Cat.fs15; color: Cat.mauve.with-alpha(0.75); overflow: elide; vertical-alignment: center; horizontal-alignment: right; }
         }
 
-        // Repo badge — 80px
+        // Repo badge - 80px
         Rectangle {
             width: 80px;
             Rectangle {
@@ -647,7 +674,7 @@ component RepoRow inherits Rectangle {
             }
         }
 
-        // Action buttons — 235px (Tree + Info + Install/Remove side by side)
+        // Action buttons - 235px (Tree + Info + Install/Remove side by side)
         VerticalLayout {
             alignment: center; width: 235px;
             HorizontalLayout {
@@ -696,15 +723,23 @@ component SettingsRow inherits Rectangle {
     in property <string> label;
     in property <string> subtitle: "";
     in property <bool> checked: false;
+    in property <color> accent: Cat.mauve;
     callback toggled(bool);
 
-    height: subtitle != "" ? 66px : 52px;
+    height: 66px;
     border-radius: 8px;
-    background: Cat.surface0.with-alpha(0.4);
+    background: accent.with-alpha(0.07);
+    border-width: 1.5px;
+    border-color: accent.with-alpha(0.5);
+    // preferred-width 0 → equal horizontal-stretch splits the row exactly in half
+    // regardless of label/subtitle length. clip so long text elides.
+    preferred-width: 0px;
+    clip: true;
 
     HorizontalLayout {
         padding-left: 16px;
-        padding-right: 16px;
+        padding-right: 12px;
+        spacing: 8px;
 
         VerticalLayout {
             alignment: center;
@@ -715,12 +750,14 @@ component SettingsRow inherits Rectangle {
                 text: label;
                 font-size: Cat.fs14;
                 color: Cat.text;
+                overflow: elide;
             }
 
             if subtitle != "": Text {
                 text: subtitle;
-                font-size: Cat.fs15;
+                font-size: Cat.fs13;
                 color: Cat.overlay0;
+                overflow: elide;
             }
         }
 
@@ -731,6 +768,46 @@ component SettingsRow inherits Rectangle {
                 toggled(val) => { root.toggled(val); }
             }
         }
+    }
+}
+
+// Clickable settings row (chevron) — same footprint/preferred-width as SettingsRow
+// so it lines up in the 2-column grid.
+component SettingsLinkRow inherits Rectangle {
+    in property <string> label;
+    in property <string> subtitle: "";
+    in property <color> accent: Cat.mauve;
+    callback clicked;
+
+    height: 66px;
+    border-radius: 8px;
+    background: link-ta.has-hover ? accent.with-alpha(0.14) : accent.with-alpha(0.07);
+    border-width: 1.5px;
+    border-color: accent.with-alpha(0.5);
+    preferred-width: 0px;
+    clip: true;
+    animate background { duration: 80ms; }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 12px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text { text: label; font-size: Cat.fs14; color: Cat.text; overflow: elide; }
+            if subtitle != "": Text { text: subtitle; font-size: Cat.fs13; color: Cat.overlay0; overflow: elide; }
+        }
+        VerticalLayout {
+            alignment: center;
+            NavIcon { d: "M9 18l6-6-6-6"; icon-color: Cat.overlay0; width: 14px; height: 14px; }
+        }
+    }
+
+    link-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }
 
@@ -846,7 +923,7 @@ export component MainWindow inherits Window {
     preferred-width: 1600px;
     preferred-height: 1000px;
     // Keep the floor low enough to fit 1366×768 laptops and smaller/scaled
-    // displays — layouts below adapt via the reactive window-width binding.
+    // displays - layouts below adapt via the reactive window-width binding.
     min-width: 960px;
     min-height: 600px;
     background: Palette.background;
@@ -855,6 +932,9 @@ export component MainWindow inherits Window {
     in-out property <[PackageData]> installed-packages: [];
     in-out property <[PackageData]> update-packages: [];
     in-out property <[PackageData]> flatpak-update-packages: [];
+    in-out property <[PackageData]> appimage-update-packages: [];
+    // Combined update count across all 3 formats - drives the sidebar badge + Updates page.
+    property <int> total-update-count: update-packages.length + flatpak-update-packages.length + appimage-update-packages.length;
     in-out property <[PackageData]> flatpak-packages: [];
     in-out property <int> selected-index: -1;
     in-out property <bool> loading: false;
@@ -880,6 +960,7 @@ export component MainWindow inherits Window {
     in-out property <int> setting-parallel-downloads: 5;
     in-out property <bool> setting-pd-custom-mode: false;
     in-out property <string> setting-pd-custom-text: "";
+    in-out property <bool> show-pd-modal: false;
     in-out property <int> setting-clean-keep-versions: 3;
     in-out property <bool> setting-notify-on-updates: false;
     in-out property <bool> setting-auto-clean-cache: false;
@@ -923,6 +1004,9 @@ export component MainWindow inherits Window {
     // Bound to the live window size so layouts can react to resolution/resizing.
     property <int> window-width: root.width / 1px;
     property <int> window-height: root.height / 1px;
+    // Pixel-equal width for the 2-column Settings grid. Reactive (recomputes from
+    // root.width on resize) and loop-free (doesn't read the ScrollView viewport).
+    property <length> settings-col-w: (root.width - sidebar-vl.preferred-width - 80px) / 2;
 
     in-out property <int> selected-count: 0;
     in-out property <int> selected-installed-count: 0;
@@ -969,7 +1053,7 @@ export component MainWindow inherits Window {
     in-out property <[PackageData]> search-installed: [];
     in-out property <[PackageData]> search-available: [];
 
-    // Flatpak browser (view 10) — Shelly-ALPM style
+    // Flatpak browser (view 10) - Shelly-ALPM style
     in-out property <[string]> flatpak-remotes: [];
     in-out property <string> selected-remote: "";
     in-out property <[PackageData]> remote-apps: [];
@@ -999,7 +1083,7 @@ export component MainWindow inherits Window {
     in-out property <string> current-flatpak-id: "";
     in-out property <image> flatpak-screenshot;
     in-out property <image> flatpak-detail-icon;
-    // Add-Ons modal — split into two clean arrays so sections are trivial
+    // Add-Ons modal - split into two clean arrays so sections are trivial
     in-out property <[PackageData]> flatpak-addons: [];           // NOT installed
     in-out property <[PackageData]> flatpak-addons-installed: []; // already installed
     in-out property <[AppRow]> flatpak-app-rows: [];
@@ -1287,14 +1371,34 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Text {
-                    text: @tr("XeroLinux Package Manager GUI");
-                    font-size: Cat.fs13;
-                    font-weight: 600;
-                    color: Cat.overlay1;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                    max-width: 200px;
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: "XeroLinux";
+                        font-size: Cat.fs22;
+                        font-weight: 800;
+                        letter-spacing: 0.3px;
+                        color: Cat.mauve;
+                        horizontal-alignment: center;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 5px;
+                        Text {
+                            text: @tr("Package Manager GUI");
+                            font-size: Cat.fs12;
+                            font-weight: 700;
+                            color: Cat.text;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "(XPM)";
+                            font-size: Cat.fs11;
+                            font-weight: 600;
+                            color: Cat.overlay0;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
 
@@ -1378,34 +1482,43 @@ export component MainWindow inherits Window {
 
             Rectangle { vertical-stretch: 1; }
 
-            if stats.update-count > 0: NavButton {
+            if total-update-count > 0: NavButton {
                 icon-path: icon-arrow-up;
                 label: @tr("Updates");
                 tooltip-text: @tr("View and install available package updates");
-                badge: stats.update-count;
+                badge: total-update-count;
                 active: view == 1;
                 clicked => { view = 1; selected-index = -1; }
             }
 
-            Rectangle {
+            sync-btn := Rectangle {
+                // "checking" = manual sync (busy) OR startup/refresh package load (loading)
+                property <bool> checking: busy || loading;
                 height: 31px;
                 border-radius: 8px;
-                background: sync-touch.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
-                opacity: busy ? 0.5 : 1.0;
+                background: sync-btn.checking ? Cat.mauve.with-alpha(0.5) : (sync-touch.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85));
                 animate background { duration: 100ms; }
 
-                Text {
-                    text: @tr("Check for Updates");
-                    font-size: Cat.fs13;
-                    font-weight: 600;
-                    color: Cat.crust;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+
+                    if sync-btn.checking: VerticalLayout {
+                        alignment: center;
+                        LoadingCircle { diameter: 16px; dot-color: Cat.crust; }
+                    }
+                    Text {
+                        text: sync-btn.checking ? @tr("Checking…") : @tr("Check for Updates");
+                        font-size: Cat.fs13;
+                        font-weight: 600;
+                        color: Cat.crust;
+                        vertical-alignment: center;
+                    }
                 }
 
                 sync-touch := TouchArea {
-                    mouse-cursor: busy ? default : pointer;
-                    clicked => { if !busy { root.sync-databases(); } }
+                    mouse-cursor: sync-btn.checking ? default : pointer;
+                    clicked => { if !sync-btn.checking { root.sync-databases(); } }
                 }
             }
 
@@ -1449,7 +1562,7 @@ export component MainWindow inherits Window {
         height: parent.height;
         clip: true;
 
-        // ── Font size control — Home view only ─────────────────────────────
+        // ── Font size control - Home view only ─────────────────────────────
         Rectangle {
             visible: view == 9;
             x: parent.width - self.width - 10px;
@@ -1838,7 +1951,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Installed packages (view 0) — paginated
+            // Installed packages (view 0) - paginated
             if !loading && view == 0 && installed-packages.length > 0: VerticalLayout {
                 vertical-stretch: 1;
 
@@ -1861,8 +1974,8 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Updates (view 1) — two sections: Native + Flatpaks
-            if !loading && view == 1 && (update-packages.length > 0 || flatpak-update-packages.length > 0): ScrollView {
+            // Updates (view 1) - three sections: Native + Flatpaks + AppImages
+            if !loading && view == 1 && total-update-count > 0: ScrollView {
                 vertical-stretch: 1;
                 VerticalLayout {
                     alignment: start;
@@ -1923,15 +2036,43 @@ export component MainWindow inherits Window {
                             remove => { }
                         }
                     }
+
+                    // ── AppImage section ───────────────────────────────────────
+                    if appimage-update-packages.length > 0: Rectangle {
+                        height: 29px;
+                        background: Cat.surface0.with-alpha(0.4);
+                        HorizontalLayout {
+                            padding-left: 16px; padding-right: 16px;
+                            spacing: 8px;
+                            VerticalLayout { alignment: center;
+                                Text { text: @tr("APPIMAGES"); font-size: Cat.fs10; font-weight: 700; color: Cat.peach; letter-spacing: 0.8px; }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            VerticalLayout { alignment: center;
+                                Text { text: appimage-update-packages.length + " updates"; font-size: Cat.fs12; color: Cat.overlay1; }
+                            }
+                        }
+                    }
+                    if appimage-update-packages.length > 0: VerticalLayout {
+                        spacing: 0px;
+                        for p[i] in appimage-update-packages: PackageRow {
+                            pkg: p;
+                            show-separator: i < appimage-update-packages.length - 1;
+                            show-checkbox: false;
+                            show-action-button: true;
+                            install => { root.update-appimage(p.name); }
+                            remove => { }
+                        }
+                    }
                 }
             }
 
-            if !loading && view == 1 && update-packages.length == 0 && flatpak-update-packages.length == 0: VerticalLayout {
+            if !loading && view == 1 && total-update-count == 0: VerticalLayout {
                 vertical-stretch: 1; alignment: center;
                 Text { text: @tr("System is up to date"); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
             }
 
-            // Flatpaks (view 10) — flat list with pill search + multi-select + detail
+            // Flatpaks (view 10) - flat list with pill search + multi-select + detail
             if view == 10: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 0;
@@ -2085,7 +2226,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Category pills — centered ───────────────────────────────────────
+                // ── Category pills - centered ───────────────────────────────────────
                 Rectangle {
                     height: 40px;
 
@@ -2140,7 +2281,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Loading — geeky terminal card ───────────────────────────────────
+                // ── Loading - geeky terminal card ───────────────────────────────────
                 if remote-apps-loading || !flatpak-store-ready: VerticalLayout {
                     vertical-stretch: 1;
                     alignment: center;
@@ -2213,7 +2354,7 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    Spinner { indeterminate: true; width: 14px; height: 14px; }
+                                    LoadingCircle { diameter: 14px; }
                                 }
 
                                 // Status line
@@ -2406,7 +2547,7 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Add-Ons button — shown if any addons exist (installed or not)
+                                    // Add-Ons button - shown if any addons exist (installed or not)
                                     if flatpak-addons.length > 0 || flatpak-addons-installed.length > 0: Rectangle {
                                         width: fp-addons-lbl.preferred-width + 36px;
                                         height: 31px;
@@ -2810,7 +2951,7 @@ export component MainWindow inherits Window {
                                                         root.fp-confirm-name = pkg.display-name;
                                                         root.fp-confirm-open = true;
                                                     } else {
-                                                        // Open detail view — install button is there
+                                                        // Open detail view - install button is there
                                                         current-flatpak-id = pkg.name;
                                                         flatpak-detail-installed = pkg.installed;
                                                         flatpak-detail-name = pkg.display-name;
@@ -2853,7 +2994,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination — shown when matches span more than one page
+                    // Pagination - shown when matches span more than one page
                     if flatpak-total-matches > flatpak-per-page: Paginator {
                         current-page: flatpak-page;
                         total-pages: Math.ceil(flatpak-total-matches / flatpak-per-page);
@@ -3144,7 +3285,7 @@ export component MainWindow inherits Window {
 
             } // end view 10 VerticalLayout
 
-            // AppImages (view 14) — browse catalog, install from file/URL, manage installed
+            // AppImages (view 14) - browse catalog, install from file/URL, manage installed
             if view == 14: VerticalLayout {
                 init => {
                     root.load-installed-appimages();
@@ -3153,7 +3294,7 @@ export component MainWindow inherits Window {
                 vertical-stretch: 1;
                 spacing: 10px;
 
-                // Single combined warning — content-fit, centered
+                // Single combined warning - content-fit, centered
                 HorizontalLayout {
                     alignment: center;
                     Rectangle {
@@ -3172,7 +3313,7 @@ export component MainWindow inherits Window {
                             spacing: 8px;
                             VerticalLayout { alignment: center; WarnBadge { size: 20px; } }
                             ai-warn-text := Text {
-                                text: @tr("AppImages aren't supported by us — use at your own risk. Updates are manual.");
+                                text: @tr("Use AppImages At Your Own Risk ! No Support Provided.");
                                 font-size: Cat.fs14;
                                 color: Cat.red;
                                 vertical-alignment: center;
@@ -3281,7 +3422,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Manual install — direct URL or local file
+                    // Manual install - direct URL or local file
                     HorizontalLayout {
                         height: 38px;
                         spacing: 8px;
@@ -3338,7 +3479,7 @@ export component MainWindow inherits Window {
                         spacing: 12px;
                         HorizontalLayout {
                             alignment: center;
-                            Spinner { indeterminate: true; width: 32px; height: 32px; }
+                            LoadingCircle { diameter: 32px; }
                         }
                         Text { text: @tr("Loading Apps… Might take a while"); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
                     }
@@ -3397,7 +3538,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination — shown when matches span more than one page
+                    // Pagination - shown when matches span more than one page
                     if !appimage-catalog-loading && appimage-catalog-total > appimage-per-page: HorizontalLayout {
                         height: 36px;
                         spacing: 10px;
@@ -3446,45 +3587,9 @@ export component MainWindow inherits Window {
                         Text { text: @tr("No AppImages installed yet."); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
-                    // Update-check toolbar
-                    if installed-appimages.length > 0: HorizontalLayout {
-                        height: 32px;
-                        spacing: 10px;
-                        VerticalLayout {
-                            alignment: center;
-                            horizontal-stretch: 1;
-                            if appimage-checking-updates || appimage-update-count > 0: Text {
-                                text: appimage-checking-updates
-                                    ? @tr("Checking for updates…")
-                                    : appimage-update-count + @tr(" update(s) available");
-                                font-size: Cat.fs12;
-                                color: appimage-update-count > 0 ? Cat.green : Cat.subtext0;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            Btn {
-                                label: appimage-checking-updates ? @tr("Checking…") : @tr("Check for Updates");
-                                width: 150px;
-                                horizontal-stretch: 0;
-                                enabled: !appimage-checking-updates;
-                                clicked => { root.check-appimage-updates(); }
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            Btn {
-                                label: appimage-update-count > 0
-                                    ? @tr("Update All ({0})", appimage-update-count)
-                                    : @tr("Update All");
-                                primary: true;
-                                width: 130px;
-                                horizontal-stretch: 0;
-                                enabled: !appimage-checking-updates;
-                                clicked => { root.update-all-appimages(); }
-                            }
-                        }
-                    }
+                    // Updates are surfaced on the unified Updates page (per-row), and
+                    // detected by the global "Check for Updates". A green "New version"
+                    // pill below marks apps with a pending update.
 
                     if installed-appimages.length > 0: ScrollView {
                         vertical-stretch: 1;
@@ -3532,10 +3637,6 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                     }
-                                    if pkg.supports-update: VerticalLayout {
-                                        alignment: center;
-                                        Btn { label: @tr("Update"); primary: true; width: 86px; horizontal-stretch: 0; clicked => { root.update-appimage(pkg.id); } }
-                                    }
                                     // No embedded update support: warning icon (tooltip) + Reinstall.
                                     if !pkg.supports-update: VerticalLayout {
                                         alignment: center;
@@ -3578,7 +3679,7 @@ export component MainWindow inherits Window {
                 }
             } // end view 14 VerticalLayout
 
-            // Repos browser — Flatpak-style layout with search + repo tabs + hero
+            // Repos browser - Flatpak-style layout with search + repo tabs + hero
             if view == 7 || view == 8: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 0;
@@ -3745,7 +3846,7 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         padding: 10px;
 
-                        // "All" pill — shows combined packages from all repos
+                        // "All" pill - shows combined packages from all repos
                         Rectangle {
                             width: all-pill-lbl.preferred-width + 28px;
                             height: 30px;
@@ -3813,7 +3914,7 @@ export component MainWindow inherits Window {
                     // Loading state
                     if repo-loading: VerticalLayout {
                         vertical-stretch: 1; alignment: center; spacing: 8px;
-                        Spinner { width: 24px; height: 24px; indeterminate: true; x: (parent.width - 24px) / 2; }
+                        LoadingCircle { diameter: 24px; x: (parent.width - 24px) / 2; }
                         Text { text: selected-repo != "" ? "Loading " + selected-repo + "..." : "Loading packages..."; font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
@@ -3863,7 +3964,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination — shown when matches span more than one page
+                    // Pagination - shown when matches span more than one page
                     if !repo-loading && repo-total-matches > repo-per-page: Paginator {
                         current-page: repo-page;
                         total-pages: Math.ceil(repo-total-matches / repo-per-page);
@@ -3964,7 +4065,7 @@ export component MainWindow inherits Window {
                 }
                 } // end browse tab (repos-view == 0)
 
-                // ── Installed tab — packages grouped by repo ───────────────
+                // ── Installed tab - packages grouped by repo ───────────────
                 if repos-view == 1: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
@@ -4047,7 +4148,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Column header — filter pills only, centered
+                    // Column header - filter pills only, centered
                     Rectangle {
                         height: 46px;
 
@@ -4098,7 +4199,7 @@ export component MainWindow inherits Window {
                         vertical-stretch: 1;
                         alignment: center;
                         spacing: 6px;
-                        Spinner { indeterminate: true; width: 20px; height: 20px; x: (parent.width - 20px) / 2; }
+                        LoadingCircle { diameter: 20px; x: (parent.width - 20px) / 2; }
                         Text { text: @tr("Loading..."); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
@@ -4374,7 +4475,7 @@ export component MainWindow inherits Window {
 
                 VerticalLayout {
                     padding: 4px;
-                    spacing: 28px;
+                    spacing: 14px;
                     alignment: start;
 
 
@@ -4382,25 +4483,84 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("GENERAL"); }
 
-                        SettingsRow {
-                            label: @tr("Flatpak Support");
-                            subtitle: @tr("Enable Flatpak package management");
-                            checked: setting-flatpak-enabled;
-                            toggled(val) => {
-                                setting-flatpak-enabled = val;
-                                if !val && view == 10 { view = 9; }
-                                root.save-settings();
+                        // Toggles - 2-column grid
+                        HorizontalLayout {
+                            spacing: 8px;
+                            SettingsRow {
+                                width: settings-col-w;
+                                accent: Cat.teal;
+                                label: @tr("Flatpak Support");
+                                subtitle: @tr("Enable Flatpak package management");
+                                checked: setting-flatpak-enabled;
+                                toggled(val) => {
+                                    setting-flatpak-enabled = val;
+                                    if !val && view == 10 { view = 9; }
+                                    root.save-settings();
+                                }
+                            }
+                            SettingsRow {
+                                width: settings-col-w;
+                                accent: Cat.blue;
+                                label: @tr("AppImage Support");
+                                subtitle: @tr("Unsupported, use at own risk");
+                                checked: setting-appimage-enabled;
+                                toggled(val) => {
+                                    setting-appimage-enabled = val;
+                                    if !val && view == 14 { view = 9; }
+                                    if val { root.load-installed-appimages(); }
+                                    root.save-settings();
+                                }
                             }
                         }
 
+                        HorizontalLayout {
+                            spacing: 8px;
+                            SettingsRow {
+                                width: settings-col-w;
+                                accent: Cat.mauve;
+                                label: @tr("Check Updates on Startup");
+                                subtitle: @tr("Sync databases on launch");
+                                checked: setting-check-updates-on-start;
+                                toggled(val) => { setting-check-updates-on-start = val; root.save-settings(); }
+                            }
+                            SettingsRow {
+                                width: settings-col-w;
+                                accent: Cat.green;
+                                label: @tr("Auto-clean Cache");
+                                subtitle: @tr("Run paccache after upgrade");
+                                checked: setting-auto-clean-cache;
+                                toggled(val) => { setting-auto-clean-cache = val; root.save-settings(); }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            SettingsRow {
+                                width: settings-col-w;
+                                accent: Cat.peach;
+                                label: @tr("Notify on Updates");
+                                subtitle: @tr("Desktop notify-send on startup");
+                                checked: setting-notify-on-updates;
+                                toggled(val) => { setting-notify-on-updates = val; root.save-settings(); }
+                            }
+                            // Parallel Downloads - compact, opens popup
+                            SettingsLinkRow {
+                                width: settings-col-w;
+                                accent: Cat.sapphire;
+                                label: @tr("Parallel Downloads");
+                                subtitle: @tr("Current: {0}", setting-parallel-downloads);
+                                clicked => { root.show-pd-modal = true; }
+                            }
+                        }
+
+                        // Manage sub-panels - shown when the feature is enabled
                         if setting-flatpak-enabled: Rectangle {
-                            height: 44px;
+                            height: 66px;
                             border-radius: 8px;
-                            background: fp-rem-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.25);
-                            border-width: 1px;
-                            border-color: Cat.teal.with-alpha(fp-rem-ta.has-hover ? 0.35 : 0.15);
+                            background: fp-rem-ta.has-hover ? Cat.teal.with-alpha(0.14) : Cat.teal.with-alpha(0.07);
+                            border-width: 1.5px;
+                            border-color: Cat.teal.with-alpha(0.5);
                             animate background { duration: 80ms; }
-                            animate border-color { duration: 80ms; }
 
                             HorizontalLayout {
                                 padding-left: 16px; padding-right: 14px; spacing: 10px;
@@ -4418,24 +4578,12 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        SettingsRow {
-                            label: @tr("AppImage Support");
-                            subtitle: @tr("Install and manage AppImages (unsupported, use at own risk)");
-                            checked: setting-appimage-enabled;
-                            toggled(val) => {
-                                setting-appimage-enabled = val;
-                                if !val && view == 14 { view = 9; }
-                                if val { root.load-installed-appimages(); }
-                                root.save-settings();
-                            }
-                        }
-
                         if setting-appimage-enabled: Rectangle {
-                            height: 44px;
+                            height: 66px;
                             border-radius: 8px;
-                            background: aim-mgr-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.25);
-                            border-width: 1px;
-                            border-color: Cat.blue.with-alpha(aim-mgr-ta.has-hover ? 0.35 : 0.15);
+                            background: aim-mgr-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
+                            border-width: 1.5px;
+                            border-color: Cat.blue.with-alpha(0.5);
                             animate background { duration: 80ms; }
                             HorizontalLayout {
                                 padding-left: 16px; padding-right: 14px; spacing: 10px;
@@ -4453,343 +4601,24 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        SettingsRow {
-                            label: @tr("Check Updates on Startup");
-                            subtitle: @tr("Automatically sync databases on launch");
-                            checked: setting-check-updates-on-start;
-                            toggled(val) => { setting-check-updates-on-start = val; root.save-settings(); }
-                        }
 
-                        HorizontalLayout {
-                            spacing: 8px;
-                            SettingsRow {
-                                horizontal-stretch: 1;
-                                label: @tr("Auto-clean Cache");
-                                subtitle: @tr("Run paccache after upgrade");
-                                checked: setting-auto-clean-cache;
-                                toggled(val) => { setting-auto-clean-cache = val; root.save-settings(); }
-                            }
-                            SettingsRow {
-                                horizontal-stretch: 1;
-                                label: @tr("Notify on Updates");
-                                subtitle: @tr("Desktop notify-send on startup");
-                                checked: setting-notify-on-updates;
-                                toggled(val) => { setting-notify-on-updates = val; root.save-settings(); }
-                            }
-                        }
-
-                        // Parallel downloads picker
-                        Rectangle {
-                            border-radius: 8px;
-                            background: Cat.surface0.with-alpha(0.4);
-
-                            // Compute whether the current value is a preset or custom
-                            property <bool> is-preset: setting-parallel-downloads == 5
-                                || setting-parallel-downloads == 10
-                                || setting-parallel-downloads == 15
-                                || setting-parallel-downloads == 20
-                                || setting-parallel-downloads == 25;
-
-                            VerticalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
-                                padding-top: 12px;
-                                padding-bottom: 12px;
-                                spacing: 10px;
-
-                                // Row 1: label + pills
-                                HorizontalLayout {
-                                    spacing: 0px;
-
-                                    VerticalLayout {
-                                        alignment: center;
-                                        horizontal-stretch: 1;
-                                        spacing: 2px;
-
-                                        Text {
-                                            text: @tr("Parallel Downloads");
-                                            font-size: Cat.fs14;
-                                            color: Cat.text;
-                                        }
-                                        Text {
-                                            text: @tr("Current: {0}", setting-parallel-downloads)
-                                                + (is-preset ? "" : "  (Custom)");
-                                            font-size: Cat.fs15;
-                                            color: is-preset ? Cat.overlay0 : Cat.peach;
-                                        }
-                                    }
-
-                                    HorizontalLayout {
-                                        alignment: center;
-                                        spacing: 4px;
-
-                                        // Preset pills
-                                        for opt[i] in [5, 10, 15, 20, 25]: Rectangle {
-                                            width: 36px;
-                                            height: 31px;
-                                            border-radius: 6px;
-                                            background: (setting-parallel-downloads == opt && is-preset) ?
-                                                Cat.mauve : (pd-touch.has-hover ? Cat.surface1 : Cat.surface0);
-                                            animate background { duration: 80ms; }
-
-                                            Text {
-                                                text: opt;
-                                                font-size: Cat.fs15;
-                                                font-weight: (setting-parallel-downloads == opt && is-preset) ? 700 : 400;
-                                                color: (setting-parallel-downloads == opt && is-preset) ? Cat.crust : Cat.subtext0;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-
-                                            pd-touch := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => {
-                                                    setting-parallel-downloads = opt;
-                                                    setting-pd-custom-mode = false;
-                                                    setting-pd-custom-text = "";
-                                                    root.save-settings();
-                                                    root.set-parallel-downloads(opt);
-                                                }
-                                            }
-                                        }
-
-                                        // Custom pill
-                                        Rectangle {
-                                            width: pd-custom-lbl.preferred-width + 20px;
-                                            height: 29px;
-                                            border-radius: 6px;
-                                            background: setting-pd-custom-mode ?
-                                                Cat.peach : (custom-pill-ta.has-hover ? Cat.surface1 : Cat.surface0);
-                                            animate background { duration: 80ms; }
-
-                                            pd-custom-lbl := Text {
-                                                text: @tr("Custom");
-                                                font-size: Cat.fs15;
-                                                font-weight: setting-pd-custom-mode ? 700 : 400;
-                                                color: setting-pd-custom-mode ? Cat.crust : Cat.subtext0;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-
-                                            custom-pill-ta := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => {
-                                                    setting-pd-custom-mode = !setting-pd-custom-mode;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Row 2: custom input (visible only when custom mode)
-                                if setting-pd-custom-mode: HorizontalLayout {
-                                    spacing: 8px;
-
-                                    Rectangle {
-                                        horizontal-stretch: 1;
-                                        height: 30px;
-                                        border-radius: 6px;
-                                        background: Cat.surface1;
-                                        border-width: custom-input.has-focus ? 1px : 0px;
-                                        border-color: Cat.peach.with-alpha(0.5);
-                                        clip: true;
-
-                                        HorizontalLayout {
-                                            padding-left: 10px;
-                                            padding-right: 10px;
-
-                                            if setting-pd-custom-text == "" && !custom-input.has-focus: Text {
-                                                height: 30px;
-                                                text: @tr("Enter number (e.g. 8)");
-                                                font-size: Cat.fs13;
-                                                color: Cat.overlay0;
-                                                vertical-alignment: center;
-                                            }
-
-                                            custom-input := TextInput {
-                                                height: 30px;
-                                                text <=> setting-pd-custom-text;
-                                                font-size: Cat.fs13;
-                                                color: Cat.text;
-                                                single-line: true;
-                                                vertical-alignment: center;
-                                                accepted => {
-                                                    if setting-pd-custom-text != "" {
-                                                        setting-parallel-downloads = setting-pd-custom-text.to-float();
-                                                        root.save-settings();
-                                                        root.set-parallel-downloads(setting-parallel-downloads);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        width: pd-apply-lbl.preferred-width + 24px;
-                                        height: 32px;
-                                        border-radius: 6px;
-                                        background: apply-ta.has-hover ? Cat.peach.with-alpha(0.85) : Cat.peach;
-                                        animate background { duration: 80ms; }
-
-                                        pd-apply-lbl := Text {
-                                            text: @tr("Apply");
-                                            font-size: Cat.fs15;
-                                            font-weight: 700;
-                                            color: Cat.crust;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-
-                                        apply-ta := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                if setting-pd-custom-text != "" {
-                                                    setting-parallel-downloads = setting-pd-custom-text.to-float();
-                                                    root.save-settings();
-                                                    root.set-parallel-downloads(setting-parallel-downloads);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Row 3: caution — always show when custom mode active
-                                if setting-pd-custom-mode: Rectangle {
-                                    height: 38px;
-                                    border-radius: 5px;
-                                    background: Cat.peach.with-alpha(0.08);
-                                    border-width: 1px;
-                                    border-color: Cat.peach.with-alpha(0.3);
-
-                                    HorizontalLayout {
-                                        padding-left: 10px;
-                                        padding-right: 10px;
-                                        padding-top: 6px;
-                                        padding-bottom: 6px;
-                                        spacing: 8px;
-
-                                        VerticalLayout {
-                                            alignment: center;
-                                            NavIcon {
-                                                d: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z";
-                                                icon-color: Cat.peach;
-                                                width: 14px;
-                                                height: 14px;
-                                            }
-                                        }
-
-                                        Text {
-                                            text: @tr("Values above 25 may overwhelm mirrors and cause slower or failed downloads. Use at your own risk.");
-                                            font-size: Cat.fs11;
-                                            color: Cat.peach;
-                                            vertical-alignment: center;
-                                            wrap: word-wrap;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // HoldPkg compact card
-                        Rectangle {
-                            border-radius: 8px;
-                            background: Cat.surface0.with-alpha(0.4);
-                            border-width: 1px;
-                            border-color: holdpkg-active ? Cat.yellow.with-alpha(0.3) : Cat.surface0.with-alpha(0.0);
-                            animate border-color { duration: 120ms; }
-
-                            VerticalLayout {
-                                padding-left: 16px; padding-right: 16px;
-                                padding-top: 10px; padding-bottom: 10px;
-                                spacing: 8px;
-
-                                HorizontalLayout {
-                                    spacing: 10px;
-                                    VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 2px;
-                                        HorizontalLayout { spacing: 6px; alignment: start;
-                                            Text { text: @tr("HoldPkg"); font-size: Cat.fs14; color: Cat.text; vertical-alignment: center; }
-                                            Text { text: @tr("(Don't Change. Advanced Users Only !)"); font-size: Cat.fs11; color: Cat.red.with-alpha(0.65); vertical-alignment: center; }
-                                        }
-                                        Text {
-                                            text: holdpkg-active
-                                                ? (holdpkg-value == "" ? "Active — no packages set" : "Active: " + holdpkg-value)
-                                                : (holdpkg-value == "" ? "Warn before removing listed packages" : "Inactive: " + holdpkg-value);
-                                            font-size: Cat.fs15; color: holdpkg-active ? Cat.yellow : Cat.overlay0; overflow: elide;
-                                        }
-                                    }
-                                    VerticalLayout { alignment: center;
-                                        Rectangle {
-                                            width: hp-tog-lbl.preferred-width + 20px; height: 26px; border-radius: 6px;
-                                            background: holdpkg-active
-                                                ? (hp-tog.has-hover ? Cat.yellow.with-alpha(0.3) : Cat.yellow.with-alpha(0.18))
-                                                : (hp-tog.has-hover ? Cat.surface1 : Cat.surface0);
-                                            border-width: 1px;
-                                            border-color: holdpkg-active ? Cat.yellow.with-alpha(0.5) : Cat.surface1;
-                                            animate background { duration: 80ms; }
-                                            hp-tog-lbl := Text { text: holdpkg-active ? @tr("Active") : @tr("Inactive"); font-size: Cat.fs10; font-weight: 700; color: holdpkg-active ? Cat.yellow : Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
-                                            hp-tog := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => {
-                                                    holdpkg-active = !holdpkg-active;
-                                                    root.save-holdpkg(holdpkg-active, holdpkg-value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if holdpkg-active: HorizontalLayout {
-                                    spacing: 6px;
-                                    Rectangle {
-                                        horizontal-stretch: 1; height: 25px; border-radius: 6px;
-                                        background: Cat.surface1;
-                                        border-width: hp-ti.has-focus ? 1px : 0px;
-                                        border-color: Cat.yellow.with-alpha(0.5);
-                                        clip: true; animate border-width { duration: 80ms; }
-                                        TouchArea { width: 100%; height: 100%; clicked => { hp-ti.focus(); } }
-                                        hp-ti := TextInput {
-                                            x: 8px; y: 0; width: parent.width - 16px; height: 100%;
-                                            text <=> holdpkg-edit-text;
-                                            font-size: Cat.fs14; color: Cat.text; single-line: true; vertical-alignment: center;
-                                            selection-background-color: Cat.yellow.with-alpha(0.3);
-                                            accepted => { holdpkg-value = holdpkg-edit-text; root.save-holdpkg(true, holdpkg-edit-text); }
-                                        }
-                                        if holdpkg-edit-text == "" && !hp-ti.has-focus: Text {
-                                            x: 8px; y: 0; width: parent.width - 16px; height: 100%;
-                                            text: @tr("Packages (space-separated)");
-                                            font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center;
-                                        }
-                                    }
-                                    Rectangle {
-                                        width: hp-save-lbl.preferred-width + 24px; height: 25px; border-radius: 6px;
-                                        background: hp-save.has-hover ? Cat.yellow.with-alpha(0.85) : Cat.yellow;
-                                        animate background { duration: 70ms; }
-                                        hp-save-lbl := Text { text: @tr("Save"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
-                                        hp-save := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { holdpkg-value = holdpkg-edit-text; root.save-holdpkg(true, holdpkg-edit-text); }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: @tr("REPO MANAGER"); }
+                        SectionLabel { section-title: @tr("PACMAN MANAGER"); }
 
                         HorizontalLayout {
                             spacing: 8px;
 
                             // Enable / Disable button
                             Rectangle {
-                                height: 68px;
+                                height: 66px;
                                 horizontal-stretch: 1;
                                 border-radius: 8px;
-                                background: rm-btn1-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.4);
-                                border-width: 1px;
-                                border-color: Cat.surface1;
+                                background: rm-btn1-ta.has-hover ? Cat.green.with-alpha(0.14) : Cat.green.with-alpha(0.07);
+                                border-width: 1.5px;
+                                border-color: Cat.green.with-alpha(0.5);
                                 clip: true;
                                 animate background { duration: 80ms; }
 
@@ -4829,12 +4658,12 @@ export component MainWindow inherits Window {
 
                             // Add / Remove button
                             Rectangle {
-                                height: 68px;
+                                height: 66px;
                                 horizontal-stretch: 1;
                                 border-radius: 8px;
-                                background: rm-btn2-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.4);
-                                border-width: 1px;
-                                border-color: Cat.surface1;
+                                background: rm-btn2-ta.has-hover ? Cat.teal.with-alpha(0.14) : Cat.teal.with-alpha(0.07);
+                                border-width: 1.5px;
+                                border-color: Cat.teal.with-alpha(0.5);
                                 clip: true;
                                 animate background { duration: 80ms; }
 
@@ -4873,12 +4702,12 @@ export component MainWindow inherits Window {
 
                             // Edit pacman.conf button
                             Rectangle {
-                                height: 68px;
+                                height: 66px;
                                 horizontal-stretch: 1;
                                 border-radius: 8px;
-                                background: rm-btn3-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.4);
-                                border-width: 1px;
-                                border-color: Cat.surface1;
+                                background: rm-btn3-ta.has-hover ? Cat.peach.with-alpha(0.14) : Cat.peach.with-alpha(0.07);
+                                border-width: 1.5px;
+                                border-color: Cat.peach.with-alpha(0.5);
                                 clip: true;
                                 animate background { duration: 80ms; }
 
@@ -4920,11 +4749,11 @@ export component MainWindow inherits Window {
                         SectionLabel { section-title: @tr("FIRMWARE UPDATES"); }
 
                         Rectangle {
-                            height: 44px;
+                            height: 66px;
                             border-radius: 8px;
-                            background: fw-nav-ta.has-hover ? Cat.blue.with-alpha(0.10) : Cat.surface0.with-alpha(0.4);
-                            border-width: 1px;
-                            border-color: fw-nav-ta.has-hover ? Cat.blue.with-alpha(0.40) : Cat.surface1;
+                            background: fw-nav-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
+                            border-width: 1.5px;
+                            border-color: Cat.blue.with-alpha(0.5);
                             animate background { duration: 120ms; }
                             animate border-color { duration: 120ms; }
 
@@ -4984,7 +4813,7 @@ export component MainWindow inherits Window {
 
                         // ── Geeky about card ──────────────────────────────────
                         Rectangle {
-                            height: 212px;
+                            height: 176px;
                             border-radius: 12px;
                             background: Cat.crust;
                             border-width: 1px;
@@ -5009,7 +4838,7 @@ export component MainWindow inherits Window {
                                         }
 
                                         Text {
-                                            text: "XPM  —  Version " + app-version;
+                                            text: "XPM  -  Version " + app-version;
                                             font-size: Cat.fs14; font-family: "monospace";
                                             color: Cat.overlay0;
                                             horizontal-alignment: center;
@@ -5027,10 +4856,10 @@ export component MainWindow inherits Window {
                                 VerticalLayout {
                                     alignment: center;
                                     padding-left: 16px; padding-right: 16px;
-                                    padding-top: 8px; padding-bottom: 8px;
-                                    spacing: 6px;
+                                    padding-top: 6px; padding-bottom: 6px;
+                                    spacing: 4px;
 
-                                    // App info — centered
+                                    // App info - centered
                                     VerticalLayout {
                                         spacing: 2px;
                                         Text {
@@ -5108,7 +4937,7 @@ export component MainWindow inherits Window {
 
                                     // Credits
                                     VerticalLayout {
-                                        spacing: 5px;
+                                        spacing: 3px;
                                         Text {
                                             text: @tr("CREDITS");
                                             font-size: Cat.fs10; font-weight: 800; letter-spacing: 1px;
@@ -5172,7 +5001,7 @@ export component MainWindow inherits Window {
 
               VerticalLayout {
 
-                // ── Header — pill card + back button ─────────────────────────
+                // ── Header - pill card + back button ─────────────────────────
                 Rectangle {
                     height: 88px;
                     background: Cat.crust;
@@ -5182,7 +5011,7 @@ export component MainWindow inherits Window {
                         padding-top: 12px; padding-bottom: 12px;
                         spacing: 12px;
 
-                        // Back button — VerticalLayout centers the 30px button in the 64px height
+                        // Back button - VerticalLayout centers the 30px button in the 64px height
                         VerticalLayout {
                             alignment: center;
                             Rectangle {
@@ -5201,7 +5030,7 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Pill card — horizontal-stretch:1 now works (no alignment: center on parent)
+                        // Pill card - horizontal-stretch:1 now works (no alignment: center on parent)
                         Rectangle {
                             horizontal-stretch: 1;
                             border-radius: 14px;
@@ -5252,7 +5081,7 @@ export component MainWindow inherits Window {
                                 // Loading spinner
                                 if dep-tree-loading: VerticalLayout {
                                     alignment: center;
-                                    Spinner { width: 22px; height: 22px; indeterminate: true; }
+                                    LoadingCircle { diameter: 22px; }
                                 }
                             }
                         }
@@ -5364,7 +5193,7 @@ export component MainWindow inherits Window {
                             if node.depth != -1: HorizontalLayout {
                                 padding-left: 16px; padding-right: 16px; spacing: 0px;
 
-                                // Tree prefix — fixed width prevents squeezing the name
+                                // Tree prefix - fixed width prevents squeezing the name
                                 VerticalLayout {
                                     alignment: center;
                                     Text {
@@ -5531,7 +5360,7 @@ export component MainWindow inherits Window {
                                         Rectangle {
                                             height: 20px; width: 80px; border-radius: 5px;
                                             background: Cat.surface0.with-alpha(0.5);
-                                            Text { text: node.version == "" ? "—" : node.version; font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                                            Text { text: node.version == "" ? "-" : node.version; font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
                                         }
                                     }
                                 }
@@ -5632,7 +5461,7 @@ export component MainWindow inherits Window {
                                                 padding-left: 10px; padding-right: 10px;
 
                                                 if firmware-loading: VerticalLayout { alignment: center;
-                                                    Spinner { indeterminate: true; width: 12px; height: 12px; }
+                                                    LoadingCircle { diameter: 12px; }
                                                 }
                                                 if !firmware-loading: VerticalLayout { alignment: center;
                                                     NavIcon { d: icon-search; icon-color: Cat.mauve; width: 12px; height: 12px; }
@@ -5680,7 +5509,7 @@ export component MainWindow inherits Window {
                                     WarnBadge { size: 15px; }
                                 }
                                 Text {
-                                    text: @tr("Use at your own risk — if it ain't broke, don't mess with it. Firmware updates can brick hardware.");
+                                    text: @tr("Use at your own risk - if it ain't broke, don't mess with it. Firmware updates can brick hardware.");
                                     font-size: Cat.fs11; color: Cat.yellow;
                                     vertical-alignment: center;
                                     overflow: elide;
@@ -5693,7 +5522,7 @@ export component MainWindow inherits Window {
                     if firmware-detecting || firmware-detected-count < 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center; spacing: 12px;
-                        Spinner { width: 28px; height: 28px; indeterminate: true; }
+                        LoadingCircle { diameter: 28px; }
                         Text { text: @tr("Detecting firmware devices…"); font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; }
                     }
 
@@ -5818,7 +5647,7 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     alignment: center;
                     spacing: 14px;
-                    HorizontalLayout { alignment: center; Spinner { indeterminate: true; width: 28px; height: 28px; } }
+                    HorizontalLayout { alignment: center; LoadingCircle { diameter: 28px; } }
                     Text { text: @tr("Fetching Arch news..."); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
                 }
 
@@ -5932,7 +5761,7 @@ export component MainWindow inherits Window {
                         VerticalLayout {
                             horizontal-stretch: 1; alignment: center; spacing: 2px;
                             Text { text: @tr("Troubleshooting"); font-size: Cat.fs16; font-weight: 800; color: Cat.green; }
-                            Text { text: @tr("System & Pacman diagnostics — repair tools for common issues"); font-size: Cat.fs14; color: Cat.overlay1; }
+                            Text { text: @tr("System & Pacman diagnostics - repair tools for common issues"); font-size: Cat.fs14; color: Cat.overlay1; }
                         }
 
                         VerticalLayout {
@@ -5951,7 +5780,7 @@ export component MainWindow inherits Window {
                     HorizontalLayout {
                         padding-left: 16px; padding-right: 16px; spacing: 6px; alignment: center;
                         Text { text: "⚠"; font-size: Cat.fs16; color: Cat.peach; vertical-alignment: center; }
-                        Text { text: @tr("Use at your own risk — these operations modify system files and may require a reboot."); font-size: Cat.fs13; color: Cat.peach.with-alpha(0.85); vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: @tr("Use at your own risk - these operations modify system files and may require a reboot."); font-size: Cat.fs13; color: Cat.peach.with-alpha(0.85); vertical-alignment: center; horizontal-stretch: 1; }
                     }
                 }
 
@@ -6270,8 +6099,8 @@ export component MainWindow inherits Window {
                                             Text { text: @tr("IgnorePkg"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
                                             Text {
                                                 text: ignorepkg-active
-                                                    ? (ignorepkg-value == "" ? "Active — no packages set" : "Active: " + ignorepkg-value)
-                                                    : (ignorepkg-value == "" ? "Inactive — none configured" : "Inactive: " + ignorepkg-value);
+                                                    ? (ignorepkg-value == "" ? "Active - no packages set" : "Active: " + ignorepkg-value)
+                                                    : (ignorepkg-value == "" ? "Inactive - none configured" : "Inactive: " + ignorepkg-value);
                                                 font-size: Cat.fs14;
                                                 color: ignorepkg-active ? Cat.peach : Cat.overlay1;
                                                 overflow: elide;
@@ -6354,12 +6183,12 @@ export component MainWindow inherits Window {
                     spacing: 20px;
                     alignment: start;
 
-                    // AUR info pill — centered, width = content; hidden once dismissed
+                    // AUR info pill - centered, width = content; hidden once dismissed
                     if !aur-pill-dismissed: HorizontalLayout {
                         alignment: center;
                         Rectangle {
                             // Hug the text on wide screens, but never exceed the
-                            // content width — clamp so the row can't overflow. Derived
+                            // content width - clamp so the row can't overflow. Derived
                             // from root.width (not parent.width) to avoid a ScrollView
                             // viewport binding loop.
                             width: min(aur-pill-text.preferred-width + 15px + 8px + 24px + 28px, root.width - sidebar-vl.preferred-width - 12px);
@@ -6438,7 +6267,7 @@ export component MainWindow inherits Window {
                                     alignment: center;
                                     spacing: 4px;
 
-                                    if loading: Rectangle { width: 52px; height: 20px; border-radius: 5px; background: Cat.blue.with-alpha(0.18); x: (parent.width - 52px) / 2; }
+                                    if loading: Text { text: "--"; font-size: Cat.fs30; font-weight: 700; color: Cat.blue; horizontal-alignment: center; }
                                     if !loading: Text {
                                         text: stats.pacman-count;
                                         font-size: Cat.fs30;
@@ -6467,7 +6296,7 @@ export component MainWindow inherits Window {
                                     alignment: center;
                                     spacing: 4px;
 
-                                    if loading: Rectangle { width: 40px; height: 20px; border-radius: 5px; background: Cat.teal.with-alpha(0.18); x: (parent.width - 40px) / 2; }
+                                    if loading: Text { text: "--"; font-size: Cat.fs30; font-weight: 700; color: Cat.teal; horizontal-alignment: center; }
                                     if !loading: Text {
                                         text: stats.flatpak-count;
                                         font-size: Cat.fs30;
@@ -6488,35 +6317,6 @@ export component MainWindow inherits Window {
                                 horizontal-stretch: 1;
                                 height: 82px;
                                 border-radius: 10px;
-                                background: stats.orphan-count > 0 ? Cat.yellow.with-alpha(0.1) : Cat.surface0.with-alpha(0.35);
-                                border-width: 1px;
-                                border-color: stats.orphan-count > 0 ? Cat.yellow.with-alpha(0.25) : Cat.surface0.with-alpha(0.2);
-
-                                VerticalLayout {
-                                    alignment: center;
-                                    spacing: 4px;
-
-                                    if loading: Rectangle { width: 36px; height: 20px; border-radius: 5px; background: Cat.overlay0.with-alpha(0.12); x: (parent.width - 36px) / 2; }
-                                    if !loading: Text {
-                                        text: stats.orphan-count;
-                                        font-size: Cat.fs30;
-                                        font-weight: 700;
-                                        color: stats.orphan-count > 0 ? Cat.yellow : Cat.overlay0;
-                                        horizontal-alignment: center;
-                                    }
-                                    Text {
-                                        text: @tr("Orphaned");
-                                        font-size: Cat.fs15;
-                                        color: Cat.overlay1;
-                                        horizontal-alignment: center;
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 82px;
-                                border-radius: 10px;
                                 background: stats.update-count > 0 ? Cat.peach.with-alpha(0.1) : Cat.surface0.with-alpha(0.35);
                                 border-width: 1px;
                                 border-color: stats.update-count > 0 ? Cat.peach.with-alpha(0.25) : Cat.surface0.with-alpha(0.2);
@@ -6525,7 +6325,7 @@ export component MainWindow inherits Window {
                                     alignment: center;
                                     spacing: 4px;
 
-                                    if loading: Rectangle { width: 36px; height: 20px; border-radius: 5px; background: Cat.overlay0.with-alpha(0.12); x: (parent.width - 36px) / 2; }
+                                    if loading: Text { text: "--"; font-size: Cat.fs30; font-weight: 700; color: Cat.overlay0; horizontal-alignment: center; }
                                     if !loading: Text {
                                         text: stats.update-count;
                                         font-size: Cat.fs30;
@@ -6535,6 +6335,36 @@ export component MainWindow inherits Window {
                                     }
                                     Text {
                                         text: @tr("Updates");
+                                        font-size: Cat.fs15;
+                                        color: Cat.overlay1;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // AppImages installed
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 82px;
+                                border-radius: 10px;
+                                background: Cat.mauve.with-alpha(0.1);
+                                border-width: 1px;
+                                border-color: Cat.mauve.with-alpha(0.25);
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 4px;
+
+                                    if loading: Text { text: "--"; font-size: Cat.fs30; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; }
+                                    if !loading: Text {
+                                        text: installed-appimages.length;
+                                        font-size: Cat.fs30;
+                                        font-weight: 700;
+                                        color: Cat.mauve;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: @tr("AppImages");
                                         font-size: Cat.fs15;
                                         color: Cat.overlay1;
                                         horizontal-alignment: center;
@@ -6853,7 +6683,7 @@ export component MainWindow inherits Window {
                 }
 
             // Catch-all stretch: keeps all content pinned to top when no view provides a flex child
-            if view == 2 || view == 5 || view == 3 || view == 4: Rectangle { vertical-stretch: 1; }
+            if view == 2 || view == 3 || view == 4: Rectangle { vertical-stretch: 1; }
         }
     }
 
@@ -6988,7 +6818,7 @@ export component MainWindow inherits Window {
                         font-size: Cat.fs17; font-weight: 700; color: Cat.text;
                         vertical-alignment: center; horizontal-stretch: 1;
                     }
-                    // Select All button — only when there are uninstalled addons
+                    // Select All button - only when there are uninstalled addons
                     if flatpak-addons.length > 0: Rectangle {
                         width: sel-all-lbl.preferred-width + 24px; height: 32px; border-radius: 6px;
                         background: sel-all-t.has-hover
@@ -7339,7 +7169,7 @@ export component MainWindow inherits Window {
 
                         if !progress-popup-done: VerticalLayout {
                             alignment: center;
-                            Spinner { indeterminate: true; width: 16px; height: 16px; }
+                            LoadingCircle { diameter: 16px; }
                         }
 
                         if progress-popup-done: VerticalLayout {
@@ -7408,7 +7238,7 @@ export component MainWindow inherits Window {
                         alignment: center;
                         spacing: 10px;
 
-                        // Pulsing dot — vertically centred, only while running
+                        // Pulsing dot - vertically centred, only while running
                         if !progress-popup-done: VerticalLayout {
                             alignment: center;
                             width: 8px;
@@ -7442,7 +7272,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Expand / collapse strip — hidden in external-terminal mode (no PTY output to show)
+                // Expand / collapse strip - hidden in external-terminal mode (no PTY output to show)
                 if !progress-popup-external: Rectangle {
                     height: 32px;
                     background: Cat.mantle;
@@ -7543,7 +7373,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Error summary bar — visible when error and details collapsed
+                // Error summary bar - visible when error and details collapsed
                 if progress-error-summary != "" && !progress-show-details: Rectangle {
                     height: 28px;
                     background: Cat.red.with-alpha(0.08);
@@ -7586,7 +7416,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Live log output — visible only when details expanded
+                // Live log output - visible only when details expanded
                 if progress-show-details: Rectangle {
                     height: 1px;
                     background: Cat.surface0;
@@ -8000,7 +7830,7 @@ export component MainWindow inherits Window {
                 // ── Loading spinner ─────────────────────────────────────────
                 if pkg-info-loading: VerticalLayout {
                     vertical-stretch: 1; alignment: center; spacing: 12px;
-                    HorizontalLayout { alignment: center; Spinner { width: 28px; height: 28px; indeterminate: true; } }
+                    HorizontalLayout { alignment: center; LoadingCircle { diameter: 28px; } }
                     Text { text: @tr("Loading…"); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                 }
 
@@ -8107,7 +7937,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ⚠ Scary warning banner — no fixed height, auto-sizes to wrapped text
+                // ⚠ Scary warning banner - no fixed height, auto-sizes to wrapped text
                 Rectangle {
                     background: Cat.red.with-alpha(0.07);
                     border-width: 0;
@@ -8144,7 +7974,7 @@ export component MainWindow inherits Window {
                             alignment: center;
                             spacing: 3px;
                             Text {
-                                text: @tr("DANGER — Read before proceeding");
+                                text: @tr("DANGER - Read before proceeding");
                                 font-size: Cat.fs15;
                                 font-weight: 800;
                                 color: Cat.red;
@@ -8349,7 +8179,7 @@ export component MainWindow inherits Window {
                             horizontal-stretch: 1;
                             spacing: 4px;
                             Text {
-                                text: orphan-dep-info-title + " — required by:";
+                                text: orphan-dep-info-title + " - required by:";
                                 font-size: Cat.fs11;
                                 font-weight: 700;
                                 color: Cat.sapphire;
@@ -8805,7 +8635,7 @@ export component MainWindow inherits Window {
                     spacing: 12px;
                     alignment: end;
 
-                    // Never show again checkbox — left side
+                    // Never show again checkbox - left side
                     VerticalLayout {
                         alignment: center;
                         horizontal-stretch: 1;
@@ -8988,7 +8818,7 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     HorizontalLayout {
                         alignment: center;
-                        VerticalLayout { alignment: center; Spinner { width: 32px; height: 32px; } }
+                        VerticalLayout { alignment: center; LoadingCircle { diameter: 32px; } }
                     }
                 }
 
@@ -9182,7 +9012,7 @@ export component MainWindow inherits Window {
                             }
                         }
                         Text {
-                            text: @tr("Removing a repo permanently deletes its section from /etc/pacman.conf and cannot be undone. NOT intended for repos that use separate keyrings or mirrorlists — use 'Edit pacman.conf' for those.");
+                            text: @tr("Removing a repo permanently deletes its section from /etc/pacman.conf and cannot be undone. NOT intended for repos that use separate keyrings or mirrorlists - use 'Edit pacman.conf' for those.");
                             font-size: Cat.fs11; color: Cat.red.with-alpha(0.9);
                             vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1;
                         }
@@ -9252,11 +9082,11 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     HorizontalLayout {
                         alignment: center;
-                        VerticalLayout { alignment: center; Spinner { width: 32px; height: 32px; } }
+                        VerticalLayout { alignment: center; LoadingCircle { diameter: 32px; } }
                     }
                 }
 
-                // Repo list — height capped to content so add form isn't pushed down
+                // Repo list - height capped to content so add form isn't pushed down
                 if !repo-mgr-loading: ListView {
                     height: min(repo-mgr-list.length * 52px, 280px);
 
@@ -9846,6 +9676,192 @@ export component MainWindow inherits Window {
         }
     }
 
+    // ── Parallel Downloads popup ─────────────────────────────────────────────
+    if show-pd-modal: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.65);
+        TouchArea { clicked => { root.show-pd-modal = false; } }
+
+        pd-card-area := Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(460px, parent.width - 40px);
+            height: pd-card.preferred-height;
+            background: Cat.base;
+            border-radius: 12px;
+            clip: true;
+            border-width: 1px;
+            border-color: Cat.mauve.with-alpha(0.35);
+            drop-shadow-blur: 32px;
+            drop-shadow-color: Cat.mauve.with-alpha(0.15);
+            drop-shadow-offset-y: 8px;
+
+            // swallow clicks so they don't dismiss via the backdrop
+            TouchArea {}
+
+            property <bool> is-preset: setting-parallel-downloads == 5
+                || setting-parallel-downloads == 10
+                || setting-parallel-downloads == 15
+                || setting-parallel-downloads == 20
+                || setting-parallel-downloads == 25;
+
+            pd-card := VerticalLayout {
+                // Header
+                Rectangle {
+                    height: 52px;
+                    background: Cat.mauve.with-alpha(0.12);
+                    Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.mauve.with-alpha(0.25); }
+                    HorizontalLayout {
+                        padding-left: 16px; padding-right: 16px; spacing: 10px; alignment: start;
+                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
+                            Text { text: @tr("Parallel Downloads"); font-size: Cat.fs14; font-weight: 700; color: Cat.text; }
+                            Text {
+                                text: @tr("Current: {0}", setting-parallel-downloads) + (pd-card-area.is-preset ? "" : "  (Custom)");
+                                font-size: Cat.fs11; color: pd-card-area.is-preset ? Cat.subtext0 : Cat.peach;
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    padding-left: 16px; padding-right: 16px; padding-top: 14px; padding-bottom: 14px;
+                    spacing: 12px;
+
+                    // Preset pills + Custom
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        for opt[i] in [5, 10, 15, 20, 25]: Rectangle {
+                            width: 44px; height: 34px; border-radius: 6px;
+                            background: (setting-parallel-downloads == opt && pd-card-area.is-preset) ?
+                                Cat.mauve : (pdm-touch.has-hover ? Cat.surface1 : Cat.surface0);
+                            animate background { duration: 80ms; }
+                            Text {
+                                text: opt;
+                                font-size: Cat.fs15;
+                                font-weight: (setting-parallel-downloads == opt && pd-card-area.is-preset) ? 700 : 400;
+                                color: (setting-parallel-downloads == opt && pd-card-area.is-preset) ? Cat.crust : Cat.subtext0;
+                                horizontal-alignment: center; vertical-alignment: center;
+                            }
+                            pdm-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    setting-parallel-downloads = opt;
+                                    setting-pd-custom-mode = false;
+                                    setting-pd-custom-text = "";
+                                    root.save-settings();
+                                    root.set-parallel-downloads(opt);
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: pdm-custom-lbl.preferred-width + 20px; height: 34px; border-radius: 6px;
+                            background: setting-pd-custom-mode ?
+                                Cat.peach : (pdm-custom-ta.has-hover ? Cat.surface1 : Cat.surface0);
+                            animate background { duration: 80ms; }
+                            pdm-custom-lbl := Text {
+                                text: @tr("Custom");
+                                font-size: Cat.fs15;
+                                font-weight: setting-pd-custom-mode ? 700 : 400;
+                                color: setting-pd-custom-mode ? Cat.crust : Cat.subtext0;
+                                horizontal-alignment: center; vertical-alignment: center;
+                            }
+                            pdm-custom-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { setting-pd-custom-mode = !setting-pd-custom-mode; }
+                            }
+                        }
+                    }
+
+                    // Custom input
+                    if setting-pd-custom-mode: HorizontalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            horizontal-stretch: 1; height: 32px; border-radius: 6px;
+                            background: Cat.surface1;
+                            border-width: pdm-input.has-focus ? 1px : 0px;
+                            border-color: Cat.peach.with-alpha(0.5);
+                            clip: true;
+                            HorizontalLayout {
+                                padding-left: 10px; padding-right: 10px;
+                                if setting-pd-custom-text == "" && !pdm-input.has-focus: Text {
+                                    height: 32px; text: @tr("Enter number (e.g. 8)");
+                                    font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center;
+                                }
+                                pdm-input := TextInput {
+                                    height: 32px;
+                                    text <=> setting-pd-custom-text;
+                                    font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
+                                    accepted => {
+                                        if setting-pd-custom-text != "" {
+                                            setting-parallel-downloads = setting-pd-custom-text.to-float();
+                                            root.save-settings();
+                                            root.set-parallel-downloads(setting-parallel-downloads);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: pdm-apply-lbl.preferred-width + 24px; height: 32px; border-radius: 6px;
+                            background: pdm-apply-ta.has-hover ? Cat.peach.with-alpha(0.85) : Cat.peach;
+                            animate background { duration: 80ms; }
+                            pdm-apply-lbl := Text { text: @tr("Apply"); font-size: Cat.fs15; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                            pdm-apply-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if setting-pd-custom-text != "" {
+                                        setting-parallel-downloads = setting-pd-custom-text.to-float();
+                                        root.save-settings();
+                                        root.set-parallel-downloads(setting-parallel-downloads);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Caution - centered, hugs content
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            height: 30px; border-radius: 6px;
+                            background: Cat.peach.with-alpha(0.08);
+                            border-width: 1px; border-color: Cat.peach.with-alpha(0.3);
+                            HorizontalLayout {
+                                padding-left: 12px; padding-right: 12px; spacing: 8px;
+                                VerticalLayout { alignment: center;
+                                    NavIcon { d: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"; icon-color: Cat.peach; width: 14px; height: 14px; }
+                                }
+                                Text {
+                                    text: @tr("Above 25 can overload mirrors, use at own risk.");
+                                    font-size: Cat.fs11; color: Cat.peach; vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer
+                Rectangle {
+                    height: 56px; background: Cat.mantle;
+                    Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
+                    HorizontalLayout {
+                        padding-left: 16px; padding-right: 16px; alignment: end;
+                        VerticalLayout { alignment: center;
+                            Rectangle {
+                                width: 90px; height: 32px; border-radius: 8px;
+                                background: pdm-done-ta.has-hover ? Cat.mauve.with-alpha(0.85) : Cat.mauve.with-alpha(0.7);
+                                animate background { duration: 80ms; }
+                                Text { text: @tr("Done"); font-size: Cat.fs13; font-weight: 700; color: Cat.base; horizontal-alignment: center; vertical-alignment: center; }
+                                pdm-done-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-pd-modal = false; } }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Missing dependency warning popup ─────────────────────────────────────
     if show-warning-popup: Rectangle {
         width: 100%;
@@ -9989,7 +10005,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Install button — only when Chaotic-AUR available
+                // Install button - only when Chaotic-AUR available
                 if warning-popup-chaotic-aur: Rectangle {
                     height: 36px;
                     border-radius: 8px;
@@ -10079,7 +10095,7 @@ export component MainWindow inherits Window {
                         if flatpak-mgr-remotes-loading: VerticalLayout {
                             alignment: center;
                             padding-top: 20px;
-                            Spinner { indeterminate: true; width: 24px; height: 24px; }
+                            LoadingCircle { diameter: 24px; }
                         }
 
                         if !flatpak-mgr-remotes-loading && flatpak-mgr-remotes.length == 0: Rectangle {
@@ -10266,7 +10282,7 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // GitHub API token (optional) — raises update-check rate limit
+                        // GitHub API token (optional) - raises update-check rate limit
                         VerticalLayout {
                             spacing: 6px;
                             Text { text: @tr("GitHub Token (optional)"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
@@ -10401,7 +10417,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Nav tooltip — declared last so it renders above all other elements
+    // Nav tooltip - declared last so it renders above all other elements
     if NavTooltip.text != "": Rectangle {
         x: sidebar-vl.preferred-width + 10px;
         y: NavTooltip.y;

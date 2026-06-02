@@ -161,12 +161,12 @@ impl AppImageBackend {
     }
 
     /// Update a tracked AppImage. Strategies, in order of preference:
-    ///   1. recorded GitHub repo — re-resolve the latest release and download it.
+    ///   1. recorded GitHub repo - re-resolve the latest release and download it.
     ///      Preferred because it's reliable; `appimageupdatetool` is known to abort
     ///      (uncaught C++ exception) on some update-info transports.
-    ///   2. embedded update info + `appimageupdatetool` (efficient binary delta) —
+    ///   2. embedded update info + `appimageupdatetool` (efficient binary delta) -
     ///      a soft fallback: any non-success, including a crash signal, falls through.
-    ///   3. recorded http(s) source URL — re-download in place.
+    ///   3. recorded http(s) source URL - re-download in place.
     pub fn update_app(&self, name: &str, log: &LogFn<'_>) -> Result<AppImageEntry> {
         let entries = manifest::load();
         let Some(entry) = entries.iter().find(|e| e.name == name).cloned() else {
@@ -185,7 +185,7 @@ impl AppImageBackend {
         let mut new_source = entry.source_url.clone();
         let mut done = false;
 
-        // 1. GitHub repo (catalog apps) — avoids the crash-prone update tool.
+        // 1. GitHub repo (catalog apps) - avoids the crash-prone update tool.
         if let Some(gh) = &entry.github {
             log(&format!("Resolving latest release for {}…\n", gh));
             match crate::catalog::resolve_download(gh) {
@@ -203,7 +203,7 @@ impl AppImageBackend {
             }
         }
 
-        // 2. appimageupdatetool. It can abort on some update-info transports — treat
+        // 2. appimageupdatetool. It can abort on some update-info transports - treat
         //    any non-success (including a crash signal → no exit code) as soft failure.
         if !done && entry.update_info.is_some() && which("appimageupdatetool").is_some() {
             log("Updating via appimageupdatetool…\n");
@@ -285,7 +285,7 @@ impl AppImageBackend {
     }
 
     /// Scan every installed AppImage and return the ids of those with a pending
-    /// update. Network-bound (one GitHub query per catalog app) — run off the UI
+    /// update. Network-bound (one GitHub query per catalog app) - run off the UI
     /// thread. Entries that error during the check are skipped, not failed.
     pub fn check_all_updates(&self) -> Vec<String> {
         self.list_entries()
@@ -297,7 +297,7 @@ impl AppImageBackend {
 
     /// Re-fetch the app from its recorded source (GitHub latest, URL, or local
     /// file) and replace it in place. Used for AppImages that lack embedded
-    /// update info — the only way to "update" them is to reinstall.
+    /// update info - the only way to "update" them is to reinstall.
     pub fn reinstall_app(&self, name: &str, log: &LogFn<'_>) -> Result<AppImageEntry> {
         let entries = manifest::load();
         let Some(entry) = entries.iter().find(|e| e.name == name).cloned() else {
@@ -380,7 +380,7 @@ impl PackageSource for AppImageBackend {
     }
 
     async fn search(&self, _query: &str) -> Result<Vec<SearchResult>> {
-        // No catalog — AppImages are installed from a file or URL.
+        // No catalog - AppImages are installed from a file or URL.
         Ok(Vec::new())
     }
 

@@ -770,7 +770,46 @@ fn format_size(bytes: u64) -> String {
 // ─── AppImage helpers ─────────────────────────────────────────────────────────
 
 // Build an installed-row card with the locally-stored icon. MUST run on the UI
-// thread (slint::Image is !Send) — call from the dispatch loop, not a worker.
+// thread (slint::Image is !Send) - call from the dispatch loop, not a worker.
+/// Build a unified-Updates-page row (PackageData, backend=3) for an AppImage that
+/// has a pending update. Per-row action routes to `update-appimage`.
+fn appimage_entry_to_update_row(entry: &AppImageEntry) -> PackageData {
+    let current = if entry.version == "unknown" || entry.version.is_empty() {
+        "installed".to_string()
+    } else {
+        entry.version.clone()
+    };
+    PackageData {
+        name: SharedString::from(entry.name.as_str()),
+        display_name: SharedString::from(entry.display_name.as_str()),
+        version: SharedString::from("update available"),
+        description: SharedString::from(format!("current: {}", current).as_str()),
+        repository: SharedString::from("appimage"),
+        backend: 3,
+        installed: true,
+        has_update: true,
+        installed_size: SharedString::from(format_size(entry.size).as_str()),
+        licenses: SharedString::from(""),
+        url: SharedString::from(""),
+        dependencies: SharedString::from(""),
+        required_by: SharedString::from(""),
+        selected: false,
+        explicit: false,
+    }
+}
+
+/// Rows for the Updates page = installed AppImages whose id is in the pending set.
+fn build_appimage_update_rows(
+    entries: &[AppImageEntry],
+    updates: &std::collections::HashSet<String>,
+) -> Vec<PackageData> {
+    entries
+        .iter()
+        .filter(|e| updates.contains(&e.name))
+        .map(appimage_entry_to_update_row)
+        .collect()
+}
+
 fn entry_to_installed_card(
     entry: &AppImageEntry,
     updates: &std::collections::HashSet<String>,
@@ -863,7 +902,7 @@ fn catalog_entry_to_card(
     let category = entry.categories.first().cloned().unwrap_or_default();
 
     // Icon is loaded lazily by the per-row loader (handles cache + download), so
-    // building cards stays cheap — no synchronous image decode here.
+    // building cards stays cheap - no synchronous image decode here.
     AppImageCard {
         github: SharedString::from(entry.github.as_str()),
         name: SharedString::from(entry.name.as_str()),
@@ -1034,7 +1073,7 @@ fn run_appimage_op<F>(
     tx: &mpsc::Sender<UiMessage>,
     title: &str,
     dir: Option<String>,
-    // When the op updates/reinstalls a known app, its id — cleared from the
+    // When the op updates/reinstalls a known app, its id - cleared from the
     // pending-update set on success so the "New version" pill goes away.
     clear_update: Option<String>,
     op: F,
@@ -1162,12 +1201,12 @@ impl TermStream {
             if self.pending_cr {
                 self.pending_cr = false;
                 if b == 0x0a {
-                    // \r\n — CRLF: commit line without clearing
+                    // \r\n - CRLF: commit line without clearing
                     self.lines.push(std::mem::take(&mut self.current));
                     i += 1;
                     continue;
                 }
-                // bare \r: carriage return — clear and restart current line
+                // bare \r: carriage return - clear and restart current line
                 self.current.clear();
             }
 
@@ -2874,9 +2913,18 @@ fn strip_html(html: &str) -> String {
 }
 
 fn main() {
+    // Pin the Qt windowing backend. With both backend-qt and backend-winit compiled
+    // in, Slint may pick winit, whose Wayland frame-callback handling can starve
+    // redraws/input - symptom: clicks register but the frame isn't presented until a
+    // window event (e.g. refocus) forces a repaint. Qt integrates cleanly with KDE
+    // Wayland. Overridable via the environment if a user needs winit.
+    if std::env::var_os("SLINT_BACKEND").is_none() {
+        std::env::set_var("SLINT_BACKEND", "qt");
+    }
+
     // Ensure Qt can find its plugins and libraries
     // This helps when the app is installed to /usr/bin vs run from build dir
-    
+
     // Plugin path for Qt style/platform theme plugins
     if std::env::var("QT_PLUGIN_PATH").map(|p| p.is_empty()).unwrap_or(true) {
         std::env::set_var("QT_PLUGIN_PATH", "/usr/lib/qt6/plugins:/usr/lib/x86_64-linux-gnu/qt6/plugins");
@@ -2914,7 +2962,7 @@ fn main() {
     let _instance_lock = match acquire_instance_lock() {
         Some(f) => f,
         None => {
-            info!("Another instance is already running — bringing it to foreground");
+            info!("Another instance is already running - bringing it to foreground");
             signal_existing_instance();
             return;
         }
@@ -2950,6 +2998,11 @@ fn main() {
     // UI-thread owned; read when (re)building installed cards.
     let appimage_updates: Rc<RefCell<std::collections::HashSet<String>>> =
         Rc::new(RefCell::new(std::collections::HashSet::new()));
+    // Cache of installed AppImage entries (UI-thread) so the Updates-page rows can
+    // be rebuilt from the pending set without re-reading the manifest.
+    let appimage_entries: Rc<RefCell<Vec<AppImageEntry>>> = Rc::new(RefCell::new(Vec::new()));
+    // Whether AppImage support is on - read by the global update-check thread.
+    let appimage_enabled_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     listen_for_instance_signals(window.as_weak());
 
@@ -3001,7 +3054,7 @@ fn main() {
     let tx_load = tx.clone();
     let tx_search = tx.clone();
 
-    // Shared log model for colored progress log lines — reset when popup opens
+    // Shared log model for colored progress log lines - reset when popup opens
     let log_model: Rc<RefCell<Option<Rc<VecModel<LogLine>>>>> = Rc::new(RefCell::new(None));
 
     let timer = Timer::default();
@@ -3020,6 +3073,7 @@ fn main() {
     let notified_updates = Rc::new(std::cell::Cell::new(false));
     let cat_dispatch = appimage_catalog.clone();
     let updates_dispatch = appimage_updates.clone();
+    let ai_entries_dispatch = appimage_entries.clone();
 
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
         if let Some(window) = window_weak.upgrade() {
@@ -3424,18 +3478,29 @@ fn main() {
                             .map(|e| entry_to_installed_card(e, &updates))
                             .collect();
                         window.set_installed_appimages(ModelRc::new(VecModel::from(cards)));
+                        // Updates-page rows + cache entries for later rebuilds.
+                        window.set_appimage_update_packages(ModelRc::new(VecModel::from(
+                            build_appimage_update_rows(&entries, &updates),
+                        )));
+                        drop(updates);
+                        *ai_entries_dispatch.borrow_mut() = entries;
                     }
                     UiMessage::AppImageUpdateCleared(id) => {
                         let mut up = updates_dispatch.borrow_mut();
                         up.remove(&id);
                         window.set_appimage_update_count(up.len() as i32);
+                        drop(up);
+                        let updates = updates_dispatch.borrow();
+                        window.set_appimage_update_packages(ModelRc::new(VecModel::from(
+                            build_appimage_update_rows(&ai_entries_dispatch.borrow(), &updates),
+                        )));
                     }
                     UiMessage::AppImageUpdatesChecked(names) => {
                         window.set_appimage_checking_updates(false);
                         window.set_appimage_update_count(names.len() as i32);
                         *updates_dispatch.borrow_mut() = names.into_iter().collect();
-                        // Re-render installed rows so the green "New version" pill appears.
                         let updates = updates_dispatch.borrow();
+                        // Re-render installed rows so the green "New version" pill appears.
                         let model = window.get_installed_appimages();
                         let refreshed: Vec<AppImageInstalled> = (0..model.row_count())
                             .filter_map(|i| model.row_data(i))
@@ -3445,6 +3510,10 @@ fn main() {
                             })
                             .collect();
                         window.set_installed_appimages(ModelRc::new(VecModel::from(refreshed)));
+                        // Populate the unified Updates-page section.
+                        window.set_appimage_update_packages(ModelRc::new(VecModel::from(
+                            build_appimage_update_rows(&ai_entries_dispatch.borrow(), &updates),
+                        )));
                     }
                     UiMessage::AppImageCatalogReady => {
                         let page = window.get_appimage_page().max(0) as usize;
@@ -3618,6 +3687,17 @@ fn main() {
             load_packages_async(&tx_initial, check_updates_on_start).await;
         });
     });
+
+    // Startup update check also covers AppImages (when enabled).
+    if check_updates_on_start && config.appimage_enabled {
+        let tx_ai_start = tx.clone();
+        thread::spawn(move || {
+            let names = AppImageBackend::new()
+                .map(|b| b.check_all_updates())
+                .unwrap_or_default();
+            let _ = tx_ai_start.send(UiMessage::AppImageUpdatesChecked(names));
+        });
+    }
 
     // Preload flatpak appstream in background so first Flatpaks click is instant
     {
@@ -4853,8 +4933,20 @@ fn main() {
 
 
     let tx_sync = tx.clone();
+    let ai_enabled_sync = appimage_enabled_flag.clone();
     window.on_sync_databases(move || {
         info!("Check for updates");
+        // Kick the AppImage update check in parallel (network-bound, independent of
+        // pacman/flatpak) so one "Check for Updates" covers all three formats.
+        if ai_enabled_sync.load(std::sync::atomic::Ordering::Relaxed) {
+            let tx_ai = tx_sync.clone();
+            thread::spawn(move || {
+                let names = AppImageBackend::new()
+                    .map(|b| b.check_all_updates())
+                    .unwrap_or_default();
+                let _ = tx_ai.send(UiMessage::AppImageUpdatesChecked(names));
+            });
+        }
         let tx = tx_sync.clone();
         thread::spawn(move || {
             let _ = tx.send(UiMessage::SetBusy(true));
@@ -5050,7 +5142,7 @@ fn main() {
         });
     });
 
-    // Update All — like AM's `am -u`. Updates every app with a pending update; if
+    // Update All - like AM's `am -u`. Updates every app with a pending update; if
     // no check has run yet, checks first, then updates what needs it.
     let tx_ai_updateall = tx.clone();
     let dir_ai_updateall = appimage_dir_state.clone();
@@ -5075,7 +5167,7 @@ fn main() {
                 }
                 log(&format!("Updating {} AppImage(s)…\n", targets.len()));
                 for name in &targets {
-                    log(&format!("\n— {} —\n", name));
+                    log(&format!("\n- {} -\n", name));
                     match backend.update_app(name, log) {
                         Ok(_) => {
                             let _ = tx_clear.send(UiMessage::AppImageUpdateCleared(name.clone()));
@@ -5755,7 +5847,7 @@ fn main() {
         });
     });
 
-    // Repo package search filter — resets to page 1 and renders the first page.
+    // Repo package search filter - resets to page 1 and renders the first page.
     let repo_full_filter = repo_packages_full.clone();
     let win_filter_repo = window.as_weak();
     window.on_filter_repo(move |search| {
@@ -5803,7 +5895,7 @@ fn main() {
                         .join("\n")
                 }
                 _ => {
-                    // Not installed — try file database
+                    // Not installed - try file database
                     let fl = std::process::Command::new("pacman")
                         .args(["-Fl", &n])
                         .output();
@@ -6213,15 +6305,18 @@ fn main() {
         });
     });
 
+    let ai_enabled_save = appimage_enabled_flag.clone();
     window.on_save_settings(move || {
         if let Some(window) = window_weak_ss.upgrade() {
             let config = build_config(&window);
             // Apply the GitHub token immediately so the next API call is authenticated.
             xpm_appimage::catalog::set_github_token(Some(config.appimage_github_token.clone()));
+            ai_enabled_save.store(config.appimage_enabled, std::sync::atomic::Ordering::Relaxed);
             save_config(&config);
         }
     });
 
+    appimage_enabled_flag.store(config.appimage_enabled, std::sync::atomic::Ordering::Relaxed);
     window.set_setting_flatpak_enabled(config.flatpak_enabled);
     window.set_setting_appimage_enabled(config.appimage_enabled);
     window.set_setting_appimage_dir(SharedString::from(config.appimage_dir.as_str()));
@@ -7167,13 +7262,13 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         in_id = true;
                     }
                     b"name" if in_component && !in_developer && !in_description && !in_categories => {
-                        // Skip translated names — only accept the unlocalized default (English)
+                        // Skip translated names - only accept the unlocalized default (English)
                         let has_lang = e.attributes().flatten()
                             .any(|a| a.key.as_ref() == b"xml:lang");
                         if !has_lang { in_name = true; }
                     }
                     b"summary" if in_component && !in_developer && !in_description => {
-                        // Skip translated summaries — only accept the unlocalized default (English)
+                        // Skip translated summaries - only accept the unlocalized default (English)
                         let has_lang = e.attributes().flatten()
                             .any(|a| a.key.as_ref() == b"xml:lang");
                         if !has_lang { in_summary = true; }

@@ -1,4 +1,4 @@
-//! AppImage catalog — the default browse source.
+//! AppImage catalog - the default browse source.
 //!
 //! Pulls the community AppImageHub feed (https://appimage.github.io/feed.json),
 //! which lists ~1400 apps with their GitHub repo. Installing resolves the repo's
@@ -17,7 +17,7 @@ pub struct CatalogEntry {
     pub name: String,
     pub description: String,
     pub categories: Vec<String>,
-    /// GitHub "owner/repo" — used to resolve the download.
+    /// GitHub "owner/repo" - used to resolve the download.
     pub github: String,
     pub icon_url: Option<String>,
 }
@@ -65,7 +65,7 @@ fn which(cmd: &str) -> Option<PathBuf> {
 }
 
 /// Optional GitHub API token. Unauthenticated requests are capped at 60/hr per IP
-/// — a library of a few dozen apps exhausts that fast on a single update check. A
+/// - a library of a few dozen apps exhausts that fast on a single update check. A
 /// token raises the limit to 5000/hr. Set once at startup and on settings change.
 static GITHUB_TOKEN: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 
@@ -115,7 +115,7 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
     if !out.status.success() {
         if is_github_api(url) && !authed {
             return Err(Error::NetworkError(format!(
-                "GitHub request failed (likely unauthenticated rate limit — add a GitHub token in AppImage settings): {}",
+                "GitHub request failed (likely unauthenticated rate limit - add a GitHub token in AppImage settings): {}",
                 url
             )));
         }
@@ -127,8 +127,8 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
 /// Fetch and merge multiple feed-JSON sources. Per-source errors are logged and
 /// skipped; entries are de-duplicated by GitHub repo (case-insensitive), then name.
 ///
-/// The feed is messy — keys may be present-but-null and arrays may contain null
-/// elements — so we traverse a `Value` tolerantly rather than via typed structs.
+/// The feed is messy - keys may be present-but-null and arrays may contain null
+/// elements - so we traverse a `Value` tolerantly rather than via typed structs.
 pub fn fetch_sources(urls: &[String]) -> Vec<CatalogEntry> {
     let mut merged: Vec<CatalogEntry> = Vec::new();
     let mut seen_repo = std::collections::HashSet::new();
