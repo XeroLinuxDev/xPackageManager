@@ -64,6 +64,31 @@ fn which(cmd: &str) -> Option<PathBuf> {
     std::env::split_paths(&path).map(|d| d.join(cmd)).find(|p| p.is_file())
 }
 
+/// Optional GitHub API token. Unauthenticated requests are capped at 60/hr per IP
+/// — a library of a few dozen apps exhausts that fast on a single update check. A
+/// token raises the limit to 5000/hr. Set once at startup and on settings change.
+static GITHUB_TOKEN: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+/// Set (or clear with an empty/None value) the GitHub API token used for release
+/// resolution and update checks. Process-global; safe to call from any thread.
+pub fn set_github_token(token: Option<String>) {
+    let cleaned = token.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+    if let Ok(mut w) = GITHUB_TOKEN.write() {
+        *w = cleaned;
+    }
+}
+
+fn github_token() -> Option<String> {
+    GITHUB_TOKEN.read().ok().and_then(|g| g.clone())
+}
+
+fn is_github_api(url: &str) -> bool {
+    url.contains("api.github.com")
+}
+
 fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
     if which("curl").is_none() {
         return Err(Error::Other("curl is required".to_string()));
@@ -74,9 +99,26 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
         cmd.args(["-H", &format!("Accept: {}", a)]);
     }
     cmd.args(["-H", "User-Agent: xPackageManager"]);
+    // Authenticate GitHub API calls when a token is configured (5000/hr vs 60/hr).
+    let authed = if is_github_api(url) {
+        if let Some(tok) = github_token() {
+            cmd.args(["-H", &format!("Authorization: Bearer {}", tok)]);
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
     cmd.arg(url);
     let out = cmd.output().map_err(|e| Error::NetworkError(e.to_string()))?;
     if !out.status.success() {
+        if is_github_api(url) && !authed {
+            return Err(Error::NetworkError(format!(
+                "GitHub request failed (likely unauthenticated rate limit — add a GitHub token in AppImage settings): {}",
+                url
+            )));
+        }
         return Err(Error::NetworkError(format!("Request failed: {}", url)));
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
@@ -246,10 +288,28 @@ pub fn resolve_download(github: &str) -> Result<String> {
             github
         )));
     }
-    // Prefer 64-bit desktop builds.
-    let preferred = urls.iter().find(|(n, _)| {
+    // Drop non-x86_64 builds so a repo that ships ARM/32-bit assets alongside (or
+    // before) the desktop build doesn't get the wrong binary. (Same exclusion list
+    // AM uses.) If everything gets filtered out, fall back to the full set.
+    let is_other_arch = |n: &str| {
+        let l = n.to_lowercase();
+        ["i386", "i686", "aarch64", "arm64", "armv7l", "armhf"]
+            .iter()
+            .any(|a| l.contains(a))
+    };
+    let pool: Vec<&(String, String)> = {
+        let kept: Vec<&(String, String)> =
+            urls.iter().filter(|(n, _)| !is_other_arch(n)).collect();
+        if kept.is_empty() {
+            urls.iter().collect()
+        } else {
+            kept
+        }
+    };
+    // Prefer an explicit 64-bit desktop tag within the surviving pool.
+    let preferred = pool.iter().find(|(n, _)| {
         let l = n.to_lowercase();
         l.contains("x86_64") || l.contains("amd64") || l.contains("x86-64")
     });
-    Ok(preferred.unwrap_or(&urls[0]).1.clone())
+    Ok(preferred.unwrap_or(&pool[0]).1.clone())
 }

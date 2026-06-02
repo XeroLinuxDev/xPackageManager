@@ -124,6 +124,13 @@ cd packaging/ && makepkg -rsifcd
 
 ## Changelog
 
+### v0.6.1
+
+- **AppImage engine** (inspired by [AM](https://github.com/ivan-hc/AM)): real update detection for GitHub-sourced apps via release-URL comparison (no embedded update info needed); "Check for Updates" + "Update All"; optional GitHub token to raise the API rate limit; arch-aware asset selection.
+- **Pagination**: Prev/Next paging on Flatpak Browse and Repo Browse; debounced AppImage catalog search.
+- **Responsive UI**: lower minimum window size and reactive layout so elements no longer clip on lower-resolution displays.
+- Fixed `appimageupdatetool` crash/no-fallback during AppImage updates.
+
 ### v0.6.0
 
 - **AppImage support** (optional, off by default): catalog browse, install from catalog/URL/file, desktop integration with icons, configurable install location, named source manager, Install↔Remove + Reinstall.

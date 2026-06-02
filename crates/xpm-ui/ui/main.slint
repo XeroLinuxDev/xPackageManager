@@ -39,6 +39,7 @@ export struct AppImageInstalled {
     name: string,
     detail: string,
     supports-update: bool,
+    update-available: bool,
     initial: string,
     icon: image,
     has-icon: bool,
@@ -844,8 +845,10 @@ export component MainWindow inherits Window {
     title: @tr("XeroLinux Package Manager GUI");
     preferred-width: 1600px;
     preferred-height: 1000px;
-    min-width: 1280px;
-    min-height: 850px;
+    // Keep the floor low enough to fit 1366×768 laptops and smaller/scaled
+    // displays — layouts below adapt via the reactive window-width binding.
+    min-width: 960px;
+    min-height: 600px;
     background: Palette.background;
 
     in-out property <int> view: 9;
@@ -883,13 +886,20 @@ export component MainWindow inherits Window {
     // AppImage
     in-out property <bool> setting-appimage-enabled: false;
     in-out property <string> setting-appimage-dir: "";
+    in-out property <string> setting-appimage-github-token: "";
     in-out property <[AppImageInstalled]> installed-appimages: [];
     in-out property <[AppImageCard]> catalog-appimages: [];
     in-out property <string> appimage-url-input: "";
     in-out property <string> appimage-search: "";
     in-out property <int> appimage-tab: 0; // 0=browse, 1=installed
+    in-out property <bool> appimage-checking-updates: false;
+    in-out property <int> appimage-update-count: 0;
+    callback check-appimage-updates;
+    callback update-all-appimages;
     in-out property <bool> appimage-catalog-loading: false;
     in-out property <int> appimage-catalog-total: 0;
+    in-out property <int> appimage-page: 0; // 0-based catalog page
+    property <int> appimage-per-page: 50;
     in-out property <[AppImageSource]> appimage-sources: [];
     in-out property <bool> show-appimage-mgr-modal: false;
     in-out property <string> new-appimage-source-name: "";
@@ -910,8 +920,9 @@ export component MainWindow inherits Window {
     callback add-flatpak-remote(string, string);
     callback remove-flatpak-remote(string);
 
-    in-out property <int> window-width: 1600;
-    in-out property <int> window-height: 1000;
+    // Bound to the live window size so layouts can react to resolution/resizing.
+    property <int> window-width: root.width / 1px;
+    property <int> window-height: root.height / 1px;
 
     in-out property <int> selected-count: 0;
     in-out property <int> selected-installed-count: 0;
@@ -965,8 +976,8 @@ export component MainWindow inherits Window {
     in-out property <bool> remote-apps-loading: false;
     in-out property <bool> flatpak-store-ready: false;
     in-out property <int> flatpak-total-matches: 0;
-    in-out property <bool> flatpak-loading-more: false;
-    callback load-more-flatpaks;
+    in-out property <int> flatpak-page: 0; // 0-based store page
+    property <int> flatpak-per-page: 100;
     in-out property <[string]> flatpak-categories: ["All", "AudioVideo", "Development", "Education", "Game", "Graphics", "Network", "Office", "Science", "System", "Utility"];
     in-out property <string> selected-flatpak-category: "All";
     in-out property <string> flatpak-search: "";
@@ -1045,8 +1056,9 @@ export component MainWindow inherits Window {
     in-out property <string> selected-repo: "";
     in-out property <[PackageData]> repo-packages: [];
     in-out property <bool> repo-loading: false;
-    in-out property <bool> repo-has-more: false;
-    in-out property <int> repo-extra-count: 0;
+    in-out property <int> repo-total-matches: 0;
+    in-out property <int> repo-page: 0; // 0-based browse page
+    property <int> repo-per-page: 100;
     in-out property <bool> show-repo-detail: false;
     in-out property <PackageData> repo-detail-pkg;
     in-out property <string> repo-detail-description: "";
@@ -1074,7 +1086,7 @@ export component MainWindow inherits Window {
     callback update-appimage(string);
     callback reinstall-appimage(string);
     callback load-appimage-catalog;
-    callback filter-appimage-catalog(string);
+    callback filter-appimage-catalog(string, int); // query, page
     callback install-appimage-catalog(string);
     callback load-appimage-icon(string);
     callback change-appimage-dir;
@@ -1089,7 +1101,7 @@ export component MainWindow inherits Window {
     callback filter-repo(string);
     callback load-pacman-repos;
     callback browse-repo(string);
-    callback load-more-repo-pkgs;
+    callback goto-repo-page(int);
     callback select-repo-pkg(string, int);
     callback terminal-reboot;
     callback update-mirrorlists;
@@ -2051,10 +2063,12 @@ export component MainWindow inherits Window {
                                     selection-foreground-color: Cat.text;
                                     accepted => {
                                         show-flatpak-detail = false;
+                                        flatpak-page = 0;
                                         root.filter-flatpak(selected-flatpak-category, self.text);
                                     }
                                     edited => {
                                         show-flatpak-detail = false;
+                                        flatpak-page = 0;
                                         root.filter-flatpak(selected-flatpak-category, self.text);
                                     }
                                 }
@@ -2087,6 +2101,7 @@ export component MainWindow inherits Window {
                             clicked => {
                                 selected-flatpak-category = cat;
                                 show-flatpak-detail = false;
+                                flatpak-page = 0;
                                 root.filter-flatpak(cat, flatpak-search);
                             }
                         }
@@ -2835,59 +2850,16 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Load More button — shown when there are more results beyond the current page
-                            if flatpak-total-matches > remote-apps.length: Rectangle {
-                                height: 56px;
-                                background: transparent;
+                        }
+                    }
 
-                                HorizontalLayout {
-                                    alignment: center;
-                                    padding: 10px;
-
-                                    Rectangle {
-                                        width: fk-lm-lbl.preferred-width + (flatpak-loading-more ? 52px : 36px);
-                                        height: 32px;
-                                        border-radius: 8px;
-                                        background: load-more-touch.has-hover && !flatpak-loading-more
-                                            ? Cat.mauve.with-alpha(0.18)
-                                            : Cat.surface0.with-alpha(0.5);
-                                        border-width: 1px;
-                                        border-color: Cat.mauve.with-alpha(0.2);
-                                        animate background { duration: 100ms; }
-
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            spacing: 6px;
-
-                                            if flatpak-loading-more: Spinner {
-                                                indeterminate: true;
-                                                width: 14px;
-                                                height: 14px;
-                                            }
-
-                                            fk-lm-lbl := Text {
-                                                text: flatpak-loading-more
-                                                    ? "Loading..."
-                                                    : "Load More  (" + (flatpak-total-matches - remote-apps.length) + " remaining)";
-                                                font-size: Cat.fs13;
-                                                font-weight: 600;
-                                                color: flatpak-loading-more ? Cat.overlay0 : Cat.mauve;
-                                                vertical-alignment: center;
-                                            }
-                                        }
-
-                                        load-more-touch := TouchArea {
-                                            mouse-cursor: flatpak-loading-more ? default : pointer;
-                                            clicked => {
-                                                if !flatpak-loading-more {
-                                                    flatpak-loading-more = true;
-                                                    root.load-more-flatpaks();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                    // Pagination — shown when matches span more than one page
+                    if flatpak-total-matches > flatpak-per-page: Paginator {
+                        current-page: flatpak-page;
+                        total-pages: Math.ceil(flatpak-total-matches / flatpak-per-page);
+                        go-to-page(p) => {
+                            flatpak-page = p;
+                            root.filter-flatpak(selected-flatpak-category, flatpak-search);
                         }
                     }
                 }
@@ -3185,6 +3157,9 @@ export component MainWindow inherits Window {
                 HorizontalLayout {
                     alignment: center;
                     Rectangle {
+                        // Hug content on wide screens; clamp to available width so
+                        // the warning text elides instead of overflowing off-screen.
+                        width: min(ai-warn-text.preferred-width + 20px + 8px + 24px, parent.width);
                         border-radius: 8px;
                         background: Cat.red.with-alpha(0.08);
                         border-width: 1px;
@@ -3196,11 +3171,13 @@ export component MainWindow inherits Window {
                             padding-bottom: 8px;
                             spacing: 8px;
                             VerticalLayout { alignment: center; WarnBadge { size: 20px; } }
-                            Text {
+                            ai-warn-text := Text {
                                 text: @tr("AppImages are not maintained or supported by us, use at your own risk. Updates are manual due to the nature of AppImages. Click either Update or Reinstall to update them.");
                                 font-size: Cat.fs14;
                                 color: Cat.red;
                                 vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
                             }
                         }
                     }
@@ -3266,6 +3243,17 @@ export component MainWindow inherits Window {
                             }
                             Rectangle {
                                 horizontal-stretch: 1;
+                                // Debounce: filter fires 1s after the latest keypress, off the
+                                // UI thread's per-keystroke path so typing stays smooth on the
+                                // ~1k-app feed. Restarted on every edit; page reset to first.
+                                ai-search-debounce := Timer {
+                                    interval: 1s;
+                                    running: false;
+                                    triggered => {
+                                        ai-search-debounce.running = false;
+                                        root.filter-appimage-catalog(root.appimage-search, root.appimage-page);
+                                    }
+                                }
                                 ai-search-ti := TextInput {
                                     width: 100%;
                                     height: 100%;
@@ -3275,7 +3263,11 @@ export component MainWindow inherits Window {
                                     single-line: true;
                                     vertical-alignment: center;
                                     selection-background-color: Cat.mauve.with-alpha(0.3);
-                                    edited => { root.filter-appimage-catalog(appimage-search); }
+                                    edited => {
+                                        root.appimage-page = 0;
+                                        ai-search-debounce.running = false;
+                                        ai-search-debounce.running = true;
+                                    }
                                 }
                                 if appimage-search == "" && !ai-search-ti.has-focus: Text {
                                     width: 100%;
@@ -3330,11 +3322,11 @@ export component MainWindow inherits Window {
                         VerticalLayout { alignment: center; Btn { label: @tr("Install File"); width: 104px; horizontal-stretch: 0; clicked => { root.install-appimage-file(); } } }
                     }
 
-                    // Result count
+                    // Result count (range shown for the current page)
                     if !appimage-catalog-loading && appimage-catalog-total > 0: Text {
-                        text: catalog-appimages.length < appimage-catalog-total
-                            ? "Showing " + catalog-appimages.length + " of " + appimage-catalog-total + " — refine search to narrow"
-                            : appimage-catalog-total + " apps";
+                        text: "Showing " + (appimage-page * appimage-per-page + 1)
+                            + "–" + min((appimage-page + 1) * appimage-per-page, appimage-catalog-total)
+                            + " of " + appimage-catalog-total + " apps";
                         font-size: Cat.fs11;
                         color: Cat.overlay0;
                     }
@@ -3404,6 +3396,43 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
+
+                    // Pagination — shown when matches span more than one page
+                    if !appimage-catalog-loading && appimage-catalog-total > appimage-per-page: HorizontalLayout {
+                        height: 36px;
+                        spacing: 10px;
+                        alignment: center;
+                        Btn {
+                            label: @tr("‹ Prev");
+                            width: 90px;
+                            horizontal-stretch: 0;
+                            enabled: appimage-page > 0;
+                            clicked => {
+                                root.appimage-page = appimage-page - 1;
+                                root.filter-appimage-catalog(appimage-search, root.appimage-page);
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Page " + (appimage-page + 1) + " / "
+                                    + Math.ceil(appimage-catalog-total / appimage-per-page);
+                                font-size: Cat.fs12;
+                                color: Cat.subtext0;
+                                horizontal-alignment: center;
+                            }
+                        }
+                        Btn {
+                            label: @tr("Next ›");
+                            width: 90px;
+                            horizontal-stretch: 0;
+                            enabled: (appimage-page + 1) * appimage-per-page < appimage-catalog-total;
+                            clicked => {
+                                root.appimage-page = appimage-page + 1;
+                                root.filter-appimage-catalog(appimage-search, root.appimage-page);
+                            }
+                        }
+                    }
                 }
 
                 // ── Installed tab ───────────────────────────────────────────
@@ -3415,6 +3444,46 @@ export component MainWindow inherits Window {
                         vertical-stretch: 1;
                         alignment: center;
                         Text { text: @tr("No AppImages installed yet."); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
+                    }
+
+                    // Update-check toolbar
+                    if installed-appimages.length > 0: HorizontalLayout {
+                        height: 32px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            if appimage-checking-updates || appimage-update-count > 0: Text {
+                                text: appimage-checking-updates
+                                    ? @tr("Checking for updates…")
+                                    : appimage-update-count + @tr(" update(s) available");
+                                font-size: Cat.fs12;
+                                color: appimage-update-count > 0 ? Cat.green : Cat.subtext0;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Btn {
+                                label: appimage-checking-updates ? @tr("Checking…") : @tr("Check for Updates");
+                                width: 150px;
+                                horizontal-stretch: 0;
+                                enabled: !appimage-checking-updates;
+                                clicked => { root.check-appimage-updates(); }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Btn {
+                                label: appimage-update-count > 0
+                                    ? @tr("Update All ({0})", appimage-update-count)
+                                    : @tr("Update All");
+                                primary: true;
+                                width: 130px;
+                                horizontal-stretch: 0;
+                                enabled: !appimage-checking-updates;
+                                clicked => { root.update-all-appimages(); }
+                            }
+                        }
                     }
 
                     if installed-appimages.length > 0: ScrollView {
@@ -3441,6 +3510,27 @@ export component MainWindow inherits Window {
                                         spacing: 2px;
                                         Text { text: pkg.name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
                                         Text { text: pkg.detail; font-size: Cat.fs11; color: Cat.subtext0; overflow: elide; }
+                                    }
+                                    // Green pill marks rows with a pending update (after a check).
+                                    if pkg.update-available: VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            width: ua-lbl.preferred-width + 16px;
+                                            height: 18px;
+                                            border-radius: 5px;
+                                            background: Cat.green.with-alpha(0.18);
+                                            border-width: 1px;
+                                            border-color: Cat.green.with-alpha(0.4);
+                                            ua-lbl := Text {
+                                                text: @tr("New version");
+                                                x: 8px;
+                                                font-size: Cat.fs9;
+                                                font-weight: 700;
+                                                color: Cat.green;
+                                                vertical-alignment: center;
+                                                height: 100%;
+                                            }
+                                        }
                                     }
                                     if pkg.supports-update: VerticalLayout {
                                         alignment: center;
@@ -3773,20 +3863,11 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Load More button
-                    if !repo-loading && repo-has-more: Rectangle {
-                        height: 40px;
-                        background: Cat.surface0.with-alpha(0.3);
-                        Rectangle {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            width: lm-lbl.preferred-width + 36px; height: 32px; border-radius: 8px;
-                            background: lm-ta.has-hover ? Cat.blue.with-alpha(0.2) : Cat.blue.with-alpha(0.1);
-                            border-width: 1px; border-color: Cat.blue.with-alpha(0.3);
-                            animate background { duration: 60ms; }
-                            lm-lbl := Text { text: @tr("Load {0} more packages", repo-extra-count); font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
-                            lm-ta := TouchArea { mouse-cursor: pointer; clicked => { root.load-more-repo-pkgs(); } }
-                        }
+                    // Pagination — shown when matches span more than one page
+                    if !repo-loading && repo-total-matches > repo-per-page: Paginator {
+                        current-page: repo-page;
+                        total-pages: Math.ceil(repo-total-matches / repo-per-page);
+                        go-to-page(p) => { repo-page = p; root.goto-repo-page(p); }
                     }
                 }
             }
@@ -6226,7 +6307,11 @@ export component MainWindow inherits Window {
                     if !aur-pill-dismissed: HorizontalLayout {
                         alignment: center;
                         Rectangle {
-                            width: aur-pill-text.preferred-width + 15px + 8px + 24px + 28px;
+                            // Hug the text on wide screens, but never exceed the
+                            // content width — clamp so the row can't overflow. Derived
+                            // from root.width (not parent.width) to avoid a ScrollView
+                            // viewport binding loop.
+                            width: min(aur-pill-text.preferred-width + 15px + 8px + 24px + 28px, root.width - sidebar-vl.preferred-width - 12px);
                             border-radius: 8px;
                             background: Cat.yellow.with-alpha(0.08);
                             border-width: 1px;
@@ -6251,6 +6336,7 @@ export component MainWindow inherits Window {
                                     color: Cat.yellow;
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
+                                    wrap: word-wrap;
                                 }
 
                                 VerticalLayout {
@@ -10125,6 +10211,44 @@ export component MainWindow inherits Window {
                                     }
                                     VerticalLayout { alignment: center; Btn { label: @tr("Change…"); width: 92px; horizontal-stretch: 0; clicked => { root.change-appimage-dir(); } } }
                                     if setting-appimage-dir != "": VerticalLayout { alignment: center; Btn { label: @tr("Reset"); width: 72px; horizontal-stretch: 0; clicked => { root.reset-appimage-dir(); } } }
+                                }
+                            }
+                        }
+
+                        // GitHub API token (optional) — raises update-check rate limit
+                        VerticalLayout {
+                            spacing: 6px;
+                            Text { text: @tr("GitHub Token (optional)"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
+                            Text { text: @tr("Unauthenticated GitHub allows 60 update checks/hour. A personal access token (read-only, no scopes needed) raises this to 5000/hour."); font-size: Cat.fs11; color: Cat.overlay1; wrap: word-wrap; }
+                            Rectangle {
+                                height: 42px;
+                                border-radius: 8px;
+                                background: Cat.surface0.with-alpha(0.5);
+                                border-width: 1px;
+                                border-color: aim-tok-ti.has-focus ? Cat.mauve : Cat.surface1;
+                                HorizontalLayout {
+                                    padding-left: 14px; padding-right: 12px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        aim-tok-ti := TextInput {
+                                            width: 100%; height: 100%;
+                                            text <=> setting-appimage-github-token;
+                                            font-size: Cat.fs12;
+                                            color: Cat.text;
+                                            single-line: true;
+                                            input-type: password;
+                                            vertical-alignment: center;
+                                            selection-background-color: Cat.mauve.with-alpha(0.3);
+                                            edited => { root.save-settings(); }
+                                        }
+                                        if setting-appimage-github-token == "" && !aim-tok-ti.has-focus: Text {
+                                            width: 100%; height: 100%;
+                                            text: @tr("ghp_… (leave empty to stay unauthenticated)");
+                                            font-size: Cat.fs12;
+                                            color: Cat.subtext0.with-alpha(0.5);
+                                            vertical-alignment: center;
+                                        }
+                                    }
                                 }
                             }
                         }

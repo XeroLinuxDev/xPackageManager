@@ -132,7 +132,6 @@ enum UiMessage {
     FlatpakScreenshotReady(String),
     FlatpakIconReady(String),
     FlatpakAddonsReady(Vec<PackageData>),
-    FlatpakPageAppended(Vec<PackageData>),
     PacmanReposLoaded(Vec<String>),
     RepoPackagesLoaded(Vec<PackageData>),
     RepoPkgDetail(String),
@@ -151,6 +150,8 @@ enum UiMessage {
     UpdateCacheSize(String),
     PkgInfoLoaded(String),
     InstalledAppImagesLoaded(Vec<AppImageEntry>),
+    AppImageUpdatesChecked(Vec<String>),
+    AppImageUpdateCleared(String),
     AppImageCatalogReady,
     AppImageCatalogLoading(bool),
     AppImageIconReady { github: String, path: String },
@@ -597,6 +598,8 @@ struct AppConfig {
     appimage_dir: String,
     #[serde(default)]
     appimage_feeds: Vec<AppImageFeed>,
+    #[serde(default)]
+    appimage_github_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -630,6 +633,7 @@ impl Default for AppConfig {
             appimage_enabled: false,
             appimage_dir: String::new(),
             appimage_feeds: default_appimage_feeds(),
+            appimage_github_token: String::new(),
         }
     }
 }
@@ -679,6 +683,7 @@ fn build_config(window: &MainWindow) -> AppConfig {
             .iter()
             .map(|s| AppImageFeed { name: s.name.to_string(), url: s.url.to_string() })
             .collect(),
+        appimage_github_token: window.get_setting_appimage_github_token().to_string(),
     }
 }
 
@@ -766,7 +771,10 @@ fn format_size(bytes: u64) -> String {
 
 // Build an installed-row card with the locally-stored icon. MUST run on the UI
 // thread (slint::Image is !Send) — call from the dispatch loop, not a worker.
-fn entry_to_installed_card(entry: &AppImageEntry) -> AppImageInstalled {
+fn entry_to_installed_card(
+    entry: &AppImageEntry,
+    updates: &std::collections::HashSet<String>,
+) -> AppImageInstalled {
     let (icon, has_icon) = match &entry.icon_path {
         Some(p) if std::path::Path::new(p).exists() => {
             match slint::Image::load_from_path(std::path::Path::new(p)) {
@@ -793,6 +801,7 @@ fn entry_to_installed_card(entry: &AppImageEntry) -> AppImageInstalled {
         name: SharedString::from(entry.display_name.as_str()),
         detail: SharedString::from(detail.as_str()),
         supports_update: entry.supports_update,
+        update_available: updates.contains(&entry.name),
         initial: SharedString::from(initial.as_str()),
         icon,
         has_icon,
@@ -868,15 +877,77 @@ fn catalog_entry_to_card(
     }
 }
 
-/// Filter the catalog by a query against name/description. Returns the rendered
-/// (capped) cards and the total number of matches.
+/// Rows rendered per catalog page. Keeps first paint snappy on the ~1k-app feed.
+const APPIMAGE_PER_PAGE: usize = 50;
+
+/// Clamp a 0-based page index to the last valid page for `total` matches.
+fn clamp_appimage_page(page: usize, total: usize) -> usize {
+    page.min(total.saturating_sub(1) / APPIMAGE_PER_PAGE)
+}
+
+/// Rows per page for the Flatpak and Repo store browsers (Prev/Next pagination).
+const BROWSE_PAGE_SIZE: usize = 100;
+
+/// Clamp a 0-based page to the last valid page for `total` items at BROWSE_PAGE_SIZE.
+fn clamp_browse_page(page: usize, total: usize) -> usize {
+    page.min(total.saturating_sub(1) / BROWSE_PAGE_SIZE)
+}
+
+/// Filter (and rank) the repo package list by a query against name/description.
+fn filter_repo_list(full: &[PackageData], query: &str) -> Vec<PackageData> {
+    let q = query.to_lowercase();
+    let mut filtered: Vec<PackageData> = if q.is_empty() {
+        full.to_vec()
+    } else {
+        full.iter()
+            .filter(|p| {
+                p.name.to_lowercase().contains(&q) || p.description.to_lowercase().contains(&q)
+            })
+            .cloned()
+            .collect()
+    };
+    if !q.is_empty() {
+        filtered.sort_by_key(|p| {
+            let name = p.name.to_lowercase();
+            if name == q {
+                0u8
+            } else if name.starts_with(&q) {
+                1
+            } else if name.contains(&q) {
+                2
+            } else {
+                3
+            }
+        });
+    }
+    filtered
+}
+
+/// Render one page of the repo browser: slice `filtered` at `page` and push the
+/// page slice + total + clamped page index into the window.
+fn render_repo_page(w: &MainWindow, filtered: &[PackageData], page: usize) {
+    let total = filtered.len();
+    let page = clamp_browse_page(page, total);
+    let slice: Vec<PackageData> = filtered
+        .iter()
+        .skip(page * BROWSE_PAGE_SIZE)
+        .take(BROWSE_PAGE_SIZE)
+        .cloned()
+        .collect();
+    w.set_repo_packages(ModelRc::new(VecModel::from(slice)));
+    w.set_repo_total_matches(total as i32);
+    w.set_repo_page(page as i32);
+}
+
+/// Filter the catalog by a query against name/description, then return the cards
+/// for the requested page (0-based) plus the total number of matches. The page is
+/// clamped so an out-of-range index lands on the last valid page.
 fn filter_catalog(
     catalog: &[CatalogEntry],
     query: &str,
     installed: &std::collections::HashMap<String, String>,
+    page: usize,
 ) -> (Vec<AppImageCard>, usize) {
-    // Cap rendered rows for snappy first paint; "Showing N of M" hints to search.
-    const CAP: usize = 150;
     let q = query.trim().to_lowercase();
     let matches: Vec<&CatalogEntry> = catalog
         .iter()
@@ -887,9 +958,12 @@ fn filter_catalog(
         })
         .collect();
     let total = matches.len();
+    let last_page = total.saturating_sub(1) / APPIMAGE_PER_PAGE;
+    let page = page.min(last_page);
     let cards = matches
         .into_iter()
-        .take(CAP)
+        .skip(page * APPIMAGE_PER_PAGE)
+        .take(APPIMAGE_PER_PAGE)
         .map(|e| catalog_entry_to_card(e, installed))
         .collect();
     (cards, total)
@@ -956,8 +1030,15 @@ fn pick_directory() -> Option<String> {
 
 /// Run an AppImage operation on the calling (background) thread, streaming log
 /// output into the progress popup and refreshing the installed list afterward.
-fn run_appimage_op<F>(tx: &mpsc::Sender<UiMessage>, title: &str, dir: Option<String>, op: F)
-where
+fn run_appimage_op<F>(
+    tx: &mpsc::Sender<UiMessage>,
+    title: &str,
+    dir: Option<String>,
+    // When the op updates/reinstalls a known app, its id — cleared from the
+    // pending-update set on success so the "New version" pill goes away.
+    clear_update: Option<String>,
+    op: F,
+) where
     F: FnOnce(&AppImageBackend, &dyn Fn(&str)) -> xpm_core::error::Result<()>,
 {
     let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
@@ -984,6 +1065,10 @@ where
     let res = op(&backend, &log);
     match res {
         Ok(()) => {
+            // Clear the pending-update flag before the reload so the row repaints clean.
+            if let Some(id) = clear_update {
+                let _ = tx.send(UiMessage::AppImageUpdateCleared(id));
+            }
             let _ = tx.send(UiMessage::OperationDone(true));
         }
         Err(e) => {
@@ -2861,6 +2946,10 @@ fn main() {
     let appimage_dir_state: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     // Configured catalog sources (named feeds). Shared with the fetch thread.
     let appimage_sources_state: Arc<Mutex<Vec<AppImageFeed>>> = Arc::new(Mutex::new(Vec::new()));
+    // Ids of installed AppImages with a pending update (filled by the update check).
+    // UI-thread owned; read when (re)building installed cards.
+    let appimage_updates: Rc<RefCell<std::collections::HashSet<String>>> =
+        Rc::new(RefCell::new(std::collections::HashSet::new()));
 
     listen_for_instance_signals(window.as_weak());
 
@@ -2874,7 +2963,7 @@ fn main() {
     let flatpak_filter_serial: Arc<std::sync::atomic::AtomicU64> =
         Arc::new(std::sync::atomic::AtomicU64::new(0));
 
-    const FLATPAK_PAGE_SIZE: usize = 150;  // max rows shown at once
+    const FLATPAK_PAGE_SIZE: usize = BROWSE_PAGE_SIZE;  // rows per page (Prev/Next)
 
     // Load cached packages immediately for fast startup
     if let Some(cache) = load_package_cache() {
@@ -2930,6 +3019,7 @@ fn main() {
     let log_model_timer = log_model.clone();
     let notified_updates = Rc::new(std::cell::Cell::new(false));
     let cat_dispatch = appimage_catalog.clone();
+    let updates_dispatch = appimage_updates.clone();
 
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
         if let Some(window) = window_weak.upgrade() {
@@ -3096,6 +3186,12 @@ fn main() {
                                     let updated = flip_installed_in_model(
                                         window.get_repo_packages(), &name_set_ref, new_installed);
                                     window.set_repo_packages(updated);
+                                    // Keep the full cached list in sync so paging shows fresh state
+                                    for p in repo_full_timer.borrow_mut().iter_mut() {
+                                        if name_set_ref.contains(p.name.as_str()) {
+                                            p.installed = new_installed;
+                                        }
+                                    }
 
                                     // ── remote-apps (flatpak store rows): flip flag ─────────
                                     let updated = flip_installed_in_model(
@@ -3256,11 +3352,14 @@ fn main() {
                         // For normal filter serials, drop stale results from previous keystrokes
                         let current = filter_serial_timer.load(std::sync::atomic::Ordering::Relaxed);
                         if serial == u64::MAX || serial == current {
+                            // Browse/preload paths (sentinel) always land on page 1.
+                            if serial == u64::MAX {
+                                window.set_flatpak_page(0);
+                            }
                             window.set_flatpak_total_matches(total_matches as i32);
                             window.set_remote_apps(ModelRc::new(VecModel::from(apps)));
                             window.set_remote_apps_loading(false);
                             window.set_flatpak_store_ready(true);
-                            window.set_flatpak_loading_more(false);
                         }
                     }
                     UiMessage::FlatpakScreenshotReady(path) => {
@@ -3285,16 +3384,6 @@ fn main() {
                         window.set_addon_selected(ModelRc::new(VecModel::from(vec![false; uninstalled_len])));
                         window.set_addon_selected_count(0);
                     }
-                    UiMessage::FlatpakPageAppended(new_items) => {
-                        // Append next page to the existing remote-apps model
-                        let model = window.get_remote_apps();
-                        let mut current: Vec<PackageData> = (0..model.row_count())
-                            .filter_map(|i| model.row_data(i))
-                            .collect();
-                        current.extend(new_items);
-                        window.set_remote_apps(ModelRc::new(VecModel::from(current)));
-                        window.set_flatpak_loading_more(false);
-                    }
                     UiMessage::PacmanReposLoaded(repos) => {
                         // Keep selected_repo as "" (All) - the browse-repo("") call
                         // that fired alongside load-pacman-repos handles the initial load.
@@ -3303,12 +3392,10 @@ fn main() {
                         )));
                     }
                     UiMessage::RepoPackagesLoaded(pkgs) => {
-                        *repo_full_timer.borrow_mut() = pkgs.clone();
-                        window.set_repo_packages(ModelRc::new(VecModel::from(pkgs)));
-                        window.set_repo_has_more(false);
-                        window.set_repo_extra_count(0);
-                        window.set_repo_loading(false);
                         window.set_repo_search(SharedString::from(""));
+                        render_repo_page(&window, &pkgs, 0);
+                        *repo_full_timer.borrow_mut() = pkgs;
+                        window.set_repo_loading(false);
                     }
                     UiMessage::RepoPkgDetail(desc) => {
                         window.set_repo_detail_description(SharedString::from(&desc));
@@ -3323,28 +3410,66 @@ fn main() {
                         window.set_installed_flatpaks(ModelRc::new(VecModel::from(pkgs)));
                     }
                     UiMessage::InstalledAppImagesLoaded(entries) => {
-                        let cards: Vec<AppImageInstalled> =
-                            entries.iter().map(entry_to_installed_card).collect();
+                        // Drop pending-update ids for apps no longer installed, keep count honest.
+                        {
+                            let live: std::collections::HashSet<&str> =
+                                entries.iter().map(|e| e.name.as_str()).collect();
+                            let mut up = updates_dispatch.borrow_mut();
+                            up.retain(|n| live.contains(n.as_str()));
+                            window.set_appimage_update_count(up.len() as i32);
+                        }
+                        let updates = updates_dispatch.borrow();
+                        let cards: Vec<AppImageInstalled> = entries
+                            .iter()
+                            .map(|e| entry_to_installed_card(e, &updates))
+                            .collect();
                         window.set_installed_appimages(ModelRc::new(VecModel::from(cards)));
                     }
+                    UiMessage::AppImageUpdateCleared(id) => {
+                        let mut up = updates_dispatch.borrow_mut();
+                        up.remove(&id);
+                        window.set_appimage_update_count(up.len() as i32);
+                    }
+                    UiMessage::AppImageUpdatesChecked(names) => {
+                        window.set_appimage_checking_updates(false);
+                        window.set_appimage_update_count(names.len() as i32);
+                        *updates_dispatch.borrow_mut() = names.into_iter().collect();
+                        // Re-render installed rows so the green "New version" pill appears.
+                        let updates = updates_dispatch.borrow();
+                        let model = window.get_installed_appimages();
+                        let refreshed: Vec<AppImageInstalled> = (0..model.row_count())
+                            .filter_map(|i| model.row_data(i))
+                            .map(|mut c| {
+                                c.update_available = updates.contains(c.id.as_str());
+                                c
+                            })
+                            .collect();
+                        window.set_installed_appimages(ModelRc::new(VecModel::from(refreshed)));
+                    }
                     UiMessage::AppImageCatalogReady => {
+                        let page = window.get_appimage_page().max(0) as usize;
                         let (cards, total) = filter_catalog(
                             &cat_dispatch.lock().unwrap(),
                             window.get_appimage_search().as_str(),
                             &installed_github_map(),
+                            page,
                         );
                         window.set_appimage_catalog_loading(false);
                         window.set_appimage_catalog_total(total as i32);
+                        window.set_appimage_page(clamp_appimage_page(page, total) as i32);
                         window.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
                     }
                     UiMessage::AppImageCardsRefresh => {
                         // Rebuild cards so Install/Remove reflects the latest state.
+                        let page = window.get_appimage_page().max(0) as usize;
                         let (cards, total) = filter_catalog(
                             &cat_dispatch.lock().unwrap(),
                             window.get_appimage_search().as_str(),
                             &installed_github_map(),
+                            page,
                         );
                         window.set_appimage_catalog_total(total as i32);
+                        window.set_appimage_page(clamp_appimage_page(page, total) as i32);
                         window.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
                     }
                     UiMessage::AppImageCatalogLoading(v) => {
@@ -4860,7 +4985,7 @@ fn main() {
         thread::spawn(move || {
             let Some(path) = pick_appimage_file() else { return };
             let title = format!("Installing {}", path);
-            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+            run_appimage_op(&tx, &title, Some(dir), None, |backend, log| {
                 backend.install(&path, log).map(|_| ())
             });
         });
@@ -4877,7 +5002,7 @@ fn main() {
         let dir = dir_ai_url.lock().unwrap().clone();
         thread::spawn(move || {
             let title = format!("Installing {}", url);
-            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+            run_appimage_op(&tx, &title, Some(dir), None, |backend, log| {
                 backend.install(&url, log).map(|_| ())
             });
         });
@@ -4889,7 +5014,7 @@ fn main() {
         let tx = tx_ai_remove.clone();
         thread::spawn(move || {
             let title = format!("Removing {}", name);
-            run_appimage_op(&tx, &title, None, |backend, log| backend.remove_app(&name, log));
+            run_appimage_op(&tx, &title, None, None, |backend, log| backend.remove_app(&name, log));
         });
     });
 
@@ -4901,8 +5026,64 @@ fn main() {
         let dir = dir_ai_update.lock().unwrap().clone();
         thread::spawn(move || {
             let title = format!("Updating {}", name);
-            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+            run_appimage_op(&tx, &title, Some(dir), Some(name.clone()), |backend, log| {
                 backend.update_app(&name, log).map(|_| ())
+            });
+        });
+    });
+
+    let tx_ai_check = tx.clone();
+    let win_ai_check = window.as_weak();
+    window.on_check_appimage_updates(move || {
+        if let Some(w) = win_ai_check.upgrade() {
+            if w.get_appimage_checking_updates() {
+                return; // a check is already running
+            }
+            w.set_appimage_checking_updates(true);
+        }
+        let tx = tx_ai_check.clone();
+        thread::spawn(move || {
+            let names = AppImageBackend::new()
+                .map(|b| b.check_all_updates())
+                .unwrap_or_default();
+            let _ = tx.send(UiMessage::AppImageUpdatesChecked(names));
+        });
+    });
+
+    // Update All — like AM's `am -u`. Updates every app with a pending update; if
+    // no check has run yet, checks first, then updates what needs it.
+    let tx_ai_updateall = tx.clone();
+    let dir_ai_updateall = appimage_dir_state.clone();
+    let updates_for_all = appimage_updates.clone();
+    window.on_update_all_appimages(move || {
+        let tx = tx_ai_updateall.clone();
+        let dir = dir_ai_updateall.lock().unwrap().clone();
+        // Snapshot the known pending set on the UI thread (Rc is !Send).
+        let pending: Vec<String> = updates_for_all.borrow().iter().cloned().collect();
+        let tx_clear = tx.clone();
+        thread::spawn(move || {
+            run_appimage_op(&tx, "Updating all AppImages", Some(dir), None, move |backend, log| {
+                let targets = if pending.is_empty() {
+                    log("Checking for updates…\n");
+                    backend.check_all_updates()
+                } else {
+                    pending
+                };
+                if targets.is_empty() {
+                    log("All AppImages are up to date.\n");
+                    return Ok(());
+                }
+                log(&format!("Updating {} AppImage(s)…\n", targets.len()));
+                for name in &targets {
+                    log(&format!("\n— {} —\n", name));
+                    match backend.update_app(name, log) {
+                        Ok(_) => {
+                            let _ = tx_clear.send(UiMessage::AppImageUpdateCleared(name.clone()));
+                        }
+                        Err(e) => log(&format!("Failed: {}\n", e)),
+                    }
+                }
+                Ok(())
             });
         });
     });
@@ -4915,7 +5096,7 @@ fn main() {
         let dir = dir_ai_reinstall.lock().unwrap().clone();
         thread::spawn(move || {
             let title = format!("Reinstalling {}", name);
-            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+            run_appimage_op(&tx, &title, Some(dir), Some(name.clone()), |backend, log| {
                 backend.reinstall_app(&name, log).map(|_| ())
             });
         });
@@ -4945,11 +5126,17 @@ fn main() {
 
     let cat_filter = appimage_catalog.clone();
     let win_ai_filter = window.as_weak();
-    window.on_filter_appimage_catalog(move |query| {
+    window.on_filter_appimage_catalog(move |query, page| {
         if let Some(w) = win_ai_filter.upgrade() {
-            let (cards, total) =
-                filter_catalog(&cat_filter.lock().unwrap(), query.as_str(), &installed_github_map());
+            let page = page.max(0) as usize;
+            let (cards, total) = filter_catalog(
+                &cat_filter.lock().unwrap(),
+                query.as_str(),
+                &installed_github_map(),
+                page,
+            );
             w.set_appimage_catalog_total(total as i32);
+            w.set_appimage_page(clamp_appimage_page(page, total) as i32);
             w.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
         }
     });
@@ -4962,7 +5149,7 @@ fn main() {
         let dir = dir_ai_cat.lock().unwrap().clone();
         thread::spawn(move || {
             let title = format!("Installing {}", github);
-            run_appimage_op(&tx, &title, Some(dir), |backend, log| {
+            run_appimage_op(&tx, &title, Some(dir), None, |backend, log| {
                 backend.install_from_github(&github, log).map(|_| ())
             });
         });
@@ -5330,10 +5517,12 @@ fn main() {
     window.on_filter_flatpak(move |category, search| {
         let cat = category.to_string();
         let q = search.to_string();
-        let remote = if let Some(w) = window_weak_filter.upgrade() {
-            w.get_selected_remote().to_string()
+        // Page is read from the property: search/category reset it to 0 (slint),
+        // Prev/Next set it before re-invoking this callback.
+        let (remote, page) = if let Some(w) = window_weak_filter.upgrade() {
+            (w.get_selected_remote().to_string(), w.get_flatpak_page().max(0) as usize)
         } else {
-            "flathub".to_string()
+            ("flathub".to_string(), 0)
         };
         // Bump serial immediately - any in-flight result with the old serial will be dropped
         let my_serial = serial_filter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
@@ -5356,50 +5545,14 @@ fn main() {
                 return;
             }
             let total = all.len();
-            // Cap to FLATPAK_PAGE_SIZE - enough for display, avoids VecModel of 2000 items
-            let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
-            let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: my_serial, apps: page, total_matches: total });
-        });
-    });
-
-    // Load next page of flatpak results
-    let tx_load_more = tx.clone();
-    let store_load_more = flatpak_app_store.clone();
-    let ids_load_more = flatpak_installed_ids.clone();
-    let window_weak_more = window.as_weak();
-    let serial_load_more = flatpak_filter_serial.clone();
-    window.on_load_more_flatpaks(move || {
-        let tx = tx_load_more.clone();
-        let store = store_load_more.clone();
-        let ids = ids_load_more.clone();
-        // Capture current offset and filter state from UI thread
-        let (offset, remote, category, search) = if let Some(w) = window_weak_more.upgrade() {
-            (
-                w.get_remote_apps().row_count(),
-                w.get_selected_remote().to_string(),
-                w.get_selected_flatpak_category().to_string(),
-                w.get_flatpak_search().to_string(),
-            )
-        } else {
-            return;
-        };
-        let my_serial = serial_load_more.load(std::sync::atomic::Ordering::Relaxed);
-        thread::spawn(move || {
-            let store = store.lock().unwrap();
-            let ids = ids.lock().unwrap();
-            let all = apps_to_package_data(&store, &ids, &remote, &category, &search);
-            drop(store);
-            drop(ids);
-            // Slice the next page starting from the current offset
-            let next_page: Vec<PackageData> = all
+            // Slice the requested page - avoids a VecModel of thousands of rows
+            let page = page.min(total.saturating_sub(1) / FLATPAK_PAGE_SIZE);
+            let apps: Vec<PackageData> = all
                 .into_iter()
-                .skip(offset)
+                .skip(page * FLATPAK_PAGE_SIZE)
                 .take(FLATPAK_PAGE_SIZE)
                 .collect();
-            // Only deliver if the filter hasn't changed since the button was clicked
-            let current_serial = my_serial; // we captured it before spawning
-            let _ = tx.send(UiMessage::FlatpakPageAppended(next_page));
-            let _ = current_serial; // suppress unused warning
+            let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: my_serial, apps, total_matches: total });
         });
     });
 
@@ -5582,16 +5735,6 @@ fn main() {
 
     let tx_repo_pkgs = tx.clone();
     let window_weak_repo = window.as_weak();
-    let load_more_full = repo_packages_full.clone();
-    let win_load_more = window.as_weak();
-    window.on_load_more_repo_pkgs(move || {
-        let all = load_more_full.borrow().clone();
-        if let Some(w) = win_load_more.upgrade() {
-            w.set_repo_packages(ModelRc::new(VecModel::from(all)));
-            w.set_repo_has_more(false);
-            w.set_repo_extra_count(0);
-        }
-    });
 
     let repo_browse_clear = repo_packages_full.clone();
     window.on_browse_repo(move |repo| {
@@ -5604,6 +5747,7 @@ fn main() {
         if let Some(w) = window_weak_repo.upgrade() {
             w.set_repo_loading(true);
             w.set_show_repo_detail(false);
+            w.set_repo_page(0);
         }
         thread::spawn(move || {
             let pkgs = load_repo_packages(&repo_str);
@@ -5611,36 +5755,27 @@ fn main() {
         });
     });
 
-    // Repo package search filter
+    // Repo package search filter — resets to page 1 and renders the first page.
     let repo_full_filter = repo_packages_full.clone();
     let win_filter_repo = window.as_weak();
     window.on_filter_repo(move |search| {
-        let q = search.to_string().to_lowercase();
         let full = repo_full_filter.borrow();
-        let mut filtered: Vec<PackageData> = if q.is_empty() {
-            full.clone()
-        } else {
-            full.iter().filter(|p| {
-                p.name.to_lowercase().contains(&q)
-                    || p.description.to_lowercase().contains(&q)
-            }).cloned().collect()
-        };
-        if !q.is_empty() {
-            filtered.sort_by_key(|p| {
-                let name = p.name.to_lowercase();
-                if name == q { 0u8 }
-                else if name.starts_with(&q) { 1 }
-                else if name.contains(&q) { 2 }
-                else { 3 }
-            });
-        }
+        let filtered = filter_repo_list(&full, search.as_str());
+        drop(full);
         if let Some(w) = win_filter_repo.upgrade() {
-            w.set_repo_packages(ModelRc::new(VecModel::from(filtered)));
-            // Hide "Load more" while a filter is active — it would overwrite filtered results
-            if !q.is_empty() {
-                w.set_repo_has_more(false);
-                w.set_repo_extra_count(0);
-            }
+            render_repo_page(&w, &filtered, 0);
+        }
+    });
+
+    // Repo pagination: re-filter with the current query, render the requested page.
+    let repo_full_goto = repo_packages_full.clone();
+    let win_goto_repo = window.as_weak();
+    window.on_goto_repo_page(move |page| {
+        if let Some(w) = win_goto_repo.upgrade() {
+            let full = repo_full_goto.borrow();
+            let filtered = filter_repo_list(&full, w.get_repo_search().as_str());
+            drop(full);
+            render_repo_page(&w, &filtered, page.max(0) as usize);
         }
     });
 
@@ -6081,6 +6216,8 @@ fn main() {
     window.on_save_settings(move || {
         if let Some(window) = window_weak_ss.upgrade() {
             let config = build_config(&window);
+            // Apply the GitHub token immediately so the next API call is authenticated.
+            xpm_appimage::catalog::set_github_token(Some(config.appimage_github_token.clone()));
             save_config(&config);
         }
     });
@@ -6088,6 +6225,8 @@ fn main() {
     window.set_setting_flatpak_enabled(config.flatpak_enabled);
     window.set_setting_appimage_enabled(config.appimage_enabled);
     window.set_setting_appimage_dir(SharedString::from(config.appimage_dir.as_str()));
+    window.set_setting_appimage_github_token(SharedString::from(config.appimage_github_token.as_str()));
+    xpm_appimage::catalog::set_github_token(Some(config.appimage_github_token.clone()));
     *appimage_dir_state.lock().unwrap() = config.appimage_dir.clone();
     let initial_feeds = if config.appimage_feeds.is_empty() {
         default_appimage_feeds()

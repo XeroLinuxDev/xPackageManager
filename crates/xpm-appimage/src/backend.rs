@@ -130,8 +130,11 @@ impl AppImageBackend {
         log(&format!("Resolving latest release for {}…\n", github));
         let url = crate::catalog::resolve_download(github)?;
         let mut entry = self.install(&url, log)?;
-        // Record the catalog repo so the catalog can show this app as installed.
+        // Record the catalog repo so the catalog can show this app as installed,
+        // and mark it updatable: even without embedded update info we can detect
+        // and apply updates by re-resolving the repo's latest release URL.
         entry.github = Some(github.to_string());
+        entry.supports_update = true;
         let mut entries = manifest::load();
         entries.retain(|e| e.name != entry.name);
         entries.push(entry.clone());
@@ -157,8 +160,13 @@ impl AppImageBackend {
         Ok(())
     }
 
-    /// Update a tracked AppImage. Requires embedded update info.
-    /// Uses `appimageupdatetool` when available, else re-downloads the source URL.
+    /// Update a tracked AppImage. Strategies, in order of preference:
+    ///   1. recorded GitHub repo — re-resolve the latest release and download it.
+    ///      Preferred because it's reliable; `appimageupdatetool` is known to abort
+    ///      (uncaught C++ exception) on some update-info transports.
+    ///   2. embedded update info + `appimageupdatetool` (efficient binary delta) —
+    ///      a soft fallback: any non-success, including a crash signal, falls through.
+    ///   3. recorded http(s) source URL — re-download in place.
     pub fn update_app(&self, name: &str, log: &LogFn<'_>) -> Result<AppImageEntry> {
         let entries = manifest::load();
         let Some(entry) = entries.iter().find(|e| e.name == name).cloned() else {
@@ -166,35 +174,69 @@ impl AppImageBackend {
         };
         if !entry.supports_update {
             return Err(Error::Other(format!(
-                "{} does not support updating (no embedded update info)",
+                "{} does not support updating",
                 entry.display_name
             )));
         }
 
         let path = PathBuf::from(&entry.path);
-        if which("appimageupdatetool").is_some() {
+        // Tracks the resolved download URL so the manifest stays current (this is
+        // also the version marker used for future update detection).
+        let mut new_source = entry.source_url.clone();
+        let mut done = false;
+
+        // 1. GitHub repo (catalog apps) — avoids the crash-prone update tool.
+        if let Some(gh) = &entry.github {
+            log(&format!("Resolving latest release for {}…\n", gh));
+            match crate::catalog::resolve_download(gh) {
+                Ok(url) => {
+                    log("Downloading latest release…\n");
+                    download(&url, &path, log)?;
+                    chmod_exec(&path)?;
+                    new_source = Some(url);
+                    done = true;
+                }
+                Err(e) => log(&format!(
+                    "GitHub resolve failed ({}); trying other methods…\n",
+                    e
+                )),
+            }
+        }
+
+        // 2. appimageupdatetool. It can abort on some update-info transports — treat
+        //    any non-success (including a crash signal → no exit code) as soft failure.
+        if !done && entry.update_info.is_some() && which("appimageupdatetool").is_some() {
             log("Updating via appimageupdatetool…\n");
-            let status = Command::new("appimageupdatetool")
+            match Command::new("appimageupdatetool")
                 .arg("--overwrite")
                 .arg(&path)
                 .status()
-                .map_err(|e| Error::Other(format!("appimageupdatetool failed: {}", e)))?;
-            if !status.success() {
-                return Err(Error::Other("Update failed".to_string()));
+            {
+                Ok(s) if s.success() => {
+                    chmod_exec(&path)?;
+                    done = true;
+                }
+                Ok(_) => log("appimageupdatetool could not update this AppImage; trying source URL…\n"),
+                Err(e) => log(&format!(
+                    "appimageupdatetool unavailable ({}); trying source URL…\n",
+                    e
+                )),
             }
-            chmod_exec(&path)?;
-        } else if let Some(url) = &entry.source_url {
-            if !Self::is_url(url) {
-                return Err(Error::Other(
-                    "No update tool and original source is a local file".to_string(),
-                ));
+        }
+
+        // 3. Re-download from the recorded http(s) source URL.
+        if !done {
+            if let Some(url) = entry.source_url.as_deref().filter(|u| Self::is_url(u)) {
+                log("Re-downloading from source URL…\n");
+                download(url, &path, log)?;
+                chmod_exec(&path)?;
+                done = true;
             }
-            log("appimageupdatetool not found — re-downloading from source URL…\n");
-            download(url, &path, log)?;
-            chmod_exec(&path)?;
-        } else {
+        }
+
+        if !done {
             return Err(Error::Other(
-                "No update tool (appimageupdatetool) and no source URL recorded".to_string(),
+                "Could not update this AppImage (no working update source).".to_string(),
             ));
         }
 
@@ -204,6 +246,7 @@ impl AppImageBackend {
         let updated = AppImageEntry {
             display_name: integ.display_name,
             version: integ.version.unwrap_or(entry.version.clone()),
+            source_url: new_source,
             update_info: elf::read_upd_info(&path),
             supports_update: true,
             icon_path: integ.icon_path.or(entry.icon_path.clone()),
@@ -217,6 +260,39 @@ impl AppImageBackend {
         manifest::save(&entries).map_err(Error::IoError)?;
         log(&format!("Updated {}\n", updated.display_name));
         Ok(updated)
+    }
+
+    /// Check whether a newer version is available for one entry, without
+    /// downloading. GitHub apps compare the freshly-resolved release URL against
+    /// the stored one (AM's "URL as version" technique); embedded-update-info apps
+    /// defer to `appimageupdatetool --check-for-update` (exit code 1 = available).
+    /// Returns `Ok(false)` for anything we can't check.
+    pub fn check_update(&self, entry: &AppImageEntry) -> Result<bool> {
+        if let Some(gh) = &entry.github {
+            let latest = crate::catalog::resolve_download(gh)?;
+            return Ok(Some(latest.as_str()) != entry.source_url.as_deref());
+        }
+        if entry.update_info.is_some() && which("appimageupdatetool").is_some() {
+            let status = Command::new("appimageupdatetool")
+                .arg("--check-for-update")
+                .arg(&entry.path)
+                .status()
+                .map_err(|e| Error::Other(format!("appimageupdatetool failed: {}", e)))?;
+            // Exit 1 = update available, 0 = up to date, other = error.
+            return Ok(status.code() == Some(1));
+        }
+        Ok(false)
+    }
+
+    /// Scan every installed AppImage and return the ids of those with a pending
+    /// update. Network-bound (one GitHub query per catalog app) — run off the UI
+    /// thread. Entries that error during the check are skipped, not failed.
+    pub fn check_all_updates(&self) -> Vec<String> {
+        self.list_entries()
+            .iter()
+            .filter(|e| self.check_update(e).unwrap_or(false))
+            .map(|e| e.name.clone())
+            .collect()
     }
 
     /// Re-fetch the app from its recorded source (GitHub latest, URL, or local
