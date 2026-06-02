@@ -3349,6 +3349,9 @@ fn main() {
                                     );
                                     let pkgs = tokio::task::spawn_blocking(load_installed_flatpaks).await.unwrap_or_default();
                                     let _ = tx.send(UiMessage::InstalledFlatpaksLoaded(pkgs));
+                                    // Refresh Recent Activity + system stats from the pacman log.
+                                    let _ = tx.send(UiMessage::ActivityLoaded(load_recent_activity()));
+                                    let _ = tx.send(UiMessage::SysInfoLoaded(load_sys_info()));
                                 });
                             });
                         } // end if success
@@ -4397,7 +4400,7 @@ fn main() {
         let _ctx = update_all_ctx.clone();
         thread::spawn(move || {
             let _ = tx.send(UiMessage::SetTerminalIsUpgrade(needs_reboot));
-            run_in_terminal(
+            run_in_terminal_expanded(
                 &tx,
                 "Full System Update",
                 "pkexec",
@@ -4463,7 +4466,7 @@ fn main() {
         let pid = sys_full_pid.clone();
         thread::spawn(move || {
             let _ = tx.send(UiMessage::SetTerminalIsUpgrade(needs_reboot));
-            run_in_terminal(
+            run_in_terminal_expanded(
                 &tx,
                 "Full System Update",
                 "pkexec",
