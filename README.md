@@ -104,6 +104,10 @@ sudo pacman -Syy xpm-gui
 sudo pacman -S rust cargo flatpak alpm curl fuse2
 ```
 
+```bash
+yay/paru -S cpr zsync2 appimageupdate-git
+```
+
 - Build & Install :
 
 ```bash
