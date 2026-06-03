@@ -5522,7 +5522,7 @@ export component MainWindow inherits Window {
                     if firmware-detecting || firmware-detected-count < 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center; spacing: 12px;
-                        LoadingCircle { diameter: 28px; }
+                        HorizontalLayout { alignment: center; LoadingCircle { diameter: 28px; } }
                         Text { text: @tr("Detecting firmware devices…"); font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; }
                     }
 
