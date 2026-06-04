@@ -1816,8 +1816,10 @@ fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'sta
 /// Detects interactive prompts and sends the appropriate UI messages.
 /// Returns true if the output should be force-flushed to the UI immediately.
 fn handle_pty_prompt(cleaned: &str, always_input: bool, tx: &mpsc::Sender<UiMessage>) -> bool {
-    let has_yn = cleaned.contains("[Y/n]") || cleaned.contains("[y/n]");
-    let has_y_n = cleaned.contains("[y/N]");
+    // fwupdmgr and some tools use a pipe ("[Y|n]") instead of a slash.
+    let has_yn = cleaned.contains("[Y/n]") || cleaned.contains("[y/n]")
+        || cleaned.contains("[Y|n]") || cleaned.contains("[y|n]");
+    let has_y_n = cleaned.contains("[y/N]") || cleaned.contains("[y|N]");
     let needs_user_input = PACMAN_USER_PROMPT_PATTERNS.iter().any(|p| cleaned.contains(p)) || has_y_n;
     if needs_user_input || has_yn {
         let prompt_text = cleaned.lines()
