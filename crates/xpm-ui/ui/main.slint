@@ -1170,6 +1170,7 @@ export component MainWindow inherits Window {
     callback update-appimage(string);
     callback reinstall-appimage(string);
     callback load-appimage-catalog;
+    callback reload-appimage-catalog; // force-refresh catalog from remote
     callback filter-appimage-catalog(string, int); // query, page
     callback install-appimage-catalog(string);
     callback load-appimage-icon(string);
@@ -3367,9 +3368,12 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
                     spacing: 10px;
 
-                    // Catalog search
-                    Rectangle {
+                    // Catalog search + force-reload
+                    HorizontalLayout {
                         height: 40px;
+                        spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
                         border-radius: 8px;
                         background: Cat.surface0;
                         border-width: 1px;
@@ -3419,6 +3423,11 @@ export component MainWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                             }
+                        }
+                    }
+                        VerticalLayout { alignment: center;
+                            Btn { label: @tr("Reload List"); width: 116px; horizontal-stretch: 0;
+                                clicked => { root.reload-appimage-catalog(); } }
                         }
                     }
 

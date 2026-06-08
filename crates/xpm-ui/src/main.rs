@@ -237,6 +237,11 @@ const PACMAN_USER_PROMPT_PATTERNS: &[&str] = &[
     "Enter number to select",
     "Enter a selection",
     "Terminate batch job",
+    // flatpak ref disambiguation (same app on multiple remotes) + auth choice.
+    "Which do you want to install",
+    "Which do you want to use",
+    "(0 to abort)",
+    "Choose identity to authenticate",
 ];
 
 fn parse_pacman_repos(content: &str) -> Vec<(String, bool, String)> {
@@ -5221,6 +5226,25 @@ fn main() {
         });
     });
 
+    // Force-refresh: drop the on-disk feed cache and re-fetch from the network.
+    // For users stuck on a stale/partial "cannot load catalog" cache.
+    let tx_ai_reload = tx.clone();
+    let cat_reload = appimage_catalog.clone();
+    let sources_reload = appimage_sources_state.clone();
+    window.on_reload_appimage_catalog(move || {
+        let tx = tx_ai_reload.clone();
+        let cache = cat_reload.clone();
+        let urls: Vec<String> =
+            sources_reload.lock().unwrap().iter().map(|f| f.url.clone()).collect();
+        let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
+        thread::spawn(move || {
+            xpm_appimage::catalog::clear_feed_cache(&urls);
+            let entries = xpm_appimage::catalog::fetch_sources(&urls);
+            *cache.lock().unwrap() = entries;
+            let _ = tx.send(UiMessage::AppImageCatalogReady);
+        });
+    });
+
     let cat_filter = appimage_catalog.clone();
     let win_ai_filter = window.as_weak();
     window.on_filter_appimage_catalog(move |query, page| {
@@ -7503,7 +7527,9 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                     Err(_) => continue,
                 };
                 if let Some(ref mut state) = current {
-                    if in_id { state.app_id = text.trim().to_string(); }
+                    // Only the component's own <id> (first one) counts. Later <id>
+                    // tags inside <provides> (e.g. "gimp.desktop") must not clobber it.
+                    if in_id && state.app_id.is_empty() { state.app_id = text.trim().to_string(); }
                     else if in_extends && state.extends.is_empty() { state.extends = text.trim().to_string(); }
                     else if in_name && state.name.is_empty() { state.name = text.trim().to_string(); }
                     else if in_summary && state.summary.is_empty() { state.summary = text.trim().to_string(); }

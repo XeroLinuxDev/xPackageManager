@@ -170,6 +170,18 @@ fn feed_cache_path(url: &str) -> PathBuf {
     base.join("xpm/appimage-feeds").join(format!("{}.json", slug))
 }
 
+/// Delete the on-disk feed cache for the given sources so the next fetch hits the
+/// network. Used by the "Reload List" button when a stale/partial cache leaves a
+/// user stuck on "cannot load catalog".
+pub fn clear_feed_cache(urls: &[String]) {
+    for url in urls {
+        if url.trim().is_empty() {
+            continue;
+        }
+        let _ = std::fs::remove_file(feed_cache_path(url));
+    }
+}
+
 /// Return the feed body from a fresh on-disk cache, else download and cache it.
 /// Disk cache makes repeat page loads instant (no network round-trip).
 fn cached_feed_body(url: &str) -> Result<String> {
