@@ -1129,6 +1129,27 @@ fn run_appimage_op<F>(
 
 /// Strip ANSI/VT100 escape sequences, preserving all other characters including \r and \n.
 /// The caller is responsible for interpreting \r (carriage return) for overwrite semantics.
+/// Replace typographic Unicode (curly quotes, dashes, ellipsis, bidi marks) with
+/// plain ASCII. The terminal popup renders in Slint's "monospace" font, which lacks
+/// glyphs for U+2018/U+2019 etc and shows them as '?'. flatpak/glib quote refs with
+/// these chars (e.g. Similar refs found for 'org.gimp...'), so normalize for display.
+fn normalize_typographic(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}' => out.push('\''),
+            '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{201F}' => out.push('"'),
+            '\u{2013}' | '\u{2014}' | '\u{2015}' => out.push('-'),
+            '\u{2026}' => out.push_str("..."),
+            '\u{00A0}' | '\u{202F}' => out.push(' '),
+            // Drop bidi isolates / directional marks glib wraps quoted args in.
+            '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => {}
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn strip_ansi(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let chars: Vec<char> = input.chars().collect();
@@ -1271,7 +1292,7 @@ impl TermStream {
             out.push_str(line);
             out.push('\n');
         }
-        out
+        normalize_typographic(&out)
     }
 }
 
@@ -1687,8 +1708,10 @@ fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
         std::process::Command::new(cmd)
         .args(args)
         .env("TERM", "xterm-256color")
-        .env("LANG", "C")
-        .env("LC_ALL", "C")
+        // C.UTF-8: stable English messages but a UTF-8 charset so glib/flatpak's
+        // curly quotes ('…') render instead of being transliterated to '?'.
+        .env("LANG", "C.UTF-8")
+        .env("LC_ALL", "C.UTF-8")
         .stdin(std::process::Stdio::from_raw_fd(stdin_fd))
         .stdout(std::process::Stdio::from_raw_fd(stdout_fd))
         .stderr(std::process::Stdio::from_raw_fd(stderr_fd))
@@ -1939,7 +1962,7 @@ fn run_in_terminal_impl(
                 Ok(0) => break,
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&buf[..n]);
-                    let cleaned = strip_ansi(&text);
+                    let cleaned = normalize_typographic(&strip_ansi(&text));
                     let force_flush = handle_pty_prompt(&cleaned, always_input, &tx_reader);
 
                     stream.process(&buf[..n]);
@@ -2147,7 +2170,7 @@ fn run_managed_operation(
                 Ok(0) => break,
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&buf[..n]);
-                    let cleaned = strip_ansi(&text);
+                    let cleaned = normalize_typographic(&strip_ansi(&text));
 
                     // Accumulate for conflict detection
                     {
@@ -3277,6 +3300,30 @@ fn main() {
                                         let cur_id = window.get_current_flatpak_id();
                                         if name_set_ref.contains(cur_id.as_str()) {
                                             window.set_flatpak_detail_installed(new_installed);
+                                        }
+
+                                        // Add-Ons modal: flip the affected add-on(s) and
+                                        // re-partition so they move between the installed and
+                                        // not-installed sections without reopening the modal.
+                                        let mut all: Vec<PackageData> =
+                                            window.get_flatpak_addons().iter().collect();
+                                        all.extend(window.get_flatpak_addons_installed().iter());
+                                        let mut changed = false;
+                                        for a in all.iter_mut() {
+                                            if name_set_ref.contains(a.name.as_str()) {
+                                                a.installed = new_installed;
+                                                changed = true;
+                                            }
+                                        }
+                                        if changed {
+                                            let (inst, uninst): (Vec<PackageData>, Vec<PackageData>) =
+                                                all.into_iter().partition(|a| a.installed);
+                                            let uninst_len = uninst.len();
+                                            window.set_flatpak_addons_installed_count(inst.len() as i32);
+                                            window.set_flatpak_addons_installed(ModelRc::new(VecModel::from(inst)));
+                                            window.set_flatpak_addons(ModelRc::new(VecModel::from(uninst)));
+                                            window.set_addon_selected(ModelRc::new(VecModel::from(vec![false; uninst_len])));
+                                            window.set_addon_selected_count(0);
                                         }
                                     }
 
@@ -5782,9 +5829,13 @@ fn main() {
                 url_vcs: app.url_vcs.clone(),
                 categories: app.categories.clone(),
             });
-            // Find addons (apps that extend this one)
+            // Find addons (apps that extend this one). The feed can carry several
+            // components per app_id (one per branch/version, e.g. BIMP 2-3.36 and
+            // 2-40), so dedupe by app_id to avoid showing the same add-on twice.
+            let mut seen_addon = std::collections::HashSet::new();
             let addons: Vec<PackageData> = store.iter()
                 .filter(|a| a.extends == id)
+                .filter(|a| seen_addon.insert(a.app_id.clone()))
                 .map(|a| PackageData {
                     name: SharedString::from(a.app_id.as_str()),
                     display_name: SharedString::from(if a.name.is_empty() { &a.app_id } else { &a.name }),
@@ -6279,6 +6330,9 @@ fn main() {
 
     let win_inst_addons = window.as_weak();
     let tx_inst_addons = tx.clone();
+    let inst_addons_input = terminal_input_sender.clone();
+    let inst_addons_pid = terminal_child_pid.clone();
+    let inst_addons_ctx = conflict_context.clone();
     window.on_install_selected_addons(move || {
         let Some(w) = win_inst_addons.upgrade() else { return };
         let addons = w.get_flatpak_addons();
@@ -6291,12 +6345,15 @@ fn main() {
         if ids.is_empty() { return; }
         let title = format!("Installing {} add-on(s)", ids.len());
         let tx = tx_inst_addons.clone();
-        let input = std::sync::Arc::new(std::sync::Mutex::new(None::<std::sync::mpsc::Sender<String>>));
-        let pid = std::sync::Arc::new(std::sync::Mutex::new(None::<u32>));
+        // Route through run_managed_operation (action "bulk-install", flatpak backend)
+        // so it records the conflict_context the OperationDone reload needs to flip
+        // installed flags + re-partition the Add-Ons modal, AND uses the shared
+        // input/pid so a ref-disambiguation prompt reaches the popup input field.
+        let input = inst_addons_input.clone();
+        let pid = inst_addons_pid.clone();
+        let ctx = inst_addons_ctx.clone();
         thread::spawn(move || {
-            let mut args = vec!["install", "--noninteractive", "--assumeyes"];
-            args.extend(ids.iter().map(|s| s.as_str()));
-            run_in_terminal(&tx, &title, "flatpak", &args, &input, &pid);
+            run_managed_operation(&tx, &title, "bulk-install", &ids, 1, &input, &pid, &ctx);
         });
     });
 
