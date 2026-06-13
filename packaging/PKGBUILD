@@ -62,8 +62,18 @@ build() {
         export RUSTFLAGS="${RUSTFLAGS} -C link-arg=-fuse-ld=mold"
     fi
 
-    # Build with the 'pkg' profile: thin LTO + 4 codegen units (2-3x faster
-    # than the full release profile, near-identical binary size and speed)
+    # On low-memory machines with no swap, building several crates at once on
+    # top of the big xpm-ui crate can trip the OOM-killer (SIGKILL). If under
+    # ~10GB total RAM, serialize crate compilation to keep peak memory down.
+    _memkb=$(awk '/^MemTotal:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)
+    if [ "${_memkb:-0}" -gt 0 ] && [ "$_memkb" -lt 10485760 ]; then
+        export CARGO_BUILD_JOBS=1
+        echo "==> Low RAM detected ($((_memkb/1024))MB): building with -j1 to avoid OOM"
+    fi
+
+    # Build with the 'pkg' profile: no LTO + 16 codegen units, tuned for low
+    # peak memory (see Cargo.toml). Near-identical runtime speed; builds on
+    # constrained machines without OOM.
     cargo build --profile pkg --bin xpackagemanager
 }
 

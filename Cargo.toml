@@ -41,8 +41,14 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
-# Faster packaging build: thin LTO + parallel codegen, same quality output
+# Packaging build: tuned for LOW peak memory so it builds on constrained
+# machines (e.g. 8GB Arch boxes with no swap) without the OOM-killer (SIGKILL)
+# whacking rustc mid-compile of the big slint-generated xpm-ui crate.
+# - lto = false: ThinLTO holds the whole module graph in RAM = the main OOM
+#   cause; dropping it is the biggest memory win (small binary-size cost).
+# - codegen-units = 16: splits the crate into more, smaller units = lower
+#   peak RAM per unit and better parallelism.
 [profile.pkg]
 inherits = "release"
-lto = "thin"
-codegen-units = 4
+lto = false
+codegen-units = 16
