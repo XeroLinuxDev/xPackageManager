@@ -41,13 +41,13 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.2.0"
-
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+# Campaign window: fixed start, end defaults to today (current date) so the
+# scan always covers up to the moment it runs.
 START_DATE=${START_DATE:-2026-06-09}
-END_DATE=${END_DATE:-2026-06-12}
+END_DATE=${END_DATE:-$(date +%F)}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 
 CHECK_SYSTEMD=false
@@ -393,12 +393,12 @@ check_bun_cache() {
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
 
-echo "============================================================"
-echo " AUR Malware Check v${SCRIPT_VERSION}"
-echo " Campaign: atomic-lockfile / js-digest infostealer + eBPF rootkit"
-echo " Date window: ${START_DATE} to ${END_DATE}"
-echo " Packages checked: ${#INFECTED_PKGS[@]}"
-echo "============================================================"
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║                     AUR Malware Check                    ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo "  Date window : ${START_DATE}  →  ${END_DATE}"
+echo "  Campaign    : infostealer / eBPF-rootkit (atomic-lockfile)"
+echo "────────────────────────────────────────────────────────────"
 echo
 
 log_info "Loaded ${#INFECTED_PKGS[@]} packages from $PACKAGE_LIST_URL"
@@ -455,12 +455,14 @@ if $CHECK_BUN_CACHE; then
     echo
 fi
 
-echo "============================================================"
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "  Packages checked : ${#INFECTED_PKGS[@]}"
+echo "────────────────────────────────────────────────────────────"
 case $EXIT_CODE in
-    0) echo " RESULT: CLEAN - No indicators found." ;;
-    1) echo " RESULT: WARNINGS - Review output above." ;;
-    2) echo " RESULT: INFECTED - Indicators found! Follow incident response." ;;
+    0) echo "  RESULT: CLEAN - No indicators found." ;;
+    1) echo "  RESULT: WARNINGS - Review output above." ;;
+    2) echo "  RESULT: INFECTED - Indicators found! Response time." ;;
 esac
-echo "============================================================"
+echo "╚══════════════════════════════════════════════════════════╝"
 
 exit "$EXIT_CODE"

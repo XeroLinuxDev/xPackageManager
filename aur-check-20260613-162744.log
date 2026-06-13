@@ -1,0 +1,16 @@
+============================================================
+ AUR Malware Check
+ Campaign: atomic-lockfile / js-digest infostealer + eBPF rootkit
+ Date window: 2026-06-09 to 2026-06-13
+ Packages checked: 1623
+============================================================
+
+--- [1] Currently installed foreign packages ---
+  Clean: no infected packages installed within campaign window.
+
+--- [2] Historical pacman logs ---
+  Clean: no historical log matches found.
+
+============================================================
+ RESULT: CLEAN - No indicators found.
+============================================================
