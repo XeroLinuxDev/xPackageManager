@@ -128,6 +128,10 @@ cd packaging/ && makepkg -rsifcd
 
 ## Changelog
 
+### v0.6.2
+
+- Added Check for AUR Malware Option to Troubleshooting
+
 ### v0.6.1
 
 - **AppImage engine** (inspired by [AM](https://github.com/ivan-hc/AM)): real update detection for GitHub-sourced apps via release-URL comparison (no embedded update info needed); "Check for Updates" + "Update All"; optional GitHub token to raise the API rate limit; arch-aware asset selection.

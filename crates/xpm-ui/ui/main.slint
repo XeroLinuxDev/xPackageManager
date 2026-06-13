@@ -1193,6 +1193,7 @@ export component MainWindow inherits Window {
     callback fix-keyring;
     callback rebuild-initramfs;
     callback rebuild-grub;
+    callback check-aur-malware;
 
     callback toggle-package-selected(string, int, bool);
     callback bulk-install;
@@ -4516,7 +4517,10 @@ export component MainWindow inherits Window {
                                 toggled(val) => {
                                     setting-appimage-enabled = val;
                                     if !val && view == 14 { view = 9; }
-                                    if val { root.load-installed-appimages(); }
+                                    if val {
+                                        root.load-installed-appimages();
+                                        if catalog-appimages.length == 0 { root.load-appimage-catalog(); }
+                                    }
                                     root.save-settings();
                                 }
                             }
@@ -4563,6 +4567,10 @@ export component MainWindow inherits Window {
                         }
 
                         // Manage sub-panels - shown when the feature is enabled
+                        if setting-flatpak-enabled || setting-appimage-enabled: SectionLabel {
+                            section-title: @tr("REMOTE MANAGER");
+                        }
+
                         if setting-flatpak-enabled: Rectangle {
                             height: 66px;
                             border-radius: 8px;
@@ -5676,9 +5684,10 @@ export component MainWindow inherits Window {
 
                         for item[i] in arch-news-items: Rectangle {
                             border-radius: 10px;
-                            background: Cat.surface0.with-alpha(0.45);
-                            border-width: 1px;
-                            border-color: Cat.surface1.with-alpha(0.6);
+                            // Highlight the latest article (first in the feed).
+                            background: i == 0 ? Cat.green.with-alpha(0.07) : Cat.surface0.with-alpha(0.45);
+                            border-width: i == 0 ? 1.5px : 1px;
+                            border-color: i == 0 ? Cat.green.with-alpha(0.6) : Cat.surface1.with-alpha(0.6);
 
                             VerticalLayout {
                                 padding-left: 18px; padding-right: 18px;
@@ -5693,6 +5702,13 @@ export component MainWindow inherits Window {
                                         color: Cat.text;
                                         wrap: word-wrap;
                                         horizontal-stretch: 1;
+                                    }
+                                    if i == 0: VerticalLayout { alignment: start;
+                                        Rectangle {
+                                            width: 44px; height: 20px; border-radius: 6px;
+                                            background: Cat.green.with-alpha(0.2);
+                                            Text { text: @tr("New"); font-size: Cat.fs11; font-weight: 700; color: Cat.green; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
                                     }
                                 }
 
@@ -5887,6 +5903,30 @@ export component MainWindow inherits Window {
                     padding-left: 28px; padding-right: 28px;
                     padding-top: 16px; padding-bottom: 16px;
                     spacing: 14px;
+
+                    // ── AUR malware scan - prominent, centered, on top ───────
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: aur-scan-row.preferred-width + 40px;
+                            height: 46px;
+                            border-radius: 10px;
+                            background: aur-scan-ta.has-hover ? Cat.red.with-alpha(0.22) : Cat.red.with-alpha(0.12);
+                            border-width: 1.5px;
+                            border-color: Cat.red.with-alpha(aur-scan-ta.has-hover ? 0.7 : 0.4);
+                            animate background { duration: 80ms; }
+                            drop-shadow-blur: aur-scan-ta.has-hover ? 14px : 6px;
+                            drop-shadow-color: Cat.red.with-alpha(aur-scan-ta.has-hover ? 0.3 : 0.1);
+                            aur-scan-row := HorizontalLayout {
+                                padding-left: 18px; padding-right: 18px; spacing: 10px; alignment: center;
+                                VerticalLayout { alignment: center;
+                                    NavIcon { d: "M12 2L3 6v6c0 5.5 3.8 9.7 9 11 5.2-1.3 9-5.5 9-11V6l-9-4z"; icon-color: Cat.red; width: 18px; height: 18px; }
+                                }
+                                Text { text: @tr("Check for AUR Malware"); font-size: Cat.fs14; font-weight: 700; color: Cat.red; vertical-alignment: center; }
+                            }
+                            aur-scan-ta := TouchArea { mouse-cursor: pointer; clicked => { root.check-aur-malware(); } }
+                        }
+                    }
 
                     // ── SYSTEM label ─────────────────────────────────────────
                     HorizontalLayout {
@@ -10133,7 +10173,13 @@ export component MainWindow inherits Window {
                                     Text { text: remote.url; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
                                 }
                                 VerticalLayout { alignment: center;
-                                    Rectangle {
+                                    // Default remote (flathub) is protected - no delete.
+                                    if remote.name == "flathub": Rectangle {
+                                        width: 60px; height: 22px; border-radius: 6px;
+                                        background: Cat.teal.with-alpha(0.15);
+                                        Text { text: @tr("Default"); font-size: Cat.fs11; font-weight: 700; color: Cat.teal; horizontal-alignment: center; vertical-alignment: center; }
+                                    }
+                                    if remote.name != "flathub": Rectangle {
                                         width: 26px; height: 26px; border-radius: 6px;
                                         background: fr-del-ta.has-hover ? Cat.red.with-alpha(0.25) : Cat.surface1;
                                         animate background { duration: 70ms; }
@@ -10226,8 +10272,8 @@ export component MainWindow inherits Window {
         Rectangle {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            width: min(560px, parent.width - 40px);
-            height: min(620px, parent.height - 40px);
+            width: min(660px, parent.width - 40px);
+            height: min(740px, parent.height - 40px);
             background: Cat.base;
             border-radius: 12px;
             clip: true;
@@ -10242,21 +10288,21 @@ export component MainWindow inherits Window {
 
                 // Header
                 Rectangle {
-                    height: 56px;
+                    height: 66px;
                     background: Cat.blue.with-alpha(0.1);
                     Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.blue.with-alpha(0.25); }
                     HorizontalLayout {
-                        padding-left: 18px; padding-right: 18px; spacing: 12px;
-                        VerticalLayout { alignment: center; NavIcon { d: icon-image; icon-color: Cat.blue; width: 20px; height: 20px; } }
-                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                            Text { text: @tr("Manage AppImages"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
-                            Text { text: @tr("Install location and catalog sources"); font-size: Cat.fs11; color: Cat.subtext0; }
+                        padding-left: 20px; padding-right: 20px; spacing: 14px;
+                        VerticalLayout { alignment: center; NavIcon { d: icon-image; icon-color: Cat.blue; width: 24px; height: 24px; } }
+                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 3px;
+                            Text { text: @tr("Manage AppImages"); font-size: Cat.fs17; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Install location and catalog sources"); font-size: Cat.fs13; color: Cat.subtext0; }
                         }
                         VerticalLayout { alignment: center;
                             Rectangle {
-                                width: 28px; height: 25px; border-radius: 8px;
+                                width: 34px; height: 32px; border-radius: 8px;
                                 background: aim-close-ta.has-hover ? Cat.surface1 : transparent;
-                                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 14px; height: 14px; x: 7px; y: 7px; }
+                                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 16px; height: 16px; x: 9px; y: 8px; }
                                 aim-close-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-appimage-mgr-modal = false; } }
                             }
                         }
@@ -10266,50 +10312,50 @@ export component MainWindow inherits Window {
                 ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
-                        padding: 14px;
-                        spacing: 14px;
+                        padding: 20px;
+                        spacing: 20px;
                         alignment: start;
 
                         // Install location
                         VerticalLayout {
-                            spacing: 6px;
-                            Text { text: @tr("Install / Download Location"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
+                            spacing: 8px;
+                            Text { text: @tr("Install / Download Location"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
                             Rectangle {
-                                height: 50px;
+                                height: 58px;
                                 border-radius: 8px;
                                 background: Cat.surface0.with-alpha(0.5);
                                 border-width: 1px; border-color: Cat.surface1;
                                 HorizontalLayout {
-                                    padding-left: 14px; padding-right: 12px; spacing: 10px;
+                                    padding-left: 16px; padding-right: 14px; spacing: 10px;
                                     Text {
                                         text: setting-appimage-dir == "" ? @tr("Default: ~/.local/share/xpm/appimages") : setting-appimage-dir;
-                                        font-size: Cat.fs12; color: Cat.subtext1; vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
+                                        font-size: Cat.fs14; color: Cat.subtext1; vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
                                     }
-                                    VerticalLayout { alignment: center; Btn { label: @tr("Change…"); width: 92px; horizontal-stretch: 0; clicked => { root.change-appimage-dir(); } } }
-                                    if setting-appimage-dir != "": VerticalLayout { alignment: center; Btn { label: @tr("Reset"); width: 72px; horizontal-stretch: 0; clicked => { root.reset-appimage-dir(); } } }
+                                    VerticalLayout { alignment: center; Btn { label: @tr("Change…"); width: 100px; horizontal-stretch: 0; clicked => { root.change-appimage-dir(); } } }
+                                    if setting-appimage-dir != "": VerticalLayout { alignment: center; Btn { label: @tr("Reset"); width: 78px; horizontal-stretch: 0; clicked => { root.reset-appimage-dir(); } } }
                                 }
                             }
                         }
 
                         // GitHub API token (optional) - raises update-check rate limit
                         VerticalLayout {
-                            spacing: 6px;
-                            Text { text: @tr("GitHub Token (optional)"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
-                            Text { text: @tr("Unauthenticated GitHub allows 60 update checks/hour. A personal access token (read-only, no scopes needed) raises this to 5000/hour."); font-size: Cat.fs11; color: Cat.overlay1; wrap: word-wrap; }
+                            spacing: 8px;
+                            Text { text: @tr("GitHub Token (optional)"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
+                            Text { text: @tr("Unauthenticated GitHub allows 60 update checks/hour. A personal access token (read-only, no scopes needed) raises this to 5000/hour."); font-size: Cat.fs13; color: Cat.overlay1; wrap: word-wrap; }
                             Rectangle {
-                                height: 42px;
+                                height: 50px;
                                 border-radius: 8px;
                                 background: Cat.surface0.with-alpha(0.5);
                                 border-width: 1px;
                                 border-color: aim-tok-ti.has-focus ? Cat.mauve : Cat.surface1;
                                 HorizontalLayout {
-                                    padding-left: 14px; padding-right: 12px;
+                                    padding-left: 16px; padding-right: 14px;
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         aim-tok-ti := TextInput {
                                             width: 100%; height: 100%;
                                             text <=> setting-appimage-github-token;
-                                            font-size: Cat.fs12;
+                                            font-size: Cat.fs14;
                                             color: Cat.text;
                                             single-line: true;
                                             input-type: password;
@@ -10320,7 +10366,7 @@ export component MainWindow inherits Window {
                                         if setting-appimage-github-token == "" && !aim-tok-ti.has-focus: Text {
                                             width: 100%; height: 100%;
                                             text: @tr("ghp_… (leave empty to stay unauthenticated)");
-                                            font-size: Cat.fs12;
+                                            font-size: Cat.fs14;
                                             color: Cat.subtext0.with-alpha(0.5);
                                             vertical-alignment: center;
                                         }
@@ -10331,33 +10377,39 @@ export component MainWindow inherits Window {
 
                         // Catalog sources
                         VerticalLayout {
-                            spacing: 6px;
-                            Text { text: @tr("Catalog Sources"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
-                            Text { text: @tr("Feed-JSON catalogs (appimage.github.io format). Merged and de-duplicated."); font-size: Cat.fs11; color: Cat.overlay1; }
+                            spacing: 8px;
+                            Text { text: @tr("Catalog Sources"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
+                            Text { text: @tr("Feed-JSON catalogs (appimage.github.io format). Merged and de-duplicated."); font-size: Cat.fs13; color: Cat.overlay1; }
 
                             if appimage-sources.length == 0: Rectangle {
-                                height: 44px;
-                                Text { text: @tr("No sources configured"); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                                height: 48px;
+                                Text { text: @tr("No sources configured"); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
                             }
 
                             for src[i] in appimage-sources: Rectangle {
-                                height: 52px;
+                                height: 60px;
                                 border-radius: 8px;
                                 background: Cat.surface0.with-alpha(0.5);
                                 border-width: 1px; border-color: Cat.surface1;
                                 HorizontalLayout {
-                                    padding-left: 14px; padding-right: 12px; spacing: 10px;
-                                    VerticalLayout { alignment: center; NavIcon { d: icon-image; icon-color: Cat.blue; width: 16px; height: 16px; } }
-                                    VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 2px;
-                                        Text { text: src.name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
+                                    padding-left: 16px; padding-right: 14px; spacing: 12px;
+                                    VerticalLayout { alignment: center; NavIcon { d: icon-image; icon-color: Cat.blue; width: 18px; height: 18px; } }
+                                    VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 3px;
+                                        Text { text: src.name; font-size: Cat.fs15; font-weight: 600; color: Cat.text; overflow: elide; }
                                         Text { text: src.url; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
                                     }
                                     VerticalLayout { alignment: center;
-                                        Rectangle {
-                                            width: 26px; height: 26px; border-radius: 6px;
+                                        // Default AppImageHub feed is protected - no delete.
+                                        if src.url == "https://appimage.github.io/feed.json": Rectangle {
+                                            width: 68px; height: 26px; border-radius: 6px;
+                                            background: Cat.blue.with-alpha(0.15);
+                                            Text { text: @tr("Default"); font-size: Cat.fs13; font-weight: 700; color: Cat.blue; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                        if src.url != "https://appimage.github.io/feed.json": Rectangle {
+                                            width: 30px; height: 30px; border-radius: 6px;
                                             background: aim-src-del-ta.has-hover ? Cat.red.with-alpha(0.25) : Cat.surface1;
                                             animate background { duration: 70ms; }
-                                            NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.red; width: 12px; height: 12px; x: 7px; y: 7px; }
+                                            NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.red; width: 13px; height: 13px; x: 8px; y: 8px; }
                                             aim-src-del-ta := TouchArea { mouse-cursor: pointer; clicked => { root.remove-appimage-source(src.name); } }
                                         }
                                     }
@@ -10372,42 +10424,42 @@ export component MainWindow inherits Window {
 
                 // Add source form
                 Rectangle {
-                    height: 106px;
+                    height: 122px;
                     background: Cat.mantle;
                     VerticalLayout {
-                        padding: 12px; spacing: 8px;
-                        Text { text: @tr("Add Source"); font-size: Cat.fs13; font-weight: 700; color: Cat.subtext0; }
+                        padding: 16px; spacing: 10px;
+                        Text { text: @tr("Add Source"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
                         HorizontalLayout {
-                            spacing: 6px;
+                            spacing: 8px;
                             Rectangle {
-                                horizontal-stretch: 0; width: 130px; height: 30px; border-radius: 6px;
+                                horizontal-stretch: 0; width: 150px; height: 38px; border-radius: 6px;
                                 background: Cat.surface1;
                                 border-width: aim-name-in.has-focus ? 1px : 0px; border-color: Cat.blue.with-alpha(0.5);
                                 clip: true;
-                                if new-appimage-source-name == "" && !aim-name-in.has-focus: Text { x: 8px; height: 100%; text: @tr("Name"); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                                if new-appimage-source-name == "" && !aim-name-in.has-focus: Text { x: 10px; height: 100%; text: @tr("Name"); font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; }
                                 aim-name-in := TextInput {
-                                    x: 8px; width: parent.width - 16px; height: 100%;
-                                    text <=> new-appimage-source-name; font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
+                                    x: 10px; width: parent.width - 20px; height: 100%;
+                                    text <=> new-appimage-source-name; font-size: Cat.fs14; color: Cat.text; single-line: true; vertical-alignment: center;
                                     selection-background-color: Cat.blue.with-alpha(0.3);
                                 }
                             }
                             Rectangle {
-                                horizontal-stretch: 1; height: 30px; border-radius: 6px;
+                                horizontal-stretch: 1; height: 38px; border-radius: 6px;
                                 background: Cat.surface1;
                                 border-width: aim-url-in.has-focus ? 1px : 0px; border-color: Cat.blue.with-alpha(0.5);
                                 clip: true;
-                                if new-appimage-source-url == "" && !aim-url-in.has-focus: Text { x: 8px; height: 100%; text: @tr("Feed URL (https://…/feed.json)"); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                                if new-appimage-source-url == "" && !aim-url-in.has-focus: Text { x: 10px; height: 100%; text: @tr("Feed URL (https://…/feed.json)"); font-size: Cat.fs14; color: Cat.overlay0; vertical-alignment: center; }
                                 aim-url-in := TextInput {
-                                    x: 8px; width: parent.width - 16px; height: 100%;
-                                    text <=> new-appimage-source-url; font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
+                                    x: 10px; width: parent.width - 20px; height: 100%;
+                                    text <=> new-appimage-source-url; font-size: Cat.fs14; color: Cat.text; single-line: true; vertical-alignment: center;
                                     selection-background-color: Cat.blue.with-alpha(0.3);
                                 }
                             }
                             Rectangle {
-                                width: 60px; height: 30px; border-radius: 6px;
+                                width: 72px; height: 38px; border-radius: 6px;
                                 background: aim-add-ta.has-hover ? Cat.blue.with-alpha(0.85) : Cat.blue;
                                 animate background { duration: 70ms; }
-                                Text { text: @tr("Add"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: @tr("Add"); font-size: Cat.fs15; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
                                 aim-add-ta := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {

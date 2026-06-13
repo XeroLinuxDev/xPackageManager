@@ -24,6 +24,10 @@ use xpm_appimage::{AppImageBackend, AppImageEntry, CatalogEntry};
 
 slint::include_modules!();
 
+/// Embedded AUR malware scanner (no external script dependency). Run via
+/// `bash -c AUR_CHECK_SCRIPT xpm-aur-check --full --log-file=<path>`.
+const AUR_CHECK_SCRIPT: &str = include_str!("aur_check.sh");
+
 // ─── Single-instance guard ────────────────────────────────────────────────────
 
 fn instance_lock_path() -> String {
@@ -2108,6 +2112,11 @@ fn run_managed_operation(
     let (cmd, args) = build_pacman_command(action, names, backend);
 
     let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
+    // Open expanded with the terminal/input visible, same as the full-system
+    // update path (run_in_terminal_expanded). So install/remove/update show
+    // output and the input field up front instead of a bare spinner.
+    let _ = tx.send(UiMessage::ProgressAutoExpand);
+    let _ = tx.send(UiMessage::ProgressShowClose);
 
     let args_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
@@ -2183,7 +2192,10 @@ fn run_managed_operation(
                         *escalated_r.lock().unwrap() = true;
                     }
 
-                    let force_flush = handle_pty_prompt(&cleaned, false, &tx_reader);
+                    // always_input=true: show a text input field for Y/n prompts
+                    // (type Y/n) instead of Proceed/Cancel buttons, matching the
+                    // expanded terminal UX for installs/updates.
+                    let force_flush = handle_pty_prompt(&cleaned, true, &tx_reader);
 
                     stream.process(&buf[..n]);
 
@@ -4037,6 +4049,10 @@ fn main() {
         let window_weak_rfr = window.as_weak();
         move |name| {
             let name = name.to_string();
+            // Never delete the default remote - it's the catalog backbone.
+            if name.eq_ignore_ascii_case("flathub") {
+                return;
+            }
             let weak = window_weak_rfr.clone();
             thread::spawn(move || {
                 let _ = std::process::Command::new("flatpak")
@@ -5402,6 +5418,11 @@ fn main() {
     let apply_rm = apply_sources.clone();
     window.on_remove_appimage_source(move |name| {
         let name = name.to_string();
+        // Never remove the default AppImageHub feed - it's the catalog backbone.
+        let default_url = xpm_appimage::catalog::FEED_URL;
+        if src_rm.lock().unwrap().iter().any(|f| f.name == name && f.url == default_url) {
+            return;
+        }
         let list: Vec<AppImageFeed> =
             src_rm.lock().unwrap().iter().filter(|f| f.name != name).cloned().collect();
         if let Some(w) = win_src_rm.upgrade() {
@@ -5588,6 +5609,34 @@ fn main() {
         let pid = initrd_pid.clone();
         thread::spawn(move || {
             run_in_terminal(&tx, "Rebuild InitRamFS", "pkexec", &["mkinitcpio", "-P"], &input, &pid);
+        });
+    });
+
+    // AUR malware scan - embedded script, run with --full into the progress popup.
+    let tx_aur = tx.clone();
+    let aur_input = terminal_input_sender.clone();
+    let aur_pid = terminal_child_pid.clone();
+    window.on_check_aur_malware(move || {
+        info!("Troubleshoot: Check for AUR Malware");
+        let tx = tx_aur.clone();
+        let input = aur_input.clone();
+        let pid = aur_pid.clone();
+        thread::spawn(move || {
+            // Log dir under the cache; the script writes its full detail log here
+            // (kept tidy out of cwd - no UI button, output is shown live).
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            let log_dir = format!("{}/.cache/xpm", home);
+            let _ = std::fs::create_dir_all(&log_dir);
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            // bash -c SCRIPT $0 $1...: $0 is a label, the rest are the script's args.
+            let log_arg = format!("--log-file={}/aur-check-{}.log", log_dir, stamp);
+            let args = [
+                "-c", AUR_CHECK_SCRIPT, "xpm-aur-check", "--full", &log_arg,
+            ];
+            run_in_terminal_expanded(&tx, "Check for AUR Malware", "bash", &args, &input, &pid);
         });
     });
 
@@ -6437,6 +6486,19 @@ fn main() {
                 error!("AppImage startup preload: backend init failed");
             }
         });
+        // Also preload the browse catalog so the AppImages page is populated the
+        // moment the user opens it (instead of an empty list while the first
+        // network fetch runs on nav-click).
+        let tx_ai_cat_init = tx.clone();
+        let cat_init = appimage_catalog.clone();
+        let urls_init: Vec<String> = initial_feeds.iter().map(|f| f.url.clone()).collect();
+        let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
+        thread::spawn(move || {
+            let entries = xpm_appimage::catalog::fetch_sources(&urls_init);
+            info!("AppImage startup preload: {} catalog entries", entries.len());
+            *cat_init.lock().unwrap() = entries;
+            let _ = tx_ai_cat_init.send(UiMessage::AppImageCatalogReady);
+        });
     } else {
         info!("AppImage startup preload skipped (feature disabled in config)");
     }
@@ -6484,7 +6546,26 @@ fn main() {
 
     info!("Running application");
     window.show().expect("Failed to show window");
+
+    // First-frame nudge: on some compositors the initial window is mapped but its
+    // first frame isn't presented (and input feels dead) until a window event -
+    // e.g. clicking away and back - forces a repaint. Fire a few redraws shortly
+    // after show so the window paints/responds without manual refocus, then stop.
+    let nudge_weak = window.as_weak();
+    let nudge_timer = Rc::new(Timer::default());
+    let nudge_self = nudge_timer.clone();
+    let nudge_count = Rc::new(std::cell::Cell::new(0u32));
+    nudge_timer.start(TimerMode::Repeated, std::time::Duration::from_millis(120), move || {
+        if let Some(w) = nudge_weak.upgrade() {
+            w.window().request_redraw();
+        }
+        let n = nudge_count.get() + 1;
+        nudge_count.set(n);
+        if n >= 4 { nudge_self.stop(); }
+    });
+
     slint::run_event_loop_until_quit().expect("Failed to run application");
+    drop(nudge_timer);
     // Background threads may still be alive when Slint's Qt backend tears down
     // its thread-local storage, producing QThreadStorage warnings. Exit immediately
     // so the process terminates cleanly instead of unwinding through Qt's cleanup.
