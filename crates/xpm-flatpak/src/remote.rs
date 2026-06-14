@@ -70,7 +70,6 @@ impl RemoteManager {
         Ok(())
     }
 
-    // loops through all remotes to find the one we want, kinda wasteful
     pub fn set_remote_enabled(
         &self,
         installation: &Installation,

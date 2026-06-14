@@ -34,7 +34,6 @@ impl AppImageBackend {
         let install_dir = dir
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(manifest::store_dir);
-        // Best-effort: make sure the dirs exist so listing/installing never errors.
         let _ = std::fs::create_dir_all(manifest::store_dir());
         let _ = std::fs::create_dir_all(&install_dir);
         Ok(Self { install_dir })
@@ -54,7 +53,6 @@ impl AppImageBackend {
         let store = self.install_dir.clone();
         std::fs::create_dir_all(&store)?;
 
-        // Resolve the source down to a local file we own inside the store dir.
         let (staged, source_url): (PathBuf, Option<String>) = if Self::is_url(source) {
             let file_name = source
                 .rsplit('/')
@@ -77,13 +75,11 @@ impl AppImageBackend {
             (dest, Some(source.to_string()))
         };
 
-        // Make executable (0o755).
         chmod_exec(&staged)?;
 
         let raw_name = staged.file_name().and_then(|f| f.to_str()).unwrap_or("appimage");
         let name = manifest::sanitize_name(raw_name);
 
-        // Detect embedded update info before touching the menu.
         log("Checking update support…\n");
         let update_info = elf::read_upd_info(&staged);
         let supports_update = update_info.is_some();
@@ -93,7 +89,6 @@ impl AppImageBackend {
             log("Update support: no (no embedded update info)\n");
         }
 
-        // Desktop/menu integration.
         log("Integrating into application menu…\n");
         let integ = integration::integrate(&staged, &name, raw_name.trim_end_matches(".AppImage"));
 
@@ -112,7 +107,6 @@ impl AppImageBackend {
             size,
         };
 
-        // Upsert into the manifest (replace any existing entry with the same id).
         let mut entries = manifest::load();
         entries.retain(|e| e.name != entry.name);
         entries.push(entry.clone());
@@ -130,9 +124,6 @@ impl AppImageBackend {
         log(&format!("Resolving latest release for {}…\n", github));
         let url = crate::catalog::resolve_download(github)?;
         let mut entry = self.install(&url, log)?;
-        // Record the catalog repo so the catalog can show this app as installed,
-        // and mark it updatable: even without embedded update info we can detect
-        // and apply updates by re-resolving the repo's latest release URL.
         entry.github = Some(github.to_string());
         entry.supports_update = true;
         let mut entries = manifest::load();
@@ -180,12 +171,9 @@ impl AppImageBackend {
         }
 
         let path = PathBuf::from(&entry.path);
-        // Tracks the resolved download URL so the manifest stays current (this is
-        // also the version marker used for future update detection).
         let mut new_source = entry.source_url.clone();
         let mut done = false;
 
-        // 1. GitHub repo (catalog apps) - avoids the crash-prone update tool.
         if let Some(gh) = &entry.github {
             log(&format!("Resolving latest release for {}…\n", gh));
             match crate::catalog::resolve_download(gh) {
@@ -203,8 +191,6 @@ impl AppImageBackend {
             }
         }
 
-        // 2. appimageupdatetool. It can abort on some update-info transports - treat
-        //    any non-success (including a crash signal → no exit code) as soft failure.
         if !done && entry.update_info.is_some() && which("appimageupdatetool").is_some() {
             log("Updating via appimageupdatetool…\n");
             match Command::new("appimageupdatetool")
@@ -224,7 +210,6 @@ impl AppImageBackend {
             }
         }
 
-        // 3. Re-download from the recorded http(s) source URL.
         if !done {
             if let Some(url) = entry.source_url.as_deref().filter(|u| Self::is_url(u)) {
                 log("Re-downloading from source URL…\n");
@@ -240,7 +225,6 @@ impl AppImageBackend {
             ));
         }
 
-        // Re-integrate in case metadata/icon changed, and refresh manifest row.
         let integ = integration::integrate(&path, &entry.name, &entry.display_name);
         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(entry.size);
         let updated = AppImageEntry {
@@ -278,7 +262,6 @@ impl AppImageBackend {
                 .arg(&entry.path)
                 .status()
                 .map_err(|e| Error::Other(format!("appimageupdatetool failed: {}", e)))?;
-            // Exit 1 = update available, 0 = up to date, other = error.
             return Ok(status.code() == Some(1));
         }
         Ok(false)
@@ -306,7 +289,6 @@ impl AppImageBackend {
         let path = PathBuf::from(&entry.path);
         log(&format!("Reinstalling {}…\n", entry.display_name));
 
-        // Fetch a fresh binary into the same path.
         if let Some(gh) = &entry.github {
             log(&format!("Resolving latest release for {}…\n", gh));
             let url = crate::catalog::resolve_download(gh)?;
@@ -380,7 +362,6 @@ impl PackageSource for AppImageBackend {
     }
 
     async fn search(&self, _query: &str) -> Result<Vec<SearchResult>> {
-        // No catalog - AppImages are installed from a file or URL.
         Ok(Vec::new())
     }
 
@@ -393,8 +374,6 @@ impl PackageSource for AppImageBackend {
     }
 
     async fn list_updates(&self) -> Result<Vec<UpdateInfo>> {
-        // Capability is shown per-app in the UI; checking real updates needs
-        // network per file, so it stays user-initiated. No startup probing.
         Ok(Vec::new())
     }
 

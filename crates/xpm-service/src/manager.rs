@@ -20,7 +20,6 @@ pub enum ProgressMessage {
     Error(String),
 }
 
-// orchestrate the backends
 pub struct PackageManager {
     alpm: Option<Arc<AlpmBackend>>,
     flatpak: Option<Arc<FlatpakBackend>>,
@@ -123,7 +122,6 @@ impl PackageManager {
         backends
     }
 
-    // search across all availble backends
     pub async fn search(&self, query: &str) -> Result<Vec<SearchResult>> {
         let mut results = Vec::new();
 
@@ -207,7 +205,6 @@ impl PackageManager {
         self.get_backend(backend)?.get_package_info(name).await
     }
 
-    // run operation and broadcast progress to subscribers
     pub async fn execute(&self, operation: Operation) -> Result<OperationResult> {
         let backend = self.get_backend(operation.backend)?;
         let tx = self.progress_tx.clone();

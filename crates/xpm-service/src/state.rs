@@ -3,7 +3,6 @@ use xpm_core::{
     package::{Package, PackageBackend, SearchResult, UpdateInfo},
 };
 
-// default view on startup
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewState {
     #[default]
@@ -68,7 +67,6 @@ impl AppState {
         self.error_message = Some(message);
     }
 
-    // filters by text and backend, chain style
     pub fn filtered_installed(&self) -> Vec<&Package> {
         self.installed_packages
             .iter()

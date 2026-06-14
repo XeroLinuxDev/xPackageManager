@@ -5,7 +5,6 @@ use async_trait::async_trait;
 
 pub type ProgressCallback = Box<dyn Fn(OperationProgress) + Send + Sync>;
 
-// main trait that every backend needs to implement
 #[async_trait]
 pub trait PackageSource: Send + Sync {
     fn source_id(&self) -> &str;
@@ -43,5 +42,4 @@ pub trait PackageSourceExt: PackageSource {
     }
 }
 
-// blanket impl for all backends
 impl<T: PackageSource> PackageSourceExt for T {}

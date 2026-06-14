@@ -81,7 +81,6 @@ impl AlpmConfig {
 
         if !cache_dirs.is_empty() { cfg.cache_dirs = cache_dirs; }
         if !hook_dirs.is_empty()  {
-            // Always keep the system hooks dir; add conf-specified ones
             cfg.hook_dirs = hook_dirs;
             cfg.hook_dirs.push("/usr/share/libalpm/hooks/".to_string());
             cfg.hook_dirs.dedup();
@@ -96,7 +95,6 @@ pub struct AlpmBackend {
     cache_manager: CacheManager,
 }
 
-// alpm handle isnt Send/Sync so we recreate it per blocking task
 unsafe impl Send for AlpmBackend {}
 unsafe impl Sync for AlpmBackend {}
 
@@ -168,7 +166,6 @@ impl PackageSource for AlpmBackend {
             let mut results = Vec::new();
             let query_lower = query.to_lowercase();
 
-            // search thru sync dbs, match on name or description
             for db in handle.syncdbs() {
                 for pkg in db.pkgs() {
                     let name = pkg.name();
@@ -249,7 +246,6 @@ impl PackageSource for AlpmBackend {
         let config = self.config.clone();
 
         tokio::task::spawn_blocking(move || {
-            // checkupdates approach - sync to temp db then compare, no root needed
             let temp_dir = std::env::temp_dir().join("xpm-checkupdates");
             let temp_dbpath = temp_dir.join("db");
 
@@ -319,7 +315,6 @@ impl PackageSource for AlpmBackend {
                 handle.register_syncdb(repo.as_str(), siglevel).ok();
             }
 
-            // try local db first, fall back to sync dbs
             if let Ok(pkg) = handle.localdb().pkg(name.as_bytes()) {
                 let is_orphan = pkg.reason() == alpm::PackageReason::Depend
                     && pkg.required_by().is_empty()

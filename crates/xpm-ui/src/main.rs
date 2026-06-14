@@ -28,7 +28,48 @@ slint::include_modules!();
 /// `bash -c AUR_CHECK_SCRIPT xpm-aur-check --full --log-file=<path>`.
 const AUR_CHECK_SCRIPT: &str = include_str!("aur_check.sh");
 
-// ─── Single-instance guard ────────────────────────────────────────────────────
+/// KDE (KWin) Wayland focus-stealing-prevention workaround.
+///
+/// On slow cold-boot / first-launch-of-the-day starts, the app's XDG activation
+/// token expires before the (large) binary finishes loading and the window
+/// finishes mapping. KWin then refuses to focus the window, so it appears mapped
+/// but unresponsive until the user clicks away and back. (Confirmed via KWin
+/// scripting: the window is `active=false` right after launch.)
+///
+/// Re-activate our own window through KWin's scripting DBus interface, which is
+/// the one path that re-grants focus after the token is gone. Best-effort and
+/// silent: a no-op on non-KDE sessions or when `dbus-send` is unavailable, and
+/// harmless (re-activates an already-focused window) on fast/warm launches.
+fn kde_self_activate() {
+    use std::process::{Command, Stdio};
+
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    if !desktop.to_ascii_lowercase().contains("kde") {
+        return;
+    }
+
+    let script = r#"var ws=workspace.windowList?workspace.windowList():workspace.clientList();for(var i=0;i<ws.length;i++){if((""+ws[i].resourceClass).toLowerCase().indexOf("xpackage")>=0&&!ws[i].active){workspace.activeWindow=ws[i];}}"#;
+    let path = std::env::temp_dir().join("xpm-kwin-activate.js");
+    if std::fs::write(&path, script).is_err() {
+        return;
+    }
+    let arg = format!("string:{}", path.to_string_lossy());
+
+    let call = |method_args: &[&str]| {
+        let mut args = vec!["--session", "--dest=org.kde.KWin", "/Scripting"];
+        args.extend_from_slice(method_args);
+        let _ = Command::new("dbus-send")
+            .args(&args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    };
+
+    call(&["org.kde.kwin.Scripting.unloadScript", &arg]);
+    call(&["org.kde.kwin.Scripting.loadScript", &arg]);
+    call(&["org.kde.kwin.Scripting.start"]);
+}
+
 
 fn instance_lock_path() -> String {
     let uid = unsafe { libc::getuid() };
@@ -84,7 +125,6 @@ fn listen_for_instance_signals(window: slint::Weak<MainWindow>) {
     }
 }
 
-// ─── End single-instance guard ────────────────────────────────────────────────
 
 enum UiMessage {
     PackagesLoaded {
@@ -109,8 +149,6 @@ enum UiMessage {
     ProgressHidePrompt,
     ProgressPromptButtons,
     ProgressLogLine(String, u8),
-    #[allow(dead_code)]
-    ProgressETA(String),
     ProgressErrorSummary(String),
     ProgressAutoExpand,
     OperationDone(bool),
@@ -172,8 +210,6 @@ struct FwupdDetectedData {
     updatable: bool,
     flags: String,
     device_id: String,
-    #[allow(dead_code)]
-    has_pending_update: bool,
 }
 
 #[derive(Clone)]
@@ -202,10 +238,6 @@ struct PacmanOpts {
     clean_method: i32,
 }
 
-// Plain-text fzf replacement for programs (like downgrade) that pipe through fzf.
-// fzf uses alternate-screen TUI sequences that are invisible after strip_ansi.
-// This script reads the list from stdin, prints it to /dev/tty (our PTY),
-// asks the user to type a number, and outputs the matching line to stdout.
 const FAKE_FZF_SCRIPT: &str = r#"#!/usr/bin/env bash
 lines=()
 while IFS= read -r line; do lines+=("$line"); done
@@ -241,7 +273,6 @@ const PACMAN_USER_PROMPT_PATTERNS: &[&str] = &[
     "Enter number to select",
     "Enter a selection",
     "Terminate batch job",
-    // flatpak ref disambiguation (same app on multiple remotes) + auth choice.
     "Which do you want to install",
     "Which do you want to use",
     "(0 to abort)",
@@ -341,7 +372,6 @@ fn remove_repo_from_conf(content: &str, repo_name: &str) -> String {
         }
     }
 
-    // Collapse consecutive blank lines left by removed sections
     let mut collapsed: Vec<String> = Vec::new();
     let mut prev_blank = false;
     for line in result {
@@ -617,7 +647,6 @@ struct AppImageFeed {
     url: String,
 }
 
-// The default catalog source (community AppImageHub feed).
 fn default_appimage_feeds() -> Vec<AppImageFeed> {
     vec![AppImageFeed {
         name: "AppImageHub".to_string(),
@@ -776,10 +805,7 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-// ─── AppImage helpers ─────────────────────────────────────────────────────────
 
-// Build an installed-row card with the locally-stored icon. MUST run on the UI
-// thread (slint::Image is !Send) - call from the dispatch loop, not a worker.
 /// Build a unified-Updates-page row (PackageData, backend=3) for an AppImage that
 /// has a pending update. Per-row action routes to `update-appimage`.
 fn appimage_entry_to_update_row(entry: &AppImageEntry) -> PackageData {
@@ -856,7 +882,6 @@ fn entry_to_installed_card(
     }
 }
 
-// ─── AppImage catalog icon cache ──────────────────────────────────────────────
 
 fn appimage_icon_dir() -> std::path::PathBuf {
     let base = std::env::var("XDG_CACHE_HOME")
@@ -891,7 +916,6 @@ fn installed_github_map() -> std::collections::HashMap<String, String> {
     map
 }
 
-// Build a catalog card. `github` is the install id; icon loads on demand.
 fn catalog_entry_to_card(
     entry: &CatalogEntry,
     installed: &std::collections::HashMap<String, String>,
@@ -910,8 +934,6 @@ fn catalog_entry_to_card(
         .unwrap_or_default();
     let category = entry.categories.first().cloned().unwrap_or_default();
 
-    // Icon is loaded lazily by the per-row loader (handles cache + download), so
-    // building cards stays cheap - no synchronous image decode here.
     AppImageCard {
         github: SharedString::from(entry.github.as_str()),
         name: SharedString::from(entry.name.as_str()),
@@ -1082,8 +1104,6 @@ fn run_appimage_op<F>(
     tx: &mpsc::Sender<UiMessage>,
     title: &str,
     dir: Option<String>,
-    // When the op updates/reinstalls a known app, its id - cleared from the
-    // pending-update set on success so the "New version" pill goes away.
     clear_update: Option<String>,
     op: F,
 ) where
@@ -1113,7 +1133,6 @@ fn run_appimage_op<F>(
     let res = op(&backend, &log);
     match res {
         Ok(()) => {
-            // Clear the pending-update flag before the reload so the row repaints clean.
             if let Some(id) = clear_update {
                 let _ = tx.send(UiMessage::AppImageUpdateCleared(id));
             }
@@ -1127,7 +1146,6 @@ fn run_appimage_op<F>(
     }
 
     let _ = tx.send(UiMessage::InstalledAppImagesLoaded(backend.list_entries()));
-    // Refresh catalog cards so Install↔Remove reflects the change.
     let _ = tx.send(UiMessage::AppImageCardsRefresh);
 }
 
@@ -1146,7 +1164,6 @@ fn normalize_typographic(input: &str) -> String {
             '\u{2013}' | '\u{2014}' | '\u{2015}' => out.push('-'),
             '\u{2026}' => out.push_str("..."),
             '\u{00A0}' | '\u{202F}' => out.push(' '),
-            // Drop bidi isolates / directional marks glib wraps quoted args in.
             '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => {}
             _ => out.push(c),
         }
@@ -1195,10 +1212,6 @@ fn strip_ansi(input: &str) -> String {
     result
 }
 
-// Stream-based terminal processor. Replaces vt100 to avoid the cell-grid wrapping
-// issue where pacman pads output to terminal width and vt100 joins wrapped rows without \n.
-// Lines are committed on \n; bare \r clears the current line (progress overwrites);
-// \r\n is treated as a newline without clearing.
 struct TermStream {
     lines: Vec<String>,
     current: String,
@@ -1231,12 +1244,10 @@ impl TermStream {
             if self.pending_cr {
                 self.pending_cr = false;
                 if b == 0x0a {
-                    // \r\n - CRLF: commit line without clearing
                     self.lines.push(std::mem::take(&mut self.current));
                     i += 1;
                     continue;
                 }
-                // bare \r: carriage return - clear and restart current line
                 self.current.clear();
             }
 
@@ -1285,8 +1296,6 @@ impl TermStream {
         if parts.is_empty() {
             return String::new();
         }
-        // Collapse consecutive blank lines to at most 1 (removes the giant gap
-        // between pacman and flatpak sections of a combined update operation).
         let mut out = String::with_capacity(parts.iter().map(|s| s.len() + 1).sum::<usize>() + 1);
         let mut prev_blank = false;
         for line in &parts {
@@ -1300,11 +1309,9 @@ impl TermStream {
     }
 }
 
-// ── Dependency tree helpers ───────────────────────────────────────────────
 
 fn clean_dep_name(s: &str) -> String {
     let s = s.trim();
-    // strip version constraints  >= <= > < =
     for sep in &[">=", "<=", ">", "<", "="] {
         if let Some((name, _)) = s.split_once(sep) {
             return name.trim().to_string();
@@ -1321,7 +1328,6 @@ fn resolve_file_dep(path: &str) -> Option<String> {
         .output()
         .ok()?;
     if !out.status.success() { return None; }
-    // output: "/usr/bin/env is owned by coreutils 9.5-1"
     let text = String::from_utf8_lossy(&out.stdout);
     let pkg = text.split("is owned by ").nth(1)?.split_whitespace().next()?.to_string();
     if pkg.is_empty() { None } else { Some(pkg) }
@@ -1335,14 +1341,12 @@ fn resolve_dep_list(raw: Vec<String>) -> Vec<String> {
     let mut result = Vec::with_capacity(raw.len());
     for dep in raw {
         if dep.starts_with('/') {
-            // file path dep → resolve to owner package, skip if unresolvable
             if let Some(pkg) = resolve_file_dep(&dep) {
                 if !result.contains(&pkg) {
                     result.push(pkg);
                 }
             }
         } else if dep.contains(".so") {
-            // soname virtual dep → skip, it's an ABI contract not a package name
         } else {
             result.push(dep);
         }
@@ -1373,13 +1377,13 @@ fn is_installable(pkg_name: &str) -> bool {
 /// Returns a set of package names that are available but not installed.
 fn batch_installable_check(names: &[&str]) -> HashMap<String, bool> {
     if names.is_empty() { return HashMap::new(); }
-    
+
     let mut result: HashMap<String, bool> = HashMap::new();
-    
+
     for name in names {
         result.insert(name.to_string(), is_installable(name));
     }
-    
+
     result
 }
 
@@ -1412,10 +1416,9 @@ fn parse_qi_block(text: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut depends: Vec<String>  = Vec::new();
     let mut optional: Vec<String> = Vec::new();
     let mut reqby: Vec<String>    = Vec::new();
-    let mut state = 0u8; // 1=depends, 2=optional, 3=reqby
+    let mut state = 0u8;
 
     for line in text.lines() {
-        // Continuation line (value continues on next line with leading spaces)
         if line.starts_with(' ') || line.starts_with('\t') {
             let tokens: Vec<&str> = line.split_whitespace().collect();
             match state {
@@ -1429,7 +1432,6 @@ fn parse_qi_block(text: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
             continue;
         }
 
-        // New key-value line
         state = 0;
         if let Some(val) = line.strip_prefix("Depends On").and_then(|r| r.split_once(':').map(|x| x.1)) {
             state = 1;
@@ -1492,7 +1494,7 @@ fn batch_deps(names: &[&str]) -> HashMap<String, Vec<String>> {
 fn parse_si_block(text: &str) -> (Vec<String>, Vec<String>) {
     let mut depends: Vec<String> = Vec::new();
     let mut optional: Vec<String> = Vec::new();
-    let mut state = 0u8; // 1=depends, 2=optional
+    let mut state = 0u8;
 
     for line in text.lines() {
         if line.starts_with(' ') || line.starts_with('\t') {
@@ -1532,7 +1534,6 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
     let installed = all_installed_map();
     let pkg_installed = installed.contains_key(pkg_name);
 
-    // Query root package info - try -Qi for installed, -Si for non-installed
     let (direct_deps, opt_deps, reqby_names, root_version) = if pkg_installed {
         let root_version = installed.get(pkg_name).map(|v| trim_version(v)).unwrap_or_default();
         let Ok(root_out) = std::process::Command::new("pacman")
@@ -1559,14 +1560,12 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
         (d, o, vec![], ver)
     };
 
-    // Batch-query level-2 deps (only installed packages respond to -Qi)
     let all_l1: Vec<String> = direct_deps.iter().chain(opt_deps.iter()).cloned().collect();
     let l1_installed: Vec<&str> = all_l1.iter()
         .filter(|n| installed.contains_key(n.as_str()))
         .map(|n| n.as_str()).collect();
     let l2_map = batch_deps(&l1_installed);
 
-    // Collect ALL non-installed deps (l1 + l2) for a single installability pass
     let mut all_missing: Vec<String> = all_l1.iter()
         .filter(|n| !installed.contains_key(n.as_str()))
         .cloned().collect();
@@ -1582,18 +1581,15 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
     let missing_refs: Vec<&str> = all_missing.iter().map(|s| s.as_str()).collect();
     let installable_map = batch_installable_check(&missing_refs);
 
-    // A dep should be shown if it's installed OR available in any repo
     let show_dep = |name: &str| -> bool {
         installed.contains_key(name) || *installable_map.get(name).unwrap_or(&false)
     };
 
-    // Filter deps before computing tree connectors so └─/├─ stay correct
     let vis_direct: Vec<&String> = direct_deps.iter().filter(|n| show_dep(n)).collect();
     let vis_opt: Vec<&String>    = opt_deps.iter().filter(|n| show_dep(n)).collect();
 
     let mut dep_nodes: Vec<DepNode> = Vec::new();
 
-    // ── Hard (required) dependencies ────────────────────────────────────────
     let n_direct = vis_direct.len();
     let n_opt    = vis_opt.len();
 
@@ -1616,11 +1612,9 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
         });
 
         if let Some(sub_deps) = l2_map.get(dep_name.as_str()) {
-            // Filter sub-deps the same way
             let vis_subs: Vec<&String> = sub_deps.iter().filter(|s| show_dep(s)).collect();
             if vis_subs.is_empty() { continue; }
 
-            // Parent's vertical line continues only if more l1 nodes follow
             let parent_cont = if is_last_direct && n_opt == 0 { "   " } else { "│  " };
             let nsub = vis_subs.len();
             for (j, sub) in vis_subs.iter().enumerate() {
@@ -1642,7 +1636,6 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
         }
     }
 
-    // ── Optional dependencies separator + entries (only if any survive filter) ─
     if !vis_opt.is_empty() {
         dep_nodes.push(DepNode {
             name: SharedString::from("Optional Dependencies"),
@@ -1673,7 +1666,6 @@ fn build_dep_tree(pkg_name: &str) -> (Vec<DepNode>, Vec<DepNode>, String) {
         }
     }
 
-    // ── Required-by (flat list) ──────────────────────────────────────────────
     let reqby_nodes: Vec<DepNode> = reqby_names.iter().map(|name| {
         let ver = installed.get(name.as_str()).map(|v| trim_version(v)).unwrap_or_default();
         DepNode {
@@ -1697,8 +1689,6 @@ fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
     let mut master: libc::c_int = 0;
     let mut slave: libc::c_int = 0;
 
-    // Without explicit winsize, ws_col=0 causes pacman/flatpak to pad progress bars
-    // with excessive whitespace or behave incorrectly.
     let winsize = libc::winsize { ws_col: 80, ws_row: 40, ws_xpixel: 0, ws_ypixel: 0 };
     let ret = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), &winsize) };
     if ret != 0 {
@@ -1712,8 +1702,6 @@ fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
         std::process::Command::new(cmd)
         .args(args)
         .env("TERM", "xterm-256color")
-        // C.UTF-8: stable English messages but a UTF-8 charset so glib/flatpak's
-        // curly quotes ('…') render instead of being transliterated to '?'.
         .env("LANG", "C.UTF-8")
         .env("LC_ALL", "C.UTF-8")
         .stdin(std::process::Stdio::from_raw_fd(stdin_fd))
@@ -1738,7 +1726,6 @@ fn spawn_in_pty(cmd: &str, args: &[&str]) -> Result<(i32, u32), String> {
     }
 }
 
-// ─── Shared PTY reader helpers ────────────────────────────────────────────────
 
 fn classify_log_level(lower: &str) -> u8 {
     if lower.contains("error:") { 1 }
@@ -1770,40 +1757,25 @@ fn parse_kn_fraction(raw: &str) -> Option<f32> {
 }
 
 fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'static str, i32)> {
-    // Phase layout (must not overlap so current_percent only-increase rule works):
-    //   1–2%   resolve / conflict check
-    //   2–5%   download  (modern pacman: per-file bars, no (k/N) → cap tiny)
-    //   5–8%   verify integrity
-    //   8–9%   pre-transaction hooks
-    //  10–95%  install / upgrade / remove  ← (k-1 + inline/100) / N mapped here
-    //  95–99%  post-transaction hooks, mkinitcpio, grub
-    // 100%     OperationDone
 
-    // ── Install / upgrade / remove: smooth 10–95% from pacman's (k/N) XX% ──
     let is_install = lower.contains("installing") || lower.contains("upgrading")
         || lower.contains("reinstalling") || lower.contains("downgrading");
     let is_remove  = lower.contains("removing");
     if is_install || is_remove {
         if let Some(frac) = parse_kn_fraction(raw) {
-            // Map 0.0–1.0 → 10–95  (85 point range)
             let pct = (10.0 + frac * 85.0) as i32;
             let label = if is_remove { "Removing packages..." } else { "Installing packages..." };
             return Some((label, pct.min(95)));
         }
-        // (k/N) not on this line yet (overwrite in progress); return nothing so
-        // we wait for the complete line rather than jumping.
     }
 
-    // ── Pre-transaction hooks: 8–9% (fires BEFORE install, must stay below 10%) ──
     if lower.contains("running pre-transaction hooks") || lower.contains("pre-transaction") {
         return Some(("Preparing...", 8));
     }
 
-    // ── Resolve / conflict (very first steps) ──
     if lower.contains("resolving dependencies") { return Some(("Resolving dependencies...", 1)); }
     if lower.contains("looking for conflicting") { return Some(("Checking for conflicts...", 2)); }
 
-    // ── Download: cap at 5% so install (starting at 10%) always overtakes ──
     let has_speed = lower.contains("mib/s") || lower.contains("kib/s")
         || lower.contains(" b/s") || lower.contains("mb/s") || lower.contains("kb/s");
     if has_speed {
@@ -1814,7 +1786,6 @@ fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'sta
         return Some(("Downloading packages...", 2));
     }
 
-    // ── Verify integrity: 5–8% ──
     let is_verify = lower.contains("checking keyring") || lower.contains("checking keys")
         || lower.contains("checking integrity") || lower.contains("loading package files")
         || lower.contains("checking for file conflicts") || lower.contains("checking available disk");
@@ -1823,7 +1794,6 @@ fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'sta
         return Some(("Verifying packages...", pct.min(8)));
     }
 
-    // ── Post-transaction hooks / initramfs / grub: 95–99% ──
     if lower.contains("running post-transaction hooks") {
         return Some(("Running hooks...", 95));
     }
@@ -1833,7 +1803,6 @@ fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'sta
     if lower.contains("grub-mkconfig") || lower.contains("grub") {
         return Some(("Updating bootloader...", 99));
     }
-    // Generic hook lines with (k/N): map 95–99%
     if lower.contains("arming") || lower.contains("ldconfig") || lower.contains("dkms")
         || lower.contains("systemd") || lower.contains("fontconfig") || lower.contains("update-desktop")
         || lower.contains("gtk-update") || lower.contains("update-mime") {
@@ -1848,7 +1817,6 @@ fn detect_phase(lower: &str, raw: &str, _total_packages: usize) -> Option<(&'sta
 /// Detects interactive prompts and sends the appropriate UI messages.
 /// Returns true if the output should be force-flushed to the UI immediately.
 fn handle_pty_prompt(cleaned: &str, always_input: bool, tx: &mpsc::Sender<UiMessage>) -> bool {
-    // fwupdmgr and some tools use a pipe ("[Y|n]") instead of a slash.
     let has_yn = cleaned.contains("[Y/n]") || cleaned.contains("[y/n]")
         || cleaned.contains("[Y|n]") || cleaned.contains("[y|n]");
     let has_y_n = cleaned.contains("[y/N]") || cleaned.contains("[y|N]");
@@ -2087,7 +2055,6 @@ fn build_pacman_command(action: &str, names: &[String], backend: i32) -> (String
             ])
         }
         _ => {
-            // install / update / bulk-install
             ("pkexec".to_string(), {
                 let mut args = vec!["pacman".to_string(), "-S".to_string()];
                 args.extend(names.iter().cloned());
@@ -2112,9 +2079,6 @@ fn run_managed_operation(
     let (cmd, args) = build_pacman_command(action, names, backend);
 
     let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
-    // Open expanded with the terminal/input visible, same as the full-system
-    // update path (run_in_terminal_expanded). So install/remove/update show
-    // output and the input field up front instead of a bare spinner.
     let _ = tx.send(UiMessage::ProgressAutoExpand);
     let _ = tx.send(UiMessage::ProgressShowClose);
 
@@ -2181,7 +2145,6 @@ fn run_managed_operation(
                     let text = String::from_utf8_lossy(&buf[..n]);
                     let cleaned = normalize_typographic(&strip_ansi(&text));
 
-                    // Accumulate for conflict detection
                     {
                         let mut ob = output_buffer_r.lock().unwrap();
                         if ob.len() < 65536 { ob.push_str(&cleaned); }
@@ -2192,9 +2155,6 @@ fn run_managed_operation(
                         *escalated_r.lock().unwrap() = true;
                     }
 
-                    // always_input=true: show a text input field for Y/n prompts
-                    // (type Y/n) instead of Proceed/Cancel buttons, matching the
-                    // expanded terminal UX for installs/updates.
                     let force_flush = handle_pty_prompt(&cleaned, true, &tx_reader);
 
                     stream.process(&buf[..n]);
@@ -2406,7 +2366,6 @@ fn native_updates_need_reboot(window: &MainWindow) -> bool {
     for i in 0..model.row_count() {
         let pkg = model.row_data(i).unwrap_or_default();
         let name = pkg.name.to_string();
-        // Match exact name or "linux-*" kernel packages
         if REBOOT_PATTERNS.iter().any(|p| &name == p)
             || (name.starts_with("linux-") && !name.starts_with("linux-docs")
                 && !name.starts_with("linux-headers"))
@@ -2424,53 +2383,6 @@ fn update_selection_in_models(window: &MainWindow, name: &str, backend: i32, sel
     update_selection_in_model(&window.get_search_available(), name, backend, selected);
     update_selection_in_model(&window.get_flatpak_packages(), name, backend, selected);
     update_selection_in_model(&window.get_repo_packages(), name, backend, selected);
-}
-
-/// Given the last line of terminal output containing a prompt like `[Y/n]` or `(yes/no)`,
-/// return the default answer string (the uppercase / first option).
-/// Returns None if no recognisable prompt is found.
-#[allow(dead_code)]
-fn detect_prompt_default(line: &str) -> Option<String> {
-    // Look for [...] bracket patterns last on the line: [Y/n], [y/N], [Y/N], [yes/no] etc.
-    let line = line.trim_end_matches([' ', ':']);
-    if let Some(start) = line.rfind('[') {
-        if let Some(rel_end) = line[start..].find(']') {
-            let inner = &line[start + 1..start + rel_end];
-            // Split by '/' and pick the uppercase variant as default
-            for part in inner.split('/') {
-                let part = part.trim();
-                if !part.is_empty() && part.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                    return Some(part.to_lowercase());
-                }
-            }
-            // All lowercase - first option is default
-            if let Some(first) = inner.split('/').next() {
-                let first = first.trim();
-                if !first.is_empty() {
-                    return Some(first.to_string());
-                }
-            }
-        }
-    }
-    // (yes/no) paren style
-    if let Some(start) = line.rfind('(') {
-        if let Some(rel_end) = line[start..].find(')') {
-            let inner = &line[start + 1..start + rel_end];
-            for part in inner.split('/') {
-                let part = part.trim();
-                if !part.is_empty() && part.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                    return Some(part.to_lowercase());
-                }
-            }
-            if let Some(first) = inner.split('/').next() {
-                let first = first.trim();
-                if !first.is_empty() {
-                    return Some(first.to_string());
-                }
-            }
-        }
-    }
-    None
 }
 
 fn parse_conflict_summary(output: &str) -> (String, bool) {
@@ -2515,7 +2427,6 @@ fn load_recent_activity() -> Vec<ActivityItem> {
     let mut items: Vec<ActivityItem> = content
         .lines()
         .filter_map(|line| {
-            // Format: [2024-01-15T10:30:00+0000] [ALPM] installed pkg (ver)
             let alpm_pos = line.find("] [ALPM] ")?;
             let rest = &line[alpm_pos + 9..];
             let (action, pkg_part) = if let Some(s) = rest.strip_prefix("installed ") {
@@ -2530,7 +2441,6 @@ fn load_recent_activity() -> Vec<ActivityItem> {
             let pkg = pkg_part.split_whitespace().next().unwrap_or("").to_string();
             if pkg.is_empty() { return None; }
 
-            // Parse date from [2024-01-15T10:30:00+0000]
             let date = line.strip_prefix('[')
                 .and_then(|s| s.find(']').map(|e| &s[..e]))
                 .and_then(|s| s.get(..10))
@@ -2550,7 +2460,6 @@ fn load_recent_activity() -> Vec<ActivityItem> {
 }
 
 fn load_sys_info() -> SysInfo {
-    // Kernel version
     let kernel = std::fs::read_to_string("/proc/version")
         .unwrap_or_default()
         .split_whitespace()
@@ -2558,7 +2467,6 @@ fn load_sys_info() -> SysInfo {
         .unwrap_or("unknown")
         .to_string();
 
-    // Uptime
     let uptime_secs: u64 = std::fs::read_to_string("/proc/uptime")
         .unwrap_or_default()
         .split_whitespace()
@@ -2574,7 +2482,6 @@ fn load_sys_info() -> SysInfo {
         format!("{}m", uptime_secs / 60)
     };
 
-    // CPU model (first model name line, shortened)
     let cpu = std::fs::read_to_string("/proc/cpuinfo")
         .unwrap_or_default()
         .lines()
@@ -2590,7 +2497,6 @@ fn load_sys_info() -> SysInfo {
         })
         .unwrap_or_else(|| "unknown".to_string());
 
-    // RAM from /proc/meminfo (kB → MB)
     let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let mem_total_kb: u64 = meminfo.lines()
         .find(|l| l.starts_with("MemTotal:"))
@@ -2610,7 +2516,6 @@ fn load_sys_info() -> SysInfo {
         (format!("{}M", used_mb), format!("{}M", total_mb))
     };
 
-    // GPU - probe /sys/class/drm (fast, no subprocess)
     let gpu = (|| -> Option<String> {
         for entry in std::fs::read_dir("/sys/class/drm").ok()?.flatten() {
             let name = entry.file_name();
@@ -2641,30 +2546,23 @@ fn load_sys_info() -> SysInfo {
         None
     })().unwrap_or_default();
 
-    // Disk usage for / via /proc/mounts + statvfs (no subprocess needed)
     let (disk_used, disk_total) = (|| -> Option<(String, String)> {
-        // Use df -h / which is universally available and fast
         let out = std::process::Command::new("df")
             .args(["-h", "/"])
             .output().ok()?;
         let text = String::from_utf8_lossy(&out.stdout).to_string();
-        // df -h / output: header line then data line
-        // Filesystem  Size  Used  Avail  Use%  Mounted on
         let line = text.lines().nth(1)?;
         let parts: Vec<&str> = line.split_whitespace().collect();
-        // col 1=Size, 2=Used
         let total = parts.get(1)?.to_string();
         let used = parts.get(2)?.to_string();
         Some((used, total))
     })().unwrap_or_default();
 
-    // Hostname
     let hostname = std::fs::read_to_string("/etc/hostname")
         .unwrap_or_default()
         .trim()
         .to_string();
 
-    // Distro name from /etc/os-release
     let distro = std::fs::read_to_string("/etc/os-release")
         .unwrap_or_default()
         .lines()
@@ -2731,7 +2629,7 @@ fn group_installed_by_repo(pkgs: Vec<PackageData>) -> Vec<PackageData> {
                 version: SharedString::from(""),
                 description: SharedString::from(""),
                 repository: SharedString::from(repo.as_str()),
-                backend: -1, // sentinel: group header
+                backend: -1,
                 installed: false,
                 has_update: false,
                 installed_size: SharedString::from(""),
@@ -2743,7 +2641,6 @@ fn group_installed_by_repo(pkgs: Vec<PackageData>) -> Vec<PackageData> {
                 explicit: false,
             });
         }
-        // Augment pkg: store letter initial in required_by, category in installed_size
         let initial = pkg.name.as_str()
             .chars()
             .next()
@@ -2780,7 +2677,6 @@ fn load_installed_flatpaks() -> Vec<PackageData> {
         let display = cols.get(1).copied().unwrap_or(app_id).trim();
         let version = cols.get(2).copied().unwrap_or("").trim();
         if app_id.is_empty() { continue; }
-        // Derive letter initial from display name
         let initial = display.chars().next().unwrap_or('?').to_uppercase().to_string();
         pkgs.push(PackageData {
             name: SharedString::from(app_id),
@@ -2832,7 +2728,6 @@ fn build_mirrorlist_update_script() -> String {
     }
 
     if cmds.is_empty() {
-        // Fallback: update the standard Arch mirrorlist only
         "rate-mirrors --allow-root --protocol https arch | tee /etc/pacman.d/mirrorlist".to_string()
     } else {
         cmds.join(" && ")
@@ -2891,7 +2786,6 @@ fn parse_arch_rss(xml: &str) -> Vec<ArchNewsItem> {
                 match cur_tag.as_str() {
                     "title" => title = text,
                     "pubDate" => {
-                        // Format: "Mon, 07 Apr 2025 00:00:00 +0000" → "07 Apr 2025"
                         let parts: Vec<&str> = text.splitn(6, ' ').collect();
                         date = if parts.len() >= 4 {
                             format!("{} {} {}", parts[1], parts[2], parts[3])
@@ -2914,7 +2808,6 @@ fn parse_arch_rss(xml: &str) -> Vec<ArchNewsItem> {
                 let tag = std::str::from_utf8(name_bytes.as_ref()).unwrap_or("");
                 if tag == "item" && in_item {
                     in_item = false;
-                    // Trim description to reasonable length
                     let summary = if description.chars().count() > 400 {
                         let cut: String = description.chars().take(400).collect();
                         format!("{}…", cut.trim_end())
@@ -2950,29 +2843,19 @@ fn strip_html(html: &str) -> String {
             _ => {}
         }
     }
-    // Collapse whitespace
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn main() {
-    // Pin the Qt windowing backend. With both backend-qt and backend-winit compiled
-    // in, Slint may pick winit, whose Wayland frame-callback handling can starve
-    // redraws/input - symptom: clicks register but the frame isn't presented until a
-    // window event (e.g. refocus) forces a repaint. Qt integrates cleanly with KDE
-    // Wayland. Overridable via the environment if a user needs winit.
     if std::env::var_os("SLINT_BACKEND").is_none() {
         std::env::set_var("SLINT_BACKEND", "qt");
     }
 
-    // Ensure Qt can find its plugins and libraries
-    // This helps when the app is installed to /usr/bin vs run from build dir
 
-    // Plugin path for Qt style/platform theme plugins
     if std::env::var("QT_PLUGIN_PATH").map(|p| p.is_empty()).unwrap_or(true) {
         std::env::set_var("QT_PLUGIN_PATH", "/usr/lib/qt6/plugins:/usr/lib/x86_64-linux-gnu/qt6/plugins");
     }
-    
-    // Library path for Qt plugins that are loaded via QLibrary
+
     let current_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
     if !current_path.contains("/usr/lib/qt6") {
         let new_path = if current_path.is_empty() {
@@ -2999,8 +2882,6 @@ fn main() {
         info!("Opening local package: {}", path);
     }
 
-    // Single-instance guard: if another instance is running, signal it to show
-    // its window and exit. Keep the lock file alive for the lifetime of this process.
     let _instance_lock = match acquire_instance_lock() {
         Some(f) => f,
         None => {
@@ -3013,7 +2894,6 @@ fn main() {
     let window = MainWindow::new().expect("Failed to create window");
     window.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
 
-    // Apply locale after component creation (GLOBAL_CONTEXT required by select_bundled_translation)
     if let Some(locale) = sys_locale::get_locale() {
         let lang = locale.split(['_', '-', '.']).next().unwrap_or("en").to_ascii_lowercase();
         let full = locale.replace('-', "_").to_ascii_lowercase();
@@ -3028,22 +2908,12 @@ fn main() {
     let (tx, rx) = mpsc::channel::<UiMessage>();
     let rx = Rc::new(RefCell::new(rx));
 
-    // AppImage catalog cache (Send-safe raw entries). Cards (which hold a
-    // non-Send slint::Image) are always built on the UI thread from this.
     let appimage_catalog: Arc<Mutex<Vec<CatalogEntry>>> = Arc::new(Mutex::new(Vec::new()));
-    // User-configured AppImage install/download dir ("" = default). Shared so
-    // background ops read the current value at run time.
     let appimage_dir_state: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
-    // Configured catalog sources (named feeds). Shared with the fetch thread.
     let appimage_sources_state: Arc<Mutex<Vec<AppImageFeed>>> = Arc::new(Mutex::new(Vec::new()));
-    // Ids of installed AppImages with a pending update (filled by the update check).
-    // UI-thread owned; read when (re)building installed cards.
     let appimage_updates: Rc<RefCell<std::collections::HashSet<String>>> =
         Rc::new(RefCell::new(std::collections::HashSet::new()));
-    // Cache of installed AppImage entries (UI-thread) so the Updates-page rows can
-    // be rebuilt from the pending set without re-reading the manifest.
     let appimage_entries: Rc<RefCell<Vec<AppImageEntry>>> = Rc::new(RefCell::new(Vec::new()));
-    // Whether AppImage support is on - read by the global update-check thread.
     let appimage_enabled_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     listen_for_instance_signals(window.as_weak());
@@ -3051,16 +2921,13 @@ fn main() {
     let terminal_input_sender: Arc<Mutex<Option<mpsc::Sender<String>>>> = Arc::new(Mutex::new(None));
     let terminal_child_pid: Arc<Mutex<Option<u32>>> = Arc::new(Mutex::new(None));
     let conflict_context: Arc<Mutex<Option<(String, Vec<String>, i32)>>> = Arc::new(Mutex::new(None));
-    // Full parsed flatpak app list for client-side filtering
     let flatpak_app_store: Arc<Mutex<Vec<CachedRemoteApp>>> = Arc::new(Mutex::new(Vec::new()));
     let flatpak_installed_ids: Arc<Mutex<std::collections::HashSet<String>>> = Arc::new(Mutex::new(std::collections::HashSet::new()));
-    // Serial counter: incremented on each filter call, background threads check it before sending
     let flatpak_filter_serial: Arc<std::sync::atomic::AtomicU64> =
         Arc::new(std::sync::atomic::AtomicU64::new(0));
 
-    const FLATPAK_PAGE_SIZE: usize = BROWSE_PAGE_SIZE;  // rows per page (Prev/Next)
+    const FLATPAK_PAGE_SIZE: usize = BROWSE_PAGE_SIZE;
 
-    // Load cached packages immediately for fast startup
     if let Some(cache) = load_package_cache() {
         let installed: Vec<PackageData> = cache.installed.iter().map(cached_to_pkg).collect();
         let updates: Vec<PackageData> = cache.updates.iter().map(cached_to_pkg).collect();
@@ -3081,8 +2948,6 @@ fn main() {
         window.set_flatpak_packages(ModelRc::new(VecModel::from(flatpak)));
         window.set_stats(stats);
     }
-    // Always clear loading immediately - stat cards should never be stuck in skeleton state.
-    // The background thread will overwrite stats/packages when it finishes.
     window.set_loading(false);
 
     let selected_packages: Rc<RefCell<Vec<(String, i32, bool)>>> = Rc::new(RefCell::new(Vec::new()));
@@ -3096,7 +2961,6 @@ fn main() {
     let tx_load = tx.clone();
     let tx_search = tx.clone();
 
-    // Shared log model for colored progress log lines - reset when popup opens
     let log_model: Rc<RefCell<Option<Rc<VecModel<LogLine>>>>> = Rc::new(RefCell::new(None));
 
     let timer = Timer::default();
@@ -3138,13 +3002,11 @@ fn main() {
                         window.set_flatpak_packages(ModelRc::new(VecModel::from(flatpak)));
                         window.set_flatpak_update_count(flatpak_update_count);
                         window.set_stats(stats);
-                        // Pre-compute grouped installed list for view 0 tab 0
                         let full_for_grp: Vec<PackageData> = full_installed_timer.borrow().clone();
                         let grouped = group_installed_by_repo(full_for_grp);
                         *full_installed_grouped_timer.borrow_mut() = grouped.clone();
                         window.set_installed_grouped(ModelRc::new(VecModel::from(grouped)));
                         window.set_loading(false);
-                        // Desktop notification on first load
                         let update_count = window.get_stats().update_count;
                         let fp_count = window.get_flatpak_update_count();
                         if !notified_updates.get()
@@ -3199,7 +3061,6 @@ fn main() {
                         window.set_show_progress_logs(false);
                         window.set_progress_show_details(false);
                         window.set_progress_popup_show_buttons(false);
-                        window.set_progress_popup_eta(SharedString::from(""));
                         window.set_progress_error_summary(SharedString::from(""));
                         window.set_progress_popup_show_close(false);
                         window.set_progress_input_focus_pending(false);
@@ -3215,7 +3076,6 @@ fn main() {
                     UiMessage::ProgressPrompt(prompt) => {
                         window.set_progress_popup_prompt(SharedString::from(&prompt));
                         window.set_progress_popup_show_input(true);
-                        // Auto-focus the text input when not in button mode (e.g. downgrade)
                         if !window.get_progress_popup_show_buttons() {
                             window.set_progress_input_focus_pending(true);
                         }
@@ -3238,9 +3098,6 @@ fn main() {
                             });
                         }
                     }
-                    UiMessage::ProgressETA(eta) => {
-                        window.set_progress_popup_eta(SharedString::from(&eta));
-                    }
                     UiMessage::ProgressErrorSummary(s) => {
                         window.set_progress_error_summary(SharedString::from(&s));
                     }
@@ -3258,8 +3115,6 @@ fn main() {
                         window.set_progress_popup_show_input(false);
                         window.set_progress_popup_prompt(SharedString::from(""));
                         if success {
-                            // Optimistic updates: flip installed flags / remove from lists
-                            // immediately so buttons update before the async ALPM reload finishes.
                             if let Some((action, names, backend)) = conflict_ctx_timer.lock().unwrap().clone() {
                                 let is_remove = action == "remove" || action == "bulk-remove";
                                 let is_install = action == "install" || action == "bulk-install";
@@ -3271,30 +3126,25 @@ fn main() {
                                     let name_set_ref: std::collections::HashSet<&str> =
                                         name_set.iter().map(|s| s.as_str()).collect();
 
-                                    // ── flip installed flag in every native-package model ───
                                     let updated = flip_installed_in_model(
                                         window.get_search_available(), &name_set_ref, new_installed);
                                     window.set_search_available(updated);
                                     let updated = flip_installed_in_model(
                                         window.get_search_installed(), &name_set_ref, new_installed);
                                     window.set_search_installed(updated);
-                                    // repo-packages: the Browse view (view=7/8) uses this model
                                     let updated = flip_installed_in_model(
                                         window.get_repo_packages(), &name_set_ref, new_installed);
                                     window.set_repo_packages(updated);
-                                    // Keep the full cached list in sync so paging shows fresh state
                                     for p in repo_full_timer.borrow_mut().iter_mut() {
                                         if name_set_ref.contains(p.name.as_str()) {
                                             p.installed = new_installed;
                                         }
                                     }
 
-                                    // ── remote-apps (flatpak store rows): flip flag ─────────
                                     let updated = flip_installed_in_model(
                                         window.get_remote_apps(), &name_set_ref, new_installed);
                                     window.set_remote_apps(updated);
 
-                                    // ── Flatpak-specific: installed_flatpaks list + detail ──
                                     if backend == 1 {
                                         if is_remove {
                                             let current: Vec<PackageData> = window.get_installed_flatpaks()
@@ -3308,15 +3158,11 @@ fn main() {
                                                 .collect();
                                             window.set_flatpak_packages(ModelRc::new(VecModel::from(current)));
                                         }
-                                        // Flatpak detail panel: match by current-flatpak-id (raw app ID)
                                         let cur_id = window.get_current_flatpak_id();
                                         if name_set_ref.contains(cur_id.as_str()) {
                                             window.set_flatpak_detail_installed(new_installed);
                                         }
 
-                                        // Add-Ons modal: flip the affected add-on(s) and
-                                        // re-partition so they move between the installed and
-                                        // not-installed sections without reopening the modal.
                                         let mut all: Vec<PackageData> =
                                             window.get_flatpak_addons().iter().collect();
                                         all.extend(window.get_flatpak_addons_installed().iter());
@@ -3339,7 +3185,6 @@ fn main() {
                                         }
                                     }
 
-                                    // ── Native: installed-packages + installed-grouped ──────
                                     if backend == 0 {
                                         if is_remove {
                                             {
@@ -3361,7 +3206,6 @@ fn main() {
                                             let grp_snap: Vec<PackageData> = full_installed_grouped_timer.borrow().clone();
                                             window.set_installed_grouped(ModelRc::new(VecModel::from(grp_snap)));
                                         }
-                                        // Native detail panel
                                         let mut dpkg = window.get_repo_detail_pkg();
                                         if name_set_ref.contains(dpkg.name.as_str()) {
                                             dpkg.installed = new_installed;
@@ -3374,11 +3218,7 @@ fn main() {
                         } else {
                             window.set_show_progress_logs(true);
                         }
-                        // Only reload after a successful operation. On failure/cancel nothing
-                        // actually changed on the system, so preserve the current UI state
-                        // (especially the updates list which load_packages_async(false) would clear).
                         if success {
-                            // Auto-clean cache after successful upgrade
                             if window.get_setting_auto_clean_cache() {
                                 if let Some((ref action, _, _)) = *conflict_ctx_timer.lock().unwrap() {
                                     if action == "update-all" || action == "force-update-all" {
@@ -3399,10 +3239,8 @@ fn main() {
                             thread::spawn(move || {
                                 let rt = tokio::runtime::Runtime::new().expect("Runtime");
                                 rt.block_on(async {
-                                    // Refresh flatpak installed ids first - used by search + browse
                                     let new_ids = tokio::task::spawn_blocking(get_flatpak_installed_ids).await.unwrap_or_default();
                                     *ids_ref.lock().unwrap() = new_ids;
-                                    // Run load + search concurrently
                                     let store_join = store_ref.clone();
                                     let ids_join = ids_ref.clone();
                                     tokio::join!(
@@ -3415,12 +3253,11 @@ fn main() {
                                     );
                                     let pkgs = tokio::task::spawn_blocking(load_installed_flatpaks).await.unwrap_or_default();
                                     let _ = tx.send(UiMessage::InstalledFlatpaksLoaded(pkgs));
-                                    // Refresh Recent Activity + system stats from the pacman log.
                                     let _ = tx.send(UiMessage::ActivityLoaded(load_recent_activity()));
                                     let _ = tx.send(UiMessage::SysInfoLoaded(load_sys_info()));
                                 });
                             });
-                        } // end if success
+                        }
                     }
                     UiMessage::ShowConflict { summary, can_force } => {
                         window.set_show_progress_popup(false);
@@ -3431,7 +3268,6 @@ fn main() {
                     UiMessage::FlatpakDetailReady { name, summary, description, developer, version, version_date, changelog, url_homepage, url_bugtracker, url_translate, url_vcs, categories } => {
                         window.set_flatpak_detail_name(SharedString::from(&name));
                         window.set_flatpak_detail_summary(SharedString::from(&summary));
-                        // Normalise paragraph spacing: collapse \n\n → \n, then expand \n → \n\n
                         let fmt_desc = if description.contains('\n') {
                             description.replace("\n\n", "\n").replace('\n', "\n\n")
                         } else {
@@ -3471,11 +3307,8 @@ fn main() {
                         }
                     }
                     UiMessage::RemoteAppsFiltered { serial, apps, total_matches } => {
-                        // u64::MAX is a sentinel used by preload/browse paths - always accept
-                        // For normal filter serials, drop stale results from previous keystrokes
                         let current = filter_serial_timer.load(std::sync::atomic::Ordering::Relaxed);
                         if serial == u64::MAX || serial == current {
-                            // Browse/preload paths (sentinel) always land on page 1.
                             if serial == u64::MAX {
                                 window.set_flatpak_page(0);
                             }
@@ -3496,7 +3329,6 @@ fn main() {
                         }
                     }
                     UiMessage::FlatpakAddonsReady(addons) => {
-                        // Split into two clean lists so the modal can show them in separate sections.
                         let (installed_list, uninstalled_list): (Vec<PackageData>, Vec<PackageData>) =
                             addons.into_iter().partition(|a| a.installed);
                         let installed_count = installed_list.len() as i32;
@@ -3508,8 +3340,6 @@ fn main() {
                         window.set_addon_selected_count(0);
                     }
                     UiMessage::PacmanReposLoaded(repos) => {
-                        // Keep selected_repo as "" (All) - the browse-repo("") call
-                        // that fired alongside load-pacman-repos handles the initial load.
                         window.set_pacman_repos(ModelRc::new(VecModel::from(
                             repos.iter().map(|r| SharedString::from(r.as_str())).collect::<Vec<_>>()
                         )));
@@ -3533,7 +3363,6 @@ fn main() {
                         window.set_installed_flatpaks(ModelRc::new(VecModel::from(pkgs)));
                     }
                     UiMessage::InstalledAppImagesLoaded(entries) => {
-                        // Drop pending-update ids for apps no longer installed, keep count honest.
                         {
                             let live: std::collections::HashSet<&str> =
                                 entries.iter().map(|e| e.name.as_str()).collect();
@@ -3547,7 +3376,6 @@ fn main() {
                             .map(|e| entry_to_installed_card(e, &updates))
                             .collect();
                         window.set_installed_appimages(ModelRc::new(VecModel::from(cards)));
-                        // Updates-page rows + cache entries for later rebuilds.
                         window.set_appimage_update_packages(ModelRc::new(VecModel::from(
                             build_appimage_update_rows(&entries, &updates),
                         )));
@@ -3569,7 +3397,6 @@ fn main() {
                         window.set_appimage_update_count(names.len() as i32);
                         *updates_dispatch.borrow_mut() = names.into_iter().collect();
                         let updates = updates_dispatch.borrow();
-                        // Re-render installed rows so the green "New version" pill appears.
                         let model = window.get_installed_appimages();
                         let refreshed: Vec<AppImageInstalled> = (0..model.row_count())
                             .filter_map(|i| model.row_data(i))
@@ -3579,7 +3406,6 @@ fn main() {
                             })
                             .collect();
                         window.set_installed_appimages(ModelRc::new(VecModel::from(refreshed)));
-                        // Populate the unified Updates-page section.
                         window.set_appimage_update_packages(ModelRc::new(VecModel::from(
                             build_appimage_update_rows(&ai_entries_dispatch.borrow(), &updates),
                         )));
@@ -3598,7 +3424,6 @@ fn main() {
                         window.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
                     }
                     UiMessage::AppImageCardsRefresh => {
-                        // Rebuild cards so Install/Remove reflects the latest state.
                         let page = window.get_appimage_page().max(0) as usize;
                         let (cards, total) = filter_catalog(
                             &cat_dispatch.lock().unwrap(),
@@ -3685,7 +3510,6 @@ fn main() {
                         let count = ui_devices.len() as i32;
                         window.set_firmware_devices(ModelRc::new(VecModel::from(ui_devices)));
                         window.set_firmware_update_count(count);
-                        // Mark has_pending_update on all-devices list
                         let update_names: std::collections::HashSet<String> = devices.iter()
                             .map(|d| d.name.clone())
                             .collect();
@@ -3740,11 +3564,9 @@ fn main() {
         }
     });
 
-    // Load config first so initial thread can use check_updates_on_start
     let config = load_config();
     let check_updates_on_start = config.check_updates_on_start;
 
-    // Fire homepage data immediately - these are pure /proc reads, sub-millisecond
     let _ = tx.send(UiMessage::SysInfoLoaded(load_sys_info()));
     let _ = tx.send(UiMessage::ActivityLoaded(load_recent_activity()));
 
@@ -3757,7 +3579,6 @@ fn main() {
         });
     });
 
-    // Startup update check also covers AppImages (when enabled).
     if check_updates_on_start && config.appimage_enabled {
         let tx_ai_start = tx.clone();
         thread::spawn(move || {
@@ -3768,7 +3589,6 @@ fn main() {
         });
     }
 
-    // Preload flatpak appstream in background so first Flatpaks click is instant
     {
         let store_preload = flatpak_app_store.clone();
         let ids_preload = flatpak_installed_ids.clone();
@@ -3776,16 +3596,13 @@ fn main() {
         thread::spawn(move || {
             let remotes = fetch_flatpak_remotes();
             let target = remotes.first().cloned().unwrap_or_else(|| "flathub".to_string());
-            // Send remotes first so sidebar populates
             let _ = tx_preload.send(UiMessage::FlatpakRemotesLoaded(remotes));
             let (all_apps, installed) = load_remote_apps(&target);
             *ids_preload.lock().unwrap() = installed.clone();
-            // Build first page immediately for instant display
             let all_pkg = apps_to_package_data(&all_apps, &installed, &target, "All", "");
             let total = all_pkg.len();
             let page: Vec<PackageData> = all_pkg.into_iter().take(FLATPAK_PAGE_SIZE).collect();
             *store_preload.lock().unwrap() = all_apps;
-            // Use u64::MAX sentinel - initial population is always accepted by the message loop
             let _ = tx_preload.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
         });
     }
@@ -3844,7 +3661,6 @@ fn main() {
         }
     });
 
-    // Filter installed packages client-side (instant, no network)
     let full_installed_filter = full_installed.clone();
     let window_weak_fi = window.as_weak();
     window.on_filter_installed(move |query| {
@@ -3852,7 +3668,6 @@ fn main() {
             let q = query.to_string().to_lowercase();
             let data = full_installed_filter.borrow();
             let filtered: Vec<PackageData> = if q.is_empty() {
-                // Reset to first page
                 let ps = 50usize;
                 let total = data.len().div_ceil(ps).max(1) as i32;
                 w.set_total_pages(total);
@@ -3871,7 +3686,6 @@ fn main() {
         }
     });
 
-    // Filter installed flatpaks client-side (instant)
     let full_fk_filter = full_installed_flatpaks.clone();
     let window_weak_fif = window.as_weak();
     window.on_filter_installed_flatpaks(move |query| {
@@ -3890,7 +3704,6 @@ fn main() {
         }
     });
 
-    // Unlock pacman DB (remove stale lock file)
     let tx_ulk = tx.clone();
     let ulk_input = terminal_input_sender.clone();
     let ulk_pid = terminal_child_pid.clone();
@@ -3909,7 +3722,6 @@ fn main() {
         });
     });
 
-    // Read IgnorePkg from /etc/pacman.conf
     let window_weak_igr = window.as_weak();
     window.on_read_ignorepkg(move || {
         if let Some(w) = window_weak_igr.upgrade() {
@@ -3918,15 +3730,12 @@ fn main() {
             let mut value = String::new();
             for line in content.lines() {
                 let trimmed = line.trim();
-                // Match both commented (#IgnorePkg) and active (IgnorePkg)
                 let stripped = trimmed.strip_prefix('#').unwrap_or(trimmed).trim();
                 if let Some(rest) = stripped.strip_prefix("IgnorePkg") {
                     let v = rest.trim_start_matches([' ', '=']).trim().to_string();
-                    // Active = line is NOT commented
                     if !trimmed.starts_with('#') {
                         active = true;
                     }
-                    // Always capture value if non-empty
                     if !v.is_empty() {
                         value = v;
                     }
@@ -3939,7 +3748,6 @@ fn main() {
         }
     });
 
-    // Save IgnorePkg to /etc/pacman.conf via pkexec sed
     window.on_save_ignorepkg(move |active, value| {
         let value = value.to_string();
         thread::spawn(move || {
@@ -3948,7 +3756,6 @@ fn main() {
             } else {
                 format!("#IgnorePkg = {}", value.trim())
             };
-            // Replace any existing IgnorePkg line (commented or not); append if missing
             let script = format!(
                 "grep -q 'IgnorePkg' /etc/pacman.conf \
                  && sed -i 's|^#*[[:space:]]*IgnorePkg.*|{}|' /etc/pacman.conf \
@@ -3961,7 +3768,6 @@ fn main() {
         });
     });
 
-    // HoldPkg read/save callbacks
     let window_weak_hpr = window.as_weak();
     window.on_read_holdpkg(move || {
         if let Some(w) = window_weak_hpr.upgrade() {
@@ -4004,7 +3810,6 @@ fn main() {
         });
     });
 
-    // Flatpak remotes callbacks
     let window_weak_fr = window.as_weak();
     window.on_load_flatpak_remotes(move || {
         if let Some(w) = window_weak_fr.upgrade() {
@@ -4049,7 +3854,6 @@ fn main() {
         let window_weak_rfr = window.as_weak();
         move |name| {
             let name = name.to_string();
-            // Never delete the default remote - it's the catalog backbone.
             if name.eq_ignore_ascii_case("flathub") {
                 return;
             }
@@ -4067,11 +3871,9 @@ fn main() {
         }
     });
 
-    // Write ParallelDownloads to /etc/pacman.conf via pkexec
     window.on_set_parallel_downloads(move |n| {
         let val = n as u32;
         thread::spawn(move || {
-            // sed: replace existing line (commented or not), or append if missing
             let script = format!(
                 "grep -q 'ParallelDownloads' /etc/pacman.conf \
                  && sed -i 's/^#*[[:space:]]*ParallelDownloads.*/ParallelDownloads = {}/' /etc/pacman.conf \
@@ -4084,7 +3886,6 @@ fn main() {
         });
     });
 
-    // ── Repo Manager callbacks ────────────────────────────────────────────────
 
     window.on_load_repo_list({
         let tx = tx.clone();
@@ -4255,7 +4056,6 @@ fn main() {
         });
     });
 
-    // ── Firmware update callbacks ─────────────────────────────────────────────
 
     let tx_fw_detect = tx.clone();
     let win_fw_detect = window.as_weak();
@@ -4281,7 +4081,6 @@ fn main() {
                 #[serde(rename = "DeviceId", default)]  device_id: String,
             }
 
-            // Flags that are worth displaying to the user
             const SKIP_FLAGS: &[&str] = &[
                 "registered", "supported", "trusted-payload", "trusted-metadata",
                 "only-offline", "require-ac",
@@ -4311,7 +4110,6 @@ fn main() {
                                 updatable: true,
                                 flags: display_flags.join(" · "),
                                 device_id: d.device_id,
-                                has_pending_update: false,
                             })
                         }).collect::<Vec<_>>())
                         .unwrap_or_default()
@@ -4346,7 +4144,6 @@ fn main() {
         }
         let tx = tx_fw_check.clone();
         thread::spawn(move || {
-            // fwupdmgr refresh && fwupdmgr get-updates
             let refresh_ok = std::process::Command::new("fwupdmgr")
                 .args(["refresh"])
                 .output()
@@ -4401,7 +4198,6 @@ fn main() {
         });
     });
 
-    // ─────────────────────────────────────────────────────────────────────────
 
     let tx_install = tx.clone();
     let install_input = terminal_input_sender.clone();
@@ -4515,13 +4311,11 @@ fn main() {
         let pid = upd_flt_pid.clone();
         let ctx = upd_flt_ctx.clone();
         thread::spawn(move || {
-            // Flatpaks never require a kernel reboot
             let _ = tx.send(UiMessage::SetTerminalIsUpgrade(false));
             run_managed_operation(&tx, "Flatpak Update", "update-all", &[], 1, &input, &pid, &ctx);
         });
     });
 
-    // Combined native + flatpak system update
     let tx_sys_full = tx.clone();
     let sys_full_input = terminal_input_sender.clone();
     let sys_full_pid = terminal_child_pid.clone();
@@ -4650,7 +4444,6 @@ fn main() {
     let tx_cp = tx.clone();
     window.on_close_progress_popup(move || {
         if let Some(window) = window_weak_cp.upgrade() {
-            // If operation is still running (show-close mode = downgrade X button), kill it
             if !window.get_progress_popup_done() {
                 if let Some(pid) = *cp_pid.lock().unwrap() {
                     unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM); }
@@ -4794,13 +4587,10 @@ fn main() {
         let input = clean_input.clone();
         let pid = clean_pid.clone();
         thread::spawn(move || {
-            // yes | pacman -Scc answers both confirmation prompts (-Scc asks twice).
-            // --noconfirm is unreliable for -Scc in PTY context.
             let script = "rm -rf /var/cache/pacman/pkg/download-* 2>/dev/null; \
                           yes 2>/dev/null | LANG=C pacman -Scc; \
                           echo 'Done.'";
             run_in_terminal(&tx, "Cleaning Package Cache", "pkexec", &["bash", "-c", script], &input, &pid);
-            // Recompute cache size and update the home-page stat tile
             let bytes = std::process::Command::new("du")
                 .args(["-sb", "/var/cache/pacman/pkg"])
                 .output()
@@ -4823,7 +4613,6 @@ fn main() {
         std::process::exit(0);
     });
 
-    // Toggle individual orphan checkbox
     let window_weak_ot = window.as_weak();
     window.on_orphan_toggle(move |idx| {
         if let Some(w) = window_weak_ot.upgrade() {
@@ -4838,7 +4627,6 @@ fn main() {
         }
     });
 
-    // Select/deselect all orphan checkboxes
     let window_weak_osa = window.as_weak();
     window.on_orphan_select_all(move |select| {
         if let Some(w) = window_weak_osa.upgrade() {
@@ -4850,13 +4638,11 @@ fn main() {
         }
     });
 
-    // Load dep info for a single orphan package (what requires it)
     let window_weak_odi = window.as_weak();
     window.on_load_orphan_dep_info(move |pkg_name| {
         let name = pkg_name.to_string();
         let window_weak = window_weak_odi.clone();
         thread::spawn(move || {
-            // `pacman -Qi <name>` → Required By field
             let qi = std::process::Command::new("pacman")
                 .args(["-Qi", &name])
                 .output()
@@ -4871,7 +4657,6 @@ fn main() {
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default();
 
-            // Also check optional for
             let optional_for = qi.lines()
                 .find(|l| l.starts_with("Optional For"))
                 .and_then(|l| l.split(':').nth(1))
@@ -4895,7 +4680,6 @@ fn main() {
         });
     });
 
-    // Load orphan list into dialog
     let window_weak_orp = window.as_weak();
     let tx_orp_load = tx.clone();
     window.on_load_orphan_list(move || {
@@ -4918,7 +4702,6 @@ fn main() {
                 _ => Vec::new(),
             };
 
-            // Get details for each orphan via `pacman -Qi`
             let pkgs: Vec<PackageData> = names.iter().map(|name| {
                 let qi = std::process::Command::new("pacman")
                     .args(["-Qi", name])
@@ -4953,7 +4736,7 @@ fn main() {
             }).collect();
 
             let len = pkgs.len();
-            let checked = vec![false; len]; // none selected by default
+            let checked = vec![false; len];
             slint::invoke_from_event_loop(move || {
                 if let Some(w) = window_weak.upgrade() {
                     w.set_orphan_list(ModelRc::new(VecModel::from(pkgs)));
@@ -4964,7 +4747,6 @@ fn main() {
         });
     });
 
-    // Remove only checked orphans
     let window_weak_orp_rm = window.as_weak();
     let tx_orphans = tx.clone();
     let orphan_input = terminal_input_sender.clone();
@@ -4989,7 +4771,6 @@ fn main() {
         });
     });
 
-    // Legacy orphan removal callback
     let tx_orphans_legacy = tx.clone();
     let orphan_input_legacy = terminal_input_sender.clone();
     let orphan_pid_legacy = terminal_child_pid.clone();
@@ -5009,8 +4790,6 @@ fn main() {
     let ai_enabled_sync = appimage_enabled_flag.clone();
     window.on_sync_databases(move || {
         info!("Check for updates");
-        // Kick the AppImage update check in parallel (network-bound, independent of
-        // pacman/flatpak) so one "Check for Updates" covers all three formats.
         if ai_enabled_sync.load(std::sync::atomic::Ordering::Relaxed) {
             let tx_ai = tx_sync.clone();
             thread::spawn(move || {
@@ -5131,7 +4910,6 @@ fn main() {
         }
     });
 
-    // ─── AppImage callbacks ──────────────────────────────────────────────────
     let tx_ai_load = tx.clone();
     window.on_load_installed_appimages(move || {
         let tx = tx_ai_load.clone();
@@ -5202,7 +4980,7 @@ fn main() {
     window.on_check_appimage_updates(move || {
         if let Some(w) = win_ai_check.upgrade() {
             if w.get_appimage_checking_updates() {
-                return; // a check is already running
+                return;
             }
             w.set_appimage_checking_updates(true);
         }
@@ -5215,15 +4993,12 @@ fn main() {
         });
     });
 
-    // Update All - like AM's `am -u`. Updates every app with a pending update; if
-    // no check has run yet, checks first, then updates what needs it.
     let tx_ai_updateall = tx.clone();
     let dir_ai_updateall = appimage_dir_state.clone();
     let updates_for_all = appimage_updates.clone();
     window.on_update_all_appimages(move || {
         let tx = tx_ai_updateall.clone();
         let dir = dir_ai_updateall.lock().unwrap().clone();
-        // Snapshot the known pending set on the UI thread (Rc is !Send).
         let pending: Vec<String> = updates_for_all.borrow().iter().cloned().collect();
         let tx_clear = tx.clone();
         thread::spawn(move || {
@@ -5267,7 +5042,6 @@ fn main() {
         });
     });
 
-    // Default browse source: the AppImageHub feed, plus any user-added sources.
     let tx_ai_cat = tx.clone();
     let cat_load = appimage_catalog.clone();
     let sources_load = appimage_sources_state.clone();
@@ -5280,8 +5054,6 @@ fn main() {
         let urls: Vec<String> =
             sources_load.lock().unwrap().iter().map(|f| f.url.clone()).collect();
         let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
-        // Fetch off-thread (Send-safe entries only); cards are built on the UI
-        // thread when AppImageCatalogReady is handled.
         thread::spawn(move || {
             let entries = xpm_appimage::catalog::fetch_sources(&urls);
             *cache.lock().unwrap() = entries;
@@ -5289,8 +5061,6 @@ fn main() {
         });
     });
 
-    // Force-refresh: drop the on-disk feed cache and re-fetch from the network.
-    // For users stuck on a stale/partial "cannot load catalog" cache.
     let tx_ai_reload = tx.clone();
     let cat_reload = appimage_catalog.clone();
     let sources_reload = appimage_sources_state.clone();
@@ -5339,7 +5109,6 @@ fn main() {
         });
     });
 
-    // Change AppImage install/download directory (folder picker).
     let dir_state_change = appimage_dir_state.clone();
     let win_ai_dir = window.as_weak();
     window.on_change_appimage_dir(move || {
@@ -5358,7 +5127,6 @@ fn main() {
         });
     });
 
-    // Reset AppImage install dir to the default.
     let dir_state_reset = appimage_dir_state.clone();
     let win_ai_dir_reset = window.as_weak();
     window.on_reset_appimage_dir(move || {
@@ -5369,8 +5137,6 @@ fn main() {
         }
     });
 
-    // Add / remove named catalog sources. Rebuilds the list, clears the cached
-    // catalog, persists, and refetches.
     let apply_sources = {
         let src_state = appimage_sources_state.clone();
         let cat = appimage_catalog.clone();
@@ -5418,7 +5184,6 @@ fn main() {
     let apply_rm = apply_sources.clone();
     window.on_remove_appimage_source(move |name| {
         let name = name.to_string();
-        // Never remove the default AppImageHub feed - it's the catalog backbone.
         let default_url = xpm_appimage::catalog::FEED_URL;
         if src_rm.lock().unwrap().iter().any(|f| f.name == name && f.url == default_url) {
             return;
@@ -5430,8 +5195,6 @@ fn main() {
         }
     });
 
-    // On-demand catalog icon loader: a small worker pool downloads remote icons
-    // into a local cache, then pushes the image into the matching row.
     let icon_jobs: mpsc::Sender<(String, String, std::path::PathBuf)> = {
         let (job_tx, job_rx) = mpsc::channel::<(String, String, std::path::PathBuf)>();
         let job_rx = Arc::new(Mutex::new(job_rx));
@@ -5468,7 +5231,6 @@ fn main() {
     let tx_icon_imm = tx.clone();
     window.on_load_appimage_icon(move |github| {
         let github = github.to_string();
-        // Resolve the icon URL from the cached catalog.
         let url = {
             let cat = cat_icon.lock().unwrap();
             cat.iter().find(|e| e.github == github).and_then(|e| e.icon_url.clone())
@@ -5482,7 +5244,6 @@ fn main() {
             });
             return;
         }
-        // Dedupe in-flight requests.
         {
             let mut set = icon_inflight.lock().unwrap();
             if !set.insert(github.clone()) {
@@ -5502,7 +5263,6 @@ fn main() {
         let pid = export_pid.clone();
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         thread::spawn(move || {
-            // Prompt user for save location via kdialog (falls back to zenity)
             let default_path = format!("{}/xpm-packages.txt", home);
             let chosen = std::process::Command::new("kdialog")
                 .args(["--getsavefilename", &default_path, "*.txt", "--title", "Export Package List"])
@@ -5527,7 +5287,6 @@ fn main() {
             let path = match chosen {
                 Some(p) if !p.is_empty() => p,
                 _ => {
-                    // User cancelled
                     return;
                 }
             };
@@ -5612,7 +5371,6 @@ fn main() {
         });
     });
 
-    // AUR malware scan - embedded script, run with --full into the progress popup.
     let tx_aur = tx.clone();
     let aur_input = terminal_input_sender.clone();
     let aur_pid = terminal_child_pid.clone();
@@ -5622,8 +5380,6 @@ fn main() {
         let input = aur_input.clone();
         let pid = aur_pid.clone();
         thread::spawn(move || {
-            // Log dir under the cache; the script writes its full detail log here
-            // (kept tidy out of cwd - no UI button, output is shown live).
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             let log_dir = format!("{}/.cache/xpm", home);
             let _ = std::fs::create_dir_all(&log_dir);
@@ -5631,7 +5387,6 @@ fn main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            // bash -c SCRIPT $0 $1...: $0 is a label, the rest are the script's args.
             let log_arg = format!("--log-file={}/aur-check-{}.log", log_dir, stamp);
             let args = [
                 "-c", AUR_CHECK_SCRIPT, "xpm-aur-check", "--full", &log_arg,
@@ -5665,7 +5420,6 @@ fn main() {
         });
     });
 
-    // Flatpak remote browser - serves capped first page from in-memory store if preloaded
     let tx_remotes = tx.clone();
     let window_weak_remote = window.as_weak();
     let store_remote = flatpak_app_store.clone();
@@ -5675,7 +5429,6 @@ fn main() {
         let remote_str = remote.to_string();
         info!("Browse remote: {}", remote_str);
 
-        // If the store is already populated (preloaded), serve first page immediately
         {
             let store = store_remote.lock().unwrap();
             if !store.is_empty() {
@@ -5685,19 +5438,16 @@ fn main() {
                 } else {
                     remote_str.clone()
                 };
-                // Only deliver first FLATPAK_PAGE_SIZE items for instant render
                 let all = apps_to_package_data(&store, &ids, &target, "All", "");
                 let total = all.len();
                 let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
                 drop(ids);
                 drop(store);
-                // u64::MAX sentinel - browse result always accepted
                 let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
                 return;
             }
         }
 
-        // Store not ready yet - show loading and fetch in background
         if let Some(w) = window_weak_remote.upgrade() {
             w.set_remote_apps_loading(true);
         }
@@ -5720,12 +5470,10 @@ fn main() {
             *store.lock().unwrap() = all_apps;
             let total = all.len();
             let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
-            // u64::MAX sentinel - background browse fetch always accepted
             let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
         });
     });
 
-    // Filter flatpak apps - background thread, stale results dropped via serial counter
     let tx_filter = tx.clone();
     let store_filter = flatpak_app_store.clone();
     let ids_filter = flatpak_installed_ids.clone();
@@ -5734,14 +5482,11 @@ fn main() {
     window.on_filter_flatpak(move |category, search| {
         let cat = category.to_string();
         let q = search.to_string();
-        // Page is read from the property: search/category reset it to 0 (slint),
-        // Prev/Next set it before re-invoking this callback.
         let (remote, page) = if let Some(w) = window_weak_filter.upgrade() {
             (w.get_selected_remote().to_string(), w.get_flatpak_page().max(0) as usize)
         } else {
             ("flathub".to_string(), 0)
         };
-        // Bump serial immediately - any in-flight result with the old serial will be dropped
         let my_serial = serial_filter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         let store = store_filter.clone();
         let ids = ids_filter.clone();
@@ -5750,19 +5495,16 @@ fn main() {
         thread::spawn(move || {
             let store = store.lock().unwrap();
             let ids = ids.lock().unwrap();
-            // Check if already superseded before doing expensive work
             if serial_check.load(std::sync::atomic::Ordering::Relaxed) != my_serial {
                 return;
             }
             let all = apps_to_package_data(&store, &ids, &remote, &cat, &q);
             drop(store);
             drop(ids);
-            // Check again after the filter work
             if serial_check.load(std::sync::atomic::Ordering::Relaxed) != my_serial {
                 return;
             }
             let total = all.len();
-            // Slice the requested page - avoids a VecModel of thousands of rows
             let page = page.min(total.saturating_sub(1) / FLATPAK_PAGE_SIZE);
             let apps: Vec<PackageData> = all
                 .into_iter()
@@ -5773,7 +5515,6 @@ fn main() {
         });
     });
 
-    // Toggle individual flatpak selection (checkbox in flat list)
     let win_toggle_fk = window.as_weak();
     window.on_toggle_flatpak_selected(move |app_id, checked| {
         if let Some(w) = win_toggle_fk.upgrade() {
@@ -5797,7 +5538,6 @@ fn main() {
         }
     });
 
-    // Batch install selected flatpaks
     let win_batch_fi = window.as_weak();
     let tx_bfi = tx.clone();
     let bfi_input = terminal_input_sender.clone();
@@ -5826,7 +5566,6 @@ fn main() {
         }
     });
 
-    // Batch remove selected flatpaks
     let win_batch_fr = window.as_weak();
     let tx_bfr = tx.clone();
     let bfr_input = terminal_input_sender.clone();
@@ -5855,7 +5594,6 @@ fn main() {
         }
     });
 
-    // Lookup detail from in-memory store (no network)
     let tx_detail = tx.clone();
     let store_detail = flatpak_app_store.clone();
     let ids_detail = flatpak_installed_ids.clone();
@@ -5878,9 +5616,6 @@ fn main() {
                 url_vcs: app.url_vcs.clone(),
                 categories: app.categories.clone(),
             });
-            // Find addons (apps that extend this one). The feed can carry several
-            // components per app_id (one per branch/version, e.g. BIMP 2-3.36 and
-            // 2-40), so dedupe by app_id to avoid showing the same add-on twice.
             let mut seen_addon = std::collections::HashSet::new();
             let addons: Vec<PackageData> = store.iter()
                 .filter(|a| a.extends == id)
@@ -5904,7 +5639,6 @@ fn main() {
                 })
                 .collect();
             let _ = tx_detail.send(UiMessage::FlatpakAddonsReady(addons));
-            // Screenshot download
             let ss_url = app.screenshot_url.clone();
             let ss_id = id.clone();
             let tx_ss = tx_detail.clone();
@@ -5924,7 +5658,6 @@ fn main() {
         }
     });
 
-    // Load app icon from local appstream cache
     let store_icon = flatpak_app_store.clone();
     let tx_icon = tx.clone();
     window.on_load_flatpak_icon(move |app_id| {
@@ -5941,14 +5674,12 @@ fn main() {
         }
     });
 
-    // Pacman repos browser - auto-loads first repo
     let tx_repos = tx.clone();
     window.on_load_pacman_repos(move || {
         let tx = tx_repos.clone();
         thread::spawn(move || {
             let repos = load_pacman_repos();
             let _ = tx.send(UiMessage::PacmanReposLoaded(repos));
-            // Auto-load ALL repos so the "All" tab is ready immediately
             let pkgs = load_repo_packages("");
             let _ = tx.send(UiMessage::RepoPackagesLoaded(pkgs));
         });
@@ -5962,8 +5693,6 @@ fn main() {
         let tx = tx_repo_pkgs.clone();
         let repo_str = repo.to_string();
         info!("Browse repo: {}", repo_str);
-        // Clear stale data immediately so filter can't search previous repo's packages
-        // while the new load is in progress
         *repo_browse_clear.borrow_mut() = Vec::new();
         if let Some(w) = window_weak_repo.upgrade() {
             w.set_repo_loading(true);
@@ -5976,7 +5705,6 @@ fn main() {
         });
     });
 
-    // Repo package search filter - resets to page 1 and renders the first page.
     let repo_full_filter = repo_packages_full.clone();
     let win_filter_repo = window.as_weak();
     window.on_filter_repo(move |search| {
@@ -5988,7 +5716,6 @@ fn main() {
         }
     });
 
-    // Repo pagination: re-filter with the current query, render the requested page.
     let repo_full_goto = repo_packages_full.clone();
     let win_goto_repo = window.as_weak();
     window.on_goto_repo_page(move |page| {
@@ -6000,7 +5727,6 @@ fn main() {
         }
     });
 
-    // Package info modal: run pacman -Ql (installed) or pacman -Fl (file db)
     let tx_pkg_info = tx.clone();
     let window_weak_pi = window.as_weak();
     window.on_load_pkg_info(move |name| {
@@ -6016,7 +5742,6 @@ fn main() {
                 .output();
             let text = match ql {
                 Ok(o) if o.status.success() && !o.stdout.is_empty() => {
-                    // Strip package name prefix from each line: "pkg /path" → "/path"
                     String::from_utf8_lossy(&o.stdout)
                         .lines()
                         .filter_map(|l| l.splitn(2, ' ').nth(1))
@@ -6024,13 +5749,11 @@ fn main() {
                         .join("\n")
                 }
                 _ => {
-                    // Not installed - try file database
                     let fl = std::process::Command::new("pacman")
                         .args(["-Fl", &n])
                         .output();
                     match fl {
                         Ok(o) if o.status.success() && !o.stdout.is_empty() => {
-                            // Strip "pkg usr/lib/..." → "/usr/lib/..." (add leading /)
                             String::from_utf8_lossy(&o.stdout)
                                 .lines()
                                 .filter_map(|l| {
@@ -6049,7 +5772,6 @@ fn main() {
         });
     });
 
-    // Flatpak info modal: list installed files via flatpak info --show-location + find
     let tx_fk_info = tx.clone();
     let window_weak_fki = window.as_weak();
     window.on_load_flatpak_info(move |app_id| {
@@ -6092,7 +5814,6 @@ fn main() {
         });
     });
 
-    // Repo package detail: run pacman -Si <pkg>
     let tx_repo_detail = tx.clone();
     let window_weak_rd = window.as_weak();
     window.on_select_repo_pkg(move |name, _backend| {
@@ -6109,7 +5830,6 @@ fn main() {
             let desc = match out {
                 Ok(o) => {
                     let text = String::from_utf8_lossy(&o.stdout).to_string();
-                    // Extract Description field
                     text.lines()
                         .find(|l| l.starts_with("Description"))
                         .and_then(|l| l.split_once(':').map(|x| x.1))
@@ -6176,13 +5896,11 @@ fn main() {
             let filtered: Vec<PackageData> = if q.is_empty() {
                 data.clone()
             } else {
-                // Keep repo headers (backend == -1) only if they have matching packages beneath
                 let mut result = Vec::new();
                 let mut current_header: Option<PackageData> = None;
                 let mut header_has_match = false;
                 for item in data.iter() {
                     if item.backend == -1 {
-                        // flush previous header if it had matches
                         if let Some(h) = current_header.take() {
                             if header_has_match {
                                 result.push(h);
@@ -6210,13 +5928,11 @@ fn main() {
         }
     });
 
-    // Apply explicit/dep filter to installed grouped
     let window_weak_ef = window.as_weak();
     let full_grp_ef = full_installed_grouped.clone();
     window.on_apply_explicit_filter(move |mode| {
         if let Some(w) = window_weak_ef.upgrade() {
             let data = full_grp_ef.borrow();
-            // mode: 0=all, 1=explicit only, 2=deps only
             let filtered: Vec<PackageData> = if mode == 0 {
                 data.clone()
             } else {
@@ -6257,7 +5973,6 @@ fn main() {
         }
     });
 
-    // Load ALL installed packages (no pagination cap)
     let window_weak_lall = window.as_weak();
     let full_installed_lall = full_installed.clone();
     let full_grp_lall = full_installed_grouped.clone();
@@ -6310,9 +6025,6 @@ fn main() {
         let input = dg_input.clone();
         let pid = dg_pid.clone();
         thread::spawn(move || {
-            // downgrade uses fzf (TUI) for version selection, which is invisible after
-            // strip_ansi. We install a plain-text fzf replacement into a temp dir
-            // and prepend it to PATH so downgrade uses our version instead.
             let fake_dir = format!("/tmp/xpm-fzf-{}", std::process::id());
             let fzf_path = format!("{}/fzf", fake_dir);
             let _ = std::fs::create_dir_all(&fake_dir);
@@ -6322,8 +6034,6 @@ fn main() {
                 perms.set_mode(0o755);
                 let _ = std::fs::set_permissions(&fzf_path, perms);
             }
-            // Use pkexec so polkit handles auth graphically (Howdy → password fallback)
-            // rather than prompting in the PTY. pkexec resets PATH so we re-export inside.
             let bash_cmd = format!(
                 "export PATH={dir}:\"$PATH\"; /usr/bin/downgrade {name}",
                 dir = fake_dir,
@@ -6350,7 +6060,6 @@ fn main() {
         });
     });
 
-    // ── Addon multi-select callbacks ──────────────────────────────────────────
 
     let win_toggle = window.as_weak();
     window.on_toggle_addon_selected(move |idx| {
@@ -6368,7 +6077,6 @@ fn main() {
     let win_selall = window.as_weak();
     window.on_addon_select_all(move |select| {
         let Some(w) = win_selall.upgrade() else { return };
-        // flatpak-addons is uninstalled-only, so all entries are selectable
         let model = w.get_addon_selected();
         let count = model.row_count() as i32;
         for i in 0..model.row_count() {
@@ -6394,10 +6102,6 @@ fn main() {
         if ids.is_empty() { return; }
         let title = format!("Installing {} add-on(s)", ids.len());
         let tx = tx_inst_addons.clone();
-        // Route through run_managed_operation (action "bulk-install", flatpak backend)
-        // so it records the conflict_context the OperationDone reload needs to flip
-        // installed flags + re-partition the Add-Ons modal, AND uses the shared
-        // input/pid so a ref-disambiguation prompt reaches the popup input field.
         let input = inst_addons_input.clone();
         let pid = inst_addons_pid.clone();
         let ctx = inst_addons_ctx.clone();
@@ -6422,7 +6126,7 @@ fn main() {
                 &format!("Removing {}", id_str),
                 "remove",
                 &[id_str],
-                1, // flatpak backend
+                1,
                 &input,
                 &pid,
                 &ctx,
@@ -6444,7 +6148,6 @@ fn main() {
     window.on_save_settings(move || {
         if let Some(window) = window_weak_ss.upgrade() {
             let config = build_config(&window);
-            // Apply the GitHub token immediately so the next API call is authenticated.
             xpm_appimage::catalog::set_github_token(Some(config.appimage_github_token.clone()));
             ai_enabled_save.store(config.appimage_enabled, std::sync::atomic::Ordering::Relaxed);
             save_config(&config);
@@ -6474,7 +6177,6 @@ fn main() {
             .collect::<Vec<_>>(),
     )));
     window.set_setting_check_updates_on_start(config.check_updates_on_start);
-    // Preload the installed AppImage list when the feature is enabled.
     if config.appimage_enabled {
         let tx_ai_init = tx.clone();
         thread::spawn(move || {
@@ -6486,9 +6188,6 @@ fn main() {
                 error!("AppImage startup preload: backend init failed");
             }
         });
-        // Also preload the browse catalog so the AppImages page is populated the
-        // moment the user opens it (instead of an empty list while the first
-        // network fetch runs on nav-click).
         let tx_ai_cat_init = tx.clone();
         let cat_init = appimage_catalog.clone();
         let urls_init: Vec<String> = initial_feeds.iter().map(|f| f.url.clone()).collect();
@@ -6504,10 +6203,8 @@ fn main() {
     }
     window.set_setting_notify_on_updates(config.notify_on_updates);
     window.set_setting_auto_clean_cache(config.auto_clean_cache);
-    // Prefer actual value from /etc/pacman.conf over stored config
     let pacman_parallel = read_pacman_parallel_downloads().unwrap_or(config.parallel_downloads);
     window.set_setting_parallel_downloads(pacman_parallel as i32);
-    // If value isn't a preset, activate custom mode so UI shows it correctly
     let presets = [5u32, 10, 15, 20, 25];
     if !presets.contains(&pacman_parallel) {
         window.set_setting_pd_custom_mode(true);
@@ -6547,28 +6244,22 @@ fn main() {
     info!("Running application");
     window.show().expect("Failed to show window");
 
-    // First-frame nudge: on some compositors the initial window is mapped but its
-    // first frame isn't presented (and input feels dead) until a window event -
-    // e.g. clicking away and back - forces a repaint. Fire a few redraws shortly
-    // after show so the window paints/responds without manual refocus, then stop.
-    let nudge_weak = window.as_weak();
-    let nudge_timer = Rc::new(Timer::default());
-    let nudge_self = nudge_timer.clone();
-    let nudge_count = Rc::new(std::cell::Cell::new(0u32));
-    nudge_timer.start(TimerMode::Repeated, std::time::Duration::from_millis(120), move || {
-        if let Some(w) = nudge_weak.upgrade() {
+    let activate_weak = window.as_weak();
+    let activate_timer = Rc::new(Timer::default());
+    let activate_self = activate_timer.clone();
+    let activate_count = Rc::new(std::cell::Cell::new(0u32));
+    activate_timer.start(TimerMode::Repeated, std::time::Duration::from_millis(350), move || {
+        if let Some(w) = activate_weak.upgrade() {
             w.window().request_redraw();
         }
-        let n = nudge_count.get() + 1;
-        nudge_count.set(n);
-        if n >= 4 { nudge_self.stop(); }
+        thread::spawn(kde_self_activate);
+        let n = activate_count.get() + 1;
+        activate_count.set(n);
+        if n >= 8 { activate_self.stop(); }
     });
 
     slint::run_event_loop_until_quit().expect("Failed to run application");
-    drop(nudge_timer);
-    // Background threads may still be alive when Slint's Qt backend tears down
-    // its thread-local storage, producing QThreadStorage warnings. Exit immediately
-    // so the process terminates cleanly instead of unwinding through Qt's cleanup.
+    drop(activate_timer);
     std::process::exit(0);
 }
 
@@ -6626,7 +6317,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     let orphan_count = orphans_res.map(|o| o.len()).unwrap_or(0);
     let flatpak_packages = flatpak_installed_res.unwrap_or_else(|e| { error!("Failed to list flatpak installed: {}", e); Vec::new() });
 
-    // Compute cache size quickly in background (non-blocking estimate)
     let cache_size = tokio::task::spawn_blocking(|| {
         std::process::Command::new("du")
             .args(["-sb", "/var/cache/pacman/pkg"])
@@ -6682,7 +6372,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     .iter()
     .map(|p| {
         let has_update = flatpak_update_names.contains(&p.name);
-        // appdata_name is stored in pkg.description by list_installed()
         let display_name = if !p.description.is_empty() {
             p.description.clone()
         } else {
@@ -6716,8 +6405,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
     let total_updates = updates.len() + flatpak_updates.len() + plasmoid_updates.len();
     let flatpak_update_count = flatpak_updates.len() as i32;
 
-    // Build a display-name map from installed flatpak packages so flatpak updates
-    // show friendly names (e.g. "GNOME Calculator") instead of app IDs.
     let flatpak_name_map: std::collections::HashMap<String, String> = flatpak_packages
         .iter()
         .map(|p| {
@@ -6761,11 +6448,9 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
         })
         .collect();
 
-    // Native updates = pacman + plasmoid updates (no flatpak mixed in)
     let mut native_updates_ui = updates_ui.clone();
     native_updates_ui.extend(plasmoid_updates.clone());
 
-    // Use flatpak CLI for accurate installed count (includes runtimes/extensions the API may miss)
     let flatpak_real_count = std::process::Command::new("flatpak")
         .args(["list", "--system"])
         .output()
@@ -6780,7 +6465,6 @@ async fn load_packages_async(tx: &mpsc::Sender<UiMessage>, check_updates: bool) 
         cache_size: SharedString::from(format_size(cache_size)),
     };
 
-    // Save cache (combined for compatibility)
     let mut all_for_cache = native_updates_ui.clone();
     all_for_cache.extend(flatpak_updates_ui.clone());
     save_package_cache(&installed_ui, &all_for_cache, &flatpak_ui, &stats);
@@ -7004,7 +6688,6 @@ async fn search_packages_async(
     let q = query.to_string();
     let q_lower = q.to_lowercase();
 
-    // Snapshot flatpak data under lock, then release before doing any I/O
     let (store_snapshot, ids_snapshot) = {
         let store = flatpak_store.lock().unwrap();
         let ids = flatpak_ids.lock().unwrap();
@@ -7012,7 +6695,6 @@ async fn search_packages_async(
     };
     let store_is_empty = store_snapshot.is_empty();
 
-    // Run ALPM search and flatpak data loading concurrently
     let alpm_query = q.clone();
     let alpm_future = async move {
         let alpm = AlpmBackend::new().ok()?;
@@ -7081,7 +6763,6 @@ async fn search_packages_async(
         })
         .collect();
 
-    // Sort pacman results by relevance: exact > prefix > name-contains > desc-only
     results.sort_by_key(|p| {
         let name = p.name.to_lowercase();
         if name == q_lower { 0u8 }
@@ -7095,7 +6776,6 @@ async fn search_packages_async(
     let _ = tx.send(UiMessage::SearchResults(results));
 }
 
-// ─── Package cache ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone)]
 struct CachedPkg {
@@ -7192,7 +6872,6 @@ fn load_package_cache() -> Option<PackageCache> {
     let path = pkg_cache_path();
     let content = std::fs::read_to_string(&path).ok()?;
     let cache: PackageCache = serde_json::from_str(&content).ok()?;
-    // Valid if pacman db hasn't changed
     if cache.pacman_db_mtime == pacman_db_mtime() {
         Some(cache)
     } else {
@@ -7200,7 +6879,6 @@ fn load_package_cache() -> Option<PackageCache> {
     }
 }
 
-// ─── Flatpak remote browser ───────────────────────────────────────────────────
 
 fn remote_cache_path(remote: &str) -> std::path::PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -7213,7 +6891,7 @@ fn remote_cache_valid(path: &std::path::Path) -> bool {
             let age = std::time::SystemTime::now()
                 .duration_since(modified)
                 .unwrap_or(std::time::Duration::MAX);
-            return age.as_secs() < 86400; // 24h
+            return age.as_secs() < 86400;
         }
     }
     false
@@ -7260,8 +6938,6 @@ fn fetch_flatpak_remotes() -> Vec<String> {
 }
 
 fn get_flatpak_installed_ids() -> std::collections::HashSet<String> {
-    // No --app flag: include apps AND extensions/plugins so add-on installed
-    // state is detected correctly (e.g. com.obsproject.Studio.Plugin.GStreamer).
     match std::process::Command::new("flatpak")
         .args(["list", "--columns=application"])
         .output()
@@ -7277,7 +6953,6 @@ fn get_flatpak_installed_ids() -> std::collections::HashSet<String> {
 
 /// Strip residual HTML tags (e.g. &lt;em&gt; unescaped to <em>) from description text.
 fn strip_inline_tags(text: &str) -> String {
-    // Strip any residual HTML tags (e.g. <em>, <strong>)
     let mut out = String::with_capacity(text.len());
     let mut in_tag = false;
     for c in text.chars() {
@@ -7288,8 +6963,6 @@ fn strip_inline_tags(text: &str) -> String {
             _ => {}
         }
     }
-    // Collapse runs of 3+ newlines down to 2 (one blank line), but preserve
-    // the single blank lines that separate paragraphs.
     let mut result = String::new();
     let mut blank_run = 0usize;
     for line in out.split('\n') {
@@ -7297,9 +6970,8 @@ fn strip_inline_tags(text: &str) -> String {
         if t.is_empty() {
             blank_run += 1;
             if blank_run == 1 {
-                result.push('\n'); // allow one blank line
+                result.push('\n');
             }
-            // suppress further blanks (blank_run > 1)
         } else {
             blank_run = 0;
             result.push_str(t);
@@ -7369,7 +7041,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
     let mut current: Option<State> = None;
     let mut apps: Vec<CachedRemoteApp> = Vec::new();
 
-    // Boolean context flags
     let mut in_component = false;
     let mut in_id = false;
     let mut in_name = false;
@@ -7429,13 +7100,11 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         in_id = true;
                     }
                     b"name" if in_component && !in_developer && !in_description && !in_categories => {
-                        // Skip translated names - only accept the unlocalized default (English)
                         let has_lang = e.attributes().flatten()
                             .any(|a| a.key.as_ref() == b"xml:lang");
                         if !has_lang { in_name = true; }
                     }
                     b"summary" if in_component && !in_developer && !in_description => {
-                        // Skip translated summaries - only accept the unlocalized default (English)
                         let has_lang = e.attributes().flatten()
                             .any(|a| a.key.as_ref() == b"xml:lang");
                         if !has_lang { in_summary = true; }
@@ -7511,7 +7180,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         }
                     }
                     b"icon" if in_component && !in_screenshots && !in_description => {
-                        // Parse cached icon at 128px: <icon type="cached" width="128">filename.png</icon>
                         let mut is_cached = false;
                         let mut is_128 = false;
                         for attr in e.attributes().flatten() {
@@ -7522,18 +7190,13 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                             }
                         }
                         if is_cached && is_128 {
-                            // icon text content parsed in Text event
                             if let Some(ref mut s) = current {
-                                // Mark that we want the next text as icon_name
-                                // Use a flag - reuse in_extends pattern
-                                let _ = s; // will read in Text event via separate flag
+                                let _ = s;
                             }
-                            // Use a dedicated flag (add below)
                             in_icon = true;
                         }
                     }
                     b"li" if in_description => {
-                        // Add bullet prefix before each list item
                         if let Some(ref mut state) = current {
                             if !state.description.is_empty() && !state.description.ends_with('\n') {
                                 state.description.push('\n');
@@ -7555,7 +7218,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         in_component = false;
                         if let Some(state) = current.take() {
                             if !state.app_id.is_empty() {
-                                // Prefer CDN thumbnail, fall back to source URL
                                 let ss_url = if !state.screenshot_url.is_empty() {
                                     state.screenshot_url
                                 } else {
@@ -7623,7 +7285,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                     b"ul" | b"ol" if in_release_desc => { release_desc_depth -= 1; }
                     _ if in_release_desc => { release_desc_depth -= 1; }
                     b"p" if in_description => {
-                        // Double newline = blank line between paragraphs
                         if let Some(ref mut state) = current {
                             if !state.description.is_empty() {
                                 if !state.description.ends_with('\n') {
@@ -7635,7 +7296,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         desc_depth -= 1;
                     }
                     b"li" if in_description => {
-                        // Single newline after each bullet item
                         if let Some(ref mut state) = current {
                             if !state.description.ends_with('\n') {
                                 state.description.push('\n');
@@ -7644,7 +7304,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                         desc_depth -= 1;
                     }
                     b"ul" | b"ol" if in_description => {
-                        // Extra blank line after the whole list
                         if let Some(ref mut state) = current {
                             if !state.description.ends_with("\n\n") {
                                 if !state.description.ends_with('\n') {
@@ -7665,8 +7324,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                     Err(_) => continue,
                 };
                 if let Some(ref mut state) = current {
-                    // Only the component's own <id> (first one) counts. Later <id>
-                    // tags inside <provides> (e.g. "gimp.desktop") must not clobber it.
                     if in_id && state.app_id.is_empty() { state.app_id = text.trim().to_string(); }
                     else if in_extends && state.extends.is_empty() { state.extends = text.trim().to_string(); }
                     else if in_name && state.name.is_empty() { state.name = text.trim().to_string(); }
@@ -7714,7 +7371,6 @@ fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
                             && state.screenshot_url.is_empty()
                             && url.contains("624x351")
                         {
-                            // Prefer Flathub CDN 624x351 thumbnail
                             state.screenshot_url = url;
                         } else if cur_image_type == "source"
                             && state.screenshot_source_url.is_empty()
@@ -7744,10 +7400,8 @@ fn fetch_remote_apps_cached(remote: &str) -> Vec<CachedRemoteApp> {
         }
     }
 
-    // Parse appstream XML
     let apps = parse_appstream_xml(remote);
 
-    // Save cache
     if !apps.is_empty() {
         if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
         if let Ok(json) = serde_json::to_string(&apps) {
@@ -7765,7 +7419,6 @@ fn apps_to_package_data(
     category_filter: &str,
     search: &str,
 ) -> Vec<PackageData> {
-    // Pre-compute which app IDs have add-ons (any app whose `extends` points to them)
     let has_addons: std::collections::HashSet<&str> = apps.iter()
         .filter(|a| !a.extends.is_empty())
         .map(|a| a.extends.as_str())
@@ -7774,12 +7427,10 @@ fn apps_to_package_data(
     let search_lower = search.to_lowercase();
     apps.iter()
         .filter(|app| {
-            // Category filter
             if !category_filter.is_empty() && category_filter != "All"
                 && !app.categories.iter().any(|c| c == category_filter) {
                     return false;
                 }
-            // Search filter
             if !search_lower.is_empty() {
                 let name_lower = app.name.to_lowercase();
                 let id_lower = app.app_id.to_lowercase();
@@ -7794,20 +7445,17 @@ fn apps_to_package_data(
             true
         })
         .map(|app| {
-            // Icon path from local appstream cache
             let icon_path = if !app.icon_name.is_empty() {
                 format!("/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/{}", app.icon_name)
             } else {
                 String::new()
             };
-            // First letter uppercase for avatar
             let initial = app.name.chars()
                 .next()
                 .or_else(|| app.app_id.chars().next())
                 .map(|c| c.to_uppercase().next().unwrap_or(c))
                 .map(|c| c.to_string())
                 .unwrap_or_default();
-            // Primary category for avatar color
             let primary_cat = app.categories.first().cloned().unwrap_or_default();
             PackageData {
                 name: SharedString::from(app.app_id.as_str()),
@@ -7818,13 +7466,13 @@ fn apps_to_package_data(
                 backend: 1,
                 installed: installed_ids.contains(&app.app_id),
                 has_update: false,
-                installed_size: SharedString::from(primary_cat.as_str()),  // category for avatar color
-                licenses: SharedString::from(icon_path.as_str()),          // icon file path
+                installed_size: SharedString::from(primary_cat.as_str()),
+                licenses: SharedString::from(icon_path.as_str()),
                 url: SharedString::from(app.screenshot_url.as_str()),
                 dependencies: SharedString::from(app.developer.as_str()),
-                required_by: SharedString::from(initial.as_str()),         // first letter for avatar
+                required_by: SharedString::from(initial.as_str()),
                 selected: false,
-                explicit: has_addons.contains(app.app_id.as_str()),        // true = app has add-ons
+                explicit: has_addons.contains(app.app_id.as_str()),
             }
         })
         .collect()
@@ -7836,7 +7484,6 @@ fn load_remote_apps(remote: &str) -> (Vec<CachedRemoteApp>, std::collections::Ha
     (apps, installed)
 }
 
-// ─── Pacman repo browser ──────────────────────────────────────────────────────
 
 fn load_pacman_repos() -> Vec<String> {
     let out = std::process::Command::new("pacman")

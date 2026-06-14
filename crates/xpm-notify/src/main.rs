@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::thread;
 
 const DEFAULT_INTERVAL_MINS: u64 = 30;
-const INITIAL_DELAY_SECS: u64 = 60; // wait 1 min after login before first check
+const INITIAL_DELAY_SECS: u64 = 60;
 
 fn config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -14,7 +14,6 @@ fn config_path() -> PathBuf {
 fn load_interval_minutes() -> u64 {
     let path = config_path();
     if let Ok(content) = std::fs::read_to_string(&path) {
-        // Simple key extraction — no serde dep needed
         if let Some(pos) = content.find("\"notify_interval_minutes\"") {
             let after = &content[pos + "\"notify_interval_minutes\"".len()..];
             if let Some(colon) = after.find(':') {
@@ -44,7 +43,6 @@ fn pidfile_path() -> PathBuf {
 fn is_already_running(pidfile: &Path) -> bool {
     if let Ok(content) = std::fs::read_to_string(pidfile) {
         if let Ok(pid) = content.trim().parse::<u32>() {
-            // On Linux, /proc/<pid> exists only if the process is alive
             if Path::new(&format!("/proc/{}", pid)).exists() {
                 return true;
             }
@@ -66,7 +64,6 @@ fn remove_pidfile(pidfile: &Path) {
 
 fn check_updates() -> Vec<String> {
     let output = Command::new("checkupdates").output().unwrap_or_else(|_| {
-        // fallback: pacman -Qu (requires sudo for db sync, skip)
         std::process::Output {
             status: std::process::ExitStatus::default(),
             stdout: vec![],
@@ -74,7 +71,6 @@ fn check_updates() -> Vec<String> {
         }
     });
 
-    // checkupdates exits 0 with updates, 2 with no updates, 1 on error
     if output.stdout.is_empty() {
         return Vec::new();
     }
@@ -133,7 +129,6 @@ fn send_notification(pacman_count: usize, flatpak_count: usize) {
 }
 
 fn open_xpackagemanager() {
-    // Try to find the binary next to this daemon
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()));
@@ -146,7 +141,6 @@ fn open_xpackagemanager() {
         }
     }
 
-    // Fallback: search PATH
     let _ = Command::new("xpackagemanager").spawn();
 }
 
@@ -160,14 +154,11 @@ fn main() {
 
     write_pidfile(&pidfile);
 
-    // Register cleanup on SIGTERM/SIGINT via atexit-style approach
-    // We re-check the pidfile path in a drop guard
     let pidfile_clone = pidfile.clone();
     let _guard = PidGuard(pidfile_clone);
 
     eprintln!("xpm-notify: started (PID {})", std::process::id());
 
-    // Initial delay — give the system time to settle after login
     thread::sleep(Duration::from_secs(INITIAL_DELAY_SECS));
 
     loop {

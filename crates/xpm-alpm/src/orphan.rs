@@ -7,7 +7,6 @@ impl OrphanDetector {
         Self
     }
 
-    // pkg is orphan if it was a dep but nothing needs it anymore
     pub fn is_orphan(&self, pkg: &Package) -> bool {
         if pkg.reason() != PackageReason::Depend {
             return false;

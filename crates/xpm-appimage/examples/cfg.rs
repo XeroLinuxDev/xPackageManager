@@ -1,4 +1,3 @@
-// mimic the UI AppConfig subset to test serde tolerance
 use serde::Deserialize;
 #[derive(Deserialize,Debug,Default)]
 #[serde(default)]

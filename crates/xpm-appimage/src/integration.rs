@@ -37,13 +37,9 @@ pub fn integrate(appimage_path: &Path, name: &str, fallback_display: &str) -> In
         return result;
     }
 
-    // Full extraction into <temp>/squashfs-root. Required because the root-level
-    // .desktop and .DirIcon are usually symlinks into usr/share/*, so a targeted
-    // extract would only grab dangling links.
     extract_all(appimage_path, &temp);
     let root = temp.join("squashfs-root");
 
-    // Desktop: parse the bundled entry for Name/Icon/Categories first.
     let mut icon_name: Option<String> = None;
     let mut categories = "Utility;".to_string();
     if let Some(desktop_src) = find_desktop(&root) {
@@ -61,7 +57,6 @@ pub fn integrate(appimage_path: &Path, name: &str, fallback_display: &str) -> In
         }
     }
 
-    // Icon: resolve .DirIcon, else search the icon theme by the desktop Icon name.
     if let Some(icon_dest) = copy_icon(&root, name, icon_name.as_deref()) {
         result.icon_path = Some(icon_dest);
     }
@@ -102,7 +97,7 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>, depth: u32) {
     for e in entries.flatten() {
         let p = e.path();
         let meta = match std::fs::metadata(&p) {
-            Ok(m) => m, // follows symlinks; broken links error out and are skipped
+            Ok(m) => m,
             Err(_) => continue,
         };
         if meta.is_dir() {
@@ -118,7 +113,6 @@ fn find_desktop(root: &Path) -> Option<PathBuf> {
     if let Ok(entries) = std::fs::read_dir(root) {
         for e in entries.flatten() {
             let p = e.path();
-            // read_dir on a symlinked .desktop still has a .desktop extension.
             if p.extension().map(|x| x == "desktop").unwrap_or(false)
                 && std::fs::metadata(&p).map(|m| m.is_file()).unwrap_or(false)
             {
@@ -159,7 +153,6 @@ fn copy_icon(root: &Path, name: &str, icon_name: Option<&str>) -> Option<String>
 }
 
 fn find_icon_source(root: &Path, icon_name: Option<&str>) -> Option<PathBuf> {
-    // 1) .DirIcon resolved to a real file.
     let diricon = root.join(".DirIcon");
     if let Ok(real) = std::fs::canonicalize(&diricon) {
         if real.is_file() {
@@ -167,7 +160,6 @@ fn find_icon_source(root: &Path, icon_name: Option<&str>) -> Option<PathBuf> {
         }
     }
 
-    // Gather candidate raster/vector icons under the icon tree (+ root).
     let mut files = Vec::new();
     collect_files(&root.join("usr/share/icons"), &mut files, 0);
     if let Ok(entries) = std::fs::read_dir(root) {
@@ -185,7 +177,6 @@ fn find_icon_source(root: &Path, icon_name: Option<&str>) -> Option<PathBuf> {
         )
     };
 
-    // Score by: matches desktop Icon name, then size hint in path, then svg.
     let size_hint = |p: &Path| -> i64 {
         let s = p.to_string_lossy();
         for n in ["512", "256", "192", "128", "96", "64", "48"] {

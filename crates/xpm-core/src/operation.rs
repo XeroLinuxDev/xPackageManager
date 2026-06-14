@@ -179,7 +179,6 @@ impl OperationProgress {
         }
     }
 
-    // avoid divide by zero when theres nothing to download
     pub fn download_percent(&self) -> u8 {
         if self.total_bytes == 0 {
             return 100;

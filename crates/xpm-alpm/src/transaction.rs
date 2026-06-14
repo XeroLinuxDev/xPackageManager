@@ -5,7 +5,6 @@ use xpm_core::{
     source::ProgressCallback,
 };
 
-// stub - needs root privs to actually do anything
 pub struct TransactionHandler;
 
 impl TransactionHandler {

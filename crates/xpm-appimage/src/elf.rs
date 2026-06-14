@@ -36,12 +36,10 @@ pub fn read_upd_info(path: &Path) -> Option<String> {
 
     let mut ident = [0u8; 16];
     f.read_exact(&mut ident).ok()?;
-    // Magic 0x7f 'E' 'L' 'F', class 2 (64-bit), data 1 (little-endian).
     if &ident[0..4] != b"\x7fELF" || ident[4] != 2 || ident[5] != 1 {
         return None;
     }
 
-    // ELF64 header offsets.
     let e_shoff = read_u64(&mut f, 0x28)?;
     let e_shentsize = read_u16(&mut f, 0x3a)? as u64;
     let e_shnum = read_u16(&mut f, 0x3c)? as u64;
@@ -50,7 +48,6 @@ pub fn read_upd_info(path: &Path) -> Option<String> {
         return None;
     }
 
-    // Section header string table: locate via the shstrndx section header.
     let shstr_hdr = e_shoff + e_shstrndx * e_shentsize;
     let shstr_off = read_u64(&mut f, shstr_hdr + 0x18)?;
     let shstr_size = read_u64(&mut f, shstr_hdr + 0x20)?;
@@ -64,7 +61,6 @@ pub fn read_upd_info(path: &Path) -> Option<String> {
     for i in 0..e_shnum {
         let hdr = e_shoff + i * e_shentsize;
         let sh_name = read_u32(&mut f, hdr)? as usize;
-        // Read the NUL-terminated name out of the string table.
         let end = strtab[sh_name..].iter().position(|&b| b == 0)
             .map(|p| sh_name + p)
             .unwrap_or(strtab.len());
@@ -81,7 +77,6 @@ pub fn read_upd_info(path: &Path) -> Option<String> {
         f.seek(SeekFrom::Start(sh_offset)).ok()?;
         f.read_exact(&mut buf).ok()?;
 
-        // Trim trailing NUL padding; reject all-zero (placeholder) sections.
         let trimmed: Vec<u8> = buf.into_iter().take_while(|&b| b != 0).collect();
         if trimmed.is_empty() {
             return None;

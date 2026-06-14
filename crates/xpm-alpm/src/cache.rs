@@ -65,7 +65,6 @@ impl CacheManager {
         let mut packages: HashMap<String, Vec<(PathBuf, std::time::SystemTime)>> = HashMap::new();
         let mut freed = 0u64;
 
-        // group pkg files by name so we can prune old versions
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -109,7 +108,6 @@ impl CacheManager {
         Ok(freed)
     }
 
-    // parse name from filename, format is name-ver-rel-arch.pkg.tar.zst
     fn parse_package_name(filename: &str) -> Option<String> {
         if !filename.contains(".pkg.tar") {
             return None;

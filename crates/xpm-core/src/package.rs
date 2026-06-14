@@ -49,7 +49,6 @@ impl PartialOrd for Version {
 
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        // epoch always wins
         match (self.epoch, other.epoch) {
             (Some(a), Some(b)) => match a.cmp(&b) {
                 Ordering::Equal => {}
@@ -69,7 +68,6 @@ impl Ord for Version {
     }
 }
 
-// pacman-style version comparision logic
 fn vercmp(a: &str, b: &str) -> Ordering {
     let mut a_chars = a.chars().peekable();
     let mut b_chars = b.chars().peekable();

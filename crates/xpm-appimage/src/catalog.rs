@@ -33,7 +33,7 @@ fn sanitize_description(raw: &str) -> String {
             '<' => in_tag = true,
             '>' => {
                 in_tag = false;
-                out.push(' '); // tag boundary => space, avoids word-joining
+                out.push(' ');
             }
             _ if in_tag => {}
             '\n' | '\r' | '\t' => out.push(' '),
@@ -47,9 +47,7 @@ fn sanitize_description(raw: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
         .replace("&apos;", "'");
-    // Collapse runs of whitespace.
     let collapsed = out.split_whitespace().collect::<Vec<_>>().join(" ");
-    // Cap to keep rows tidy.
     const MAX: usize = 160;
     if collapsed.chars().count() > MAX {
         let truncated: String = collapsed.chars().take(MAX).collect();
@@ -99,7 +97,6 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
         cmd.args(["-H", &format!("Accept: {}", a)]);
     }
     cmd.args(["-H", "User-Agent: xPackageManager"]);
-    // Authenticate GitHub API calls when a token is configured (5000/hr vs 60/hr).
     let authed = if is_github_api(url) {
         if let Some(tok) = github_token() {
             cmd.args(["-H", &format!("Authorization: Bearer {}", tok)]);
@@ -225,7 +222,6 @@ fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
             _ => continue,
         };
 
-        // First GitHub "owner/repo" link.
         let github = item
             .get("links")
             .and_then(|v| v.as_array())
@@ -300,9 +296,6 @@ pub fn resolve_download(github: &str) -> Result<String> {
             github
         )));
     }
-    // Drop non-x86_64 builds so a repo that ships ARM/32-bit assets alongside (or
-    // before) the desktop build doesn't get the wrong binary. (Same exclusion list
-    // AM uses.) If everything gets filtered out, fall back to the full set.
     let is_other_arch = |n: &str| {
         let l = n.to_lowercase();
         ["i386", "i686", "aarch64", "arm64", "armv7l", "armhf"]
@@ -318,7 +311,6 @@ pub fn resolve_download(github: &str) -> Result<String> {
             kept
         }
     };
-    // Prefer an explicit 64-bit desktop tag within the surviving pool.
     let preferred = pool.iter().find(|(n, _)| {
         let l = n.to_lowercase();
         l.contains("x86_64") || l.contains("amd64") || l.contains("x86-64")

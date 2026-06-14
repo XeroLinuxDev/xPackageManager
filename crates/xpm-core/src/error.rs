@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-// covers basically every way a package op can go wrong
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Package not found: {0}")]

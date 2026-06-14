@@ -18,7 +18,6 @@ export struct PackageData {
     explicit: bool,
 }
 
-// Catalog row for AppImages - carries a runtime-loaded icon image.
 export struct AppImageCard {
     github: string,
     name: string,
@@ -33,7 +32,6 @@ export struct AppImageCard {
 
 export struct AppImageSource { name: string, url: string }
 
-// Installed AppImage row - carries the locally-stored icon image.
 export struct AppImageInstalled {
     id: string,
     name: string,
@@ -134,27 +132,21 @@ export struct FwupdDevice {
 }
 
 export global Cat {
-    // Core backgrounds - all derived from Palette.background (reliable on all systems)
-    // Palette.control-background is NOT used - it returns light colors on some Qt configs
     out property <color> base: Palette.background;
     out property <color> mantle: Palette.background.darker(0.06);
     out property <color> crust: Palette.background.darker(0.14);
-    // Surfaces - stepped brightness from base
     out property <color> surface0: Palette.background.brighter(0.08);
     out property <color> surface1: Palette.background.brighter(0.16);
     out property <color> surface2: Palette.background.brighter(0.26);
-    // Text / overlays
     out property <color> overlay0: Palette.foreground.with-alpha(0.38);
     out property <color> overlay1: Palette.foreground.with-alpha(0.55);
     out property <color> overlay2: Palette.foreground.with-alpha(0.7);
     out property <color> subtext0: Palette.foreground.with-alpha(0.8);
     out property <color> subtext1: Palette.foreground.with-alpha(0.9);
     out property <color> text: Palette.foreground;
-    // Accent - purple
     out property <color> mauve: #c6a0f6;
     out property <color> blue: #8aadf4;
     out property <color> lavender: #b7bdf8;
-    // Semantic colors - keep consistent across themes
     out property <color> red: #e06c75;
     out property <color> green: #98c379;
     out property <color> yellow: #e5c07b;
@@ -167,7 +159,6 @@ export global Cat {
     out property <color> sky: #56b6c2;
     out property <color> maroon: #be5046;
 
-    // Font scale - multiplied into every font-size across the app
     in-out property <float> font-scale: 1.0;
     out property <length> fs9:  9px  * font-scale;
     out property <length> fs10: 10px * font-scale;
@@ -189,8 +180,6 @@ global NavTooltip {
     in-out property <length> y: 0px;
 }
 
-// Filled amber warning badge (rounded triangle + bold "!"). Color-emoji isn't
-// rendered by the femtovg backend, so we draw it for a crisp, consistent look.
 component WarnBadge inherits Rectangle {
     in property <length> size: 18px;
     in property <color> fill: #f5a623;
@@ -203,7 +192,6 @@ component WarnBadge inherits Rectangle {
         viewbox-y: 0;
         viewbox-width: 24;
         viewbox-height: 24;
-        // Rounded-corner triangle.
         commands: "M10.3 3.2 a2 2 0 0 1 3.4 0 L23 19.5 a2 2 0 0 1 -1.7 3 H2.7 a2 2 0 0 1 -1.7 -3 Z";
         fill: root.fill;
     }
@@ -272,21 +260,15 @@ component Btn inherits Rectangle {
     }
 }
 
-// Animated loading indicator - a ring of dots with a "comet" brightness tail
-// that sweeps around continuously (driven by animation-tick(); no geometry
-// rotation since Rectangle can't rotate). Replaces the stock Spinner so loading
-// looks consistent everywhere. Scales to `diameter`.
 component LoadingCircle inherits Rectangle {
     in property <length> diameter: 28px;
     in property <color> dot-color: Cat.mauve;
     width: diameter;
     height: diameter;
 
-    // Moving head position around the 8-dot ring (~1 rev/sec).
     property <float> phase: mod(animation-tick() / 125ms, 8.0);
 
     for i in 8: Rectangle {
-        // Circular distance behind the head → fades the tail.
         property <float> rel: mod(i - root.phase + 8.0, 8.0);
         property <angle> a: (i / 8.0) * 360deg;
         width: root.diameter * 0.17;
@@ -557,7 +539,6 @@ component PackageRow inherits Rectangle {
     }
 }
 
-// Avatar color based on primary category (stored in installed-size field for flatpak)
 component AppAvatar inherits Rectangle {
     in property <string> initial;
     in property <string> category;
@@ -633,7 +614,6 @@ component RepoRow inherits Rectangle {
     background: pkg.selected ? Cat.mauve.with-alpha(0.07) : (row-touch.has-hover ? Cat.surface0.with-alpha(0.3) : transparent);
     animate background { duration: 60ms; }
 
-    // TouchArea first so action buttons sit on top
     row-touch := TouchArea {
         clicked => { if show-checkbox { root.toggle-selected(!pkg.selected); } }
     }
@@ -641,7 +621,6 @@ component RepoRow inherits Rectangle {
     HorizontalLayout {
         padding-left: 14px; padding-right: 12px;
 
-        // Checkbox
         if show-checkbox: VerticalLayout {
             alignment: center;
             CheckBox {
@@ -651,20 +630,17 @@ component RepoRow inherits Rectangle {
             width: 32px;
         }
 
-        // Name + description
         VerticalLayout {
             horizontal-stretch: 1; alignment: center; spacing: 2px;
             Text { text: pkg.display-name; font-size: Cat.fs14; font-weight: 500; color: Cat.text; overflow: elide; }
             if pkg.description != "": Text { text: pkg.description; font-size: Cat.fs14; color: Cat.overlay0; overflow: elide; }
         }
 
-        // Version - 120px
         Rectangle {
             width: 120px;
             Text { text: pkg.version; font-size: Cat.fs15; color: Cat.mauve.with-alpha(0.75); overflow: elide; vertical-alignment: center; horizontal-alignment: right; }
         }
 
-        // Repo badge - 80px
         Rectangle {
             width: 80px;
             Rectangle {
@@ -674,12 +650,10 @@ component RepoRow inherits Rectangle {
             }
         }
 
-        // Action buttons - 235px (Tree + Info + Install/Remove side by side)
         VerticalLayout {
             alignment: center; width: 235px;
             HorizontalLayout {
                 spacing: 6px;
-                // Tree button
                 Rectangle {
                     width: 64px; height: 32px; border-radius: 6px;
                     background: rr-tree-ta.has-hover ? Cat.teal.with-alpha(0.25) : Cat.teal.with-alpha(0.12);
@@ -688,7 +662,6 @@ component RepoRow inherits Rectangle {
                     VerticalLayout { alignment: center; Text { text: @tr("Tree"); font-size: Cat.fs15; font-weight: 600; color: Cat.teal; horizontal-alignment: center; } }
                     rr-tree-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-tree(); } }
                 }
-                // Info button
                 Rectangle {
                     width: 64px; height: 32px; border-radius: 6px;
                     background: rr-info-ta.has-hover ? Cat.blue.with-alpha(0.25) : Cat.blue.with-alpha(0.12);
@@ -697,7 +670,6 @@ component RepoRow inherits Rectangle {
                     VerticalLayout { alignment: center; Text { text: @tr("Info"); font-size: Cat.fs15; font-weight: 600; color: Cat.blue; horizontal-alignment: center; } }
                     rr-info-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-info(); } }
                 }
-                // Install / Remove button
                 if !pkg.installed: Rectangle {
                     width: 90px; height: 32px; border-radius: 6px;
                     background: rr-inst-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.75);
@@ -731,8 +703,6 @@ component SettingsRow inherits Rectangle {
     background: accent.with-alpha(0.07);
     border-width: 1.5px;
     border-color: accent.with-alpha(0.5);
-    // preferred-width 0 → equal horizontal-stretch splits the row exactly in half
-    // regardless of label/subtitle length. clip so long text elides.
     preferred-width: 0px;
     clip: true;
 
@@ -771,8 +741,6 @@ component SettingsRow inherits Rectangle {
     }
 }
 
-// Clickable settings row (chevron) — same footprint/preferred-width as SettingsRow
-// so it lines up in the 2-column grid.
 component SettingsLinkRow inherits Rectangle {
     in property <string> label;
     in property <string> subtitle: "";
@@ -922,8 +890,6 @@ export component MainWindow inherits Window {
     title: @tr("XeroLinux Package Manager GUI");
     preferred-width: 1600px;
     preferred-height: 1000px;
-    // Keep the floor low enough to fit 1366×768 laptops and smaller/scaled
-    // displays - layouts below adapt via the reactive window-width binding.
     min-width: 960px;
     min-height: 600px;
     background: Palette.background;
@@ -933,7 +899,6 @@ export component MainWindow inherits Window {
     in-out property <[PackageData]> update-packages: [];
     in-out property <[PackageData]> flatpak-update-packages: [];
     in-out property <[PackageData]> appimage-update-packages: [];
-    // Combined update count across all 3 formats - drives the sidebar badge + Updates page.
     property <int> total-update-count: update-packages.length + flatpak-update-packages.length + appimage-update-packages.length;
     in-out property <[PackageData]> flatpak-packages: [];
     in-out property <int> selected-index: -1;
@@ -964,7 +929,6 @@ export component MainWindow inherits Window {
     in-out property <int> setting-clean-keep-versions: 3;
     in-out property <bool> setting-notify-on-updates: false;
     in-out property <bool> setting-auto-clean-cache: false;
-    // AppImage
     in-out property <bool> setting-appimage-enabled: false;
     in-out property <string> setting-appimage-dir: "";
     in-out property <string> setting-appimage-github-token: "";
@@ -972,26 +936,24 @@ export component MainWindow inherits Window {
     in-out property <[AppImageCard]> catalog-appimages: [];
     in-out property <string> appimage-url-input: "";
     in-out property <string> appimage-search: "";
-    in-out property <int> appimage-tab: 0; // 0=browse, 1=installed
+    in-out property <int> appimage-tab: 0;
     in-out property <bool> appimage-checking-updates: false;
     in-out property <int> appimage-update-count: 0;
     callback check-appimage-updates;
     callback update-all-appimages;
     in-out property <bool> appimage-catalog-loading: false;
     in-out property <int> appimage-catalog-total: 0;
-    in-out property <int> appimage-page: 0; // 0-based catalog page
+    in-out property <int> appimage-page: 0;
     property <int> appimage-per-page: 50;
     in-out property <[AppImageSource]> appimage-sources: [];
     in-out property <bool> show-appimage-mgr-modal: false;
     in-out property <string> new-appimage-source-name: "";
     in-out property <string> new-appimage-source-url: "";
-    // HoldPkg
     in-out property <bool> holdpkg-active: false;
     in-out property <string> holdpkg-value: "";
     in-out property <string> holdpkg-edit-text: "";
     callback read-holdpkg;
     callback save-holdpkg(bool, string);
-    // Flatpak remotes manager
     in-out property <[FlatpakRemote]> flatpak-mgr-remotes: [];
     in-out property <bool> show-flatpak-remotes-modal: false;
     in-out property <bool> flatpak-mgr-remotes-loading: false;
@@ -1001,11 +963,8 @@ export component MainWindow inherits Window {
     callback add-flatpak-remote(string, string);
     callback remove-flatpak-remote(string);
 
-    // Bound to the live window size so layouts can react to resolution/resizing.
     property <int> window-width: root.width / 1px;
     property <int> window-height: root.height / 1px;
-    // Pixel-equal width for the 2-column Settings grid. Reactive (recomputes from
-    // root.width on resize) and loop-free (doesn't read the ScrollView viewport).
     property <length> settings-col-w: (root.width - sidebar-vl.preferred-width - 80px) / 2;
 
     in-out property <int> selected-count: 0;
@@ -1013,11 +972,10 @@ export component MainWindow inherits Window {
     in-out property <int> selected-uninstalled-count: 0;
     in-out property <bool> multi-select-mode: true;
 
-    // Flatpak remove confirmation dialog
     in-out property <bool> fp-confirm-open: false;
     in-out property <string> fp-confirm-id: "";
     in-out property <string> fp-confirm-name: "";
-    callback remove-flatpak(string, bool);  // (app_id, also_delete_data)
+    callback remove-flatpak(string, bool);
 
     in-out property <bool> show-conflict-dialog: false;
     in-out property <string> conflict-summary: "";
@@ -1044,7 +1002,6 @@ export component MainWindow inherits Window {
     in-out property <bool> show-progress-logs: false;
     in-out property <bool> progress-show-details: false;
     in-out property <bool> progress-popup-show-buttons: false;
-    in-out property <string> progress-popup-eta: "";
     in-out property <[LogLine]> progress-log-lines: [];
     in-out property <string> progress-error-summary: "";
 
@@ -1053,19 +1010,17 @@ export component MainWindow inherits Window {
     in-out property <[PackageData]> search-installed: [];
     in-out property <[PackageData]> search-available: [];
 
-    // Flatpak browser (view 10) - Shelly-ALPM style
     in-out property <[string]> flatpak-remotes: [];
     in-out property <string> selected-remote: "";
     in-out property <[PackageData]> remote-apps: [];
     in-out property <bool> remote-apps-loading: false;
     in-out property <bool> flatpak-store-ready: false;
     in-out property <int> flatpak-total-matches: 0;
-    in-out property <int> flatpak-page: 0; // 0-based store page
+    in-out property <int> flatpak-page: 0;
     property <int> flatpak-per-page: 100;
     in-out property <[string]> flatpak-categories: ["All", "AudioVideo", "Development", "Education", "Game", "Graphics", "Network", "Office", "Science", "System", "Utility"];
     in-out property <string> selected-flatpak-category: "All";
     in-out property <string> flatpak-search: "";
-    // Detail panel
     in-out property <bool> show-flatpak-detail: false;
     in-out property <string> flatpak-detail-name: "";
     in-out property <string> flatpak-detail-summary: "";
@@ -1083,25 +1038,23 @@ export component MainWindow inherits Window {
     in-out property <string> current-flatpak-id: "";
     in-out property <image> flatpak-screenshot;
     in-out property <image> flatpak-detail-icon;
-    // Add-Ons modal - split into two clean arrays so sections are trivial
-    in-out property <[PackageData]> flatpak-addons: [];           // NOT installed
-    in-out property <[PackageData]> flatpak-addons-installed: []; // already installed
+    in-out property <[PackageData]> flatpak-addons: [];
+    in-out property <[PackageData]> flatpak-addons-installed: [];
     in-out property <[AppRow]> flatpak-app-rows: [];
     in-out property <bool> show-addons-modal: false;
-    in-out property <int> flatpak-addons-installed-count: 0;      // = flatpak-addons-installed.length
+    in-out property <int> flatpak-addons-installed-count: 0;
     in-out property <int> flatpak-update-count: 0;
-    // Derived: native (pacman) update count = total updates minus flatpak updates
     property <int> native-update-count: update-packages.length - flatpak-update-count;
-    in-out property <[bool]> addon-selected: [];   // parallel bool, one per flatpak-addons entry
+    in-out property <[bool]> addon-selected: [];
     in-out property <int> addon-selected-count: 0;
     callback batch-flatpak-install;
     callback batch-flatpak-remove;
     callback install-selected-addons;
-    callback remove-addon(string);         // uninstall a single installed add-on by id
+    callback remove-addon(string);
     callback toggle-addon-selected(int);
     callback addon-select-all(bool);
     callback toggle-flatpak-selected(string, bool);
-    in-out property <int> flatpak-tab: 0; // 0=browse, 1=installed
+    in-out property <int> flatpak-tab: 0;
     in-out property <[PackageData]> installed-flatpaks: [];
     in-out property <string> installed-flatpak-filter: "";
     callback load-installed-flatpaks;
@@ -1110,14 +1063,13 @@ export component MainWindow inherits Window {
     callback load-installed-grouped;
     in-out property <string> installed-grouped-filter: "";
     callback filter-installed-grouped(string);
-    in-out property <int> installed-explicit-filter: 0; // 0=all, 1=explicit, 2=deps
+    in-out property <int> installed-explicit-filter: 0;
     callback apply-explicit-filter(int);
     in-out property <bool> installed-grouped-all-loaded: false;
     callback load-all-installed-grouped;
-    in-out property <int> repos-view: 0; // 0=browse, 1=installed
+    in-out property <int> repos-view: 0;
     callback downgrade-package(string);
 
-    // Dependency tree (view 12)
     in-out property <string> dep-tree-pkg: "";
     in-out property <string> dep-tree-root-version: "";
     in-out property <[DepNode]> dep-tree-nodes: [];
@@ -1126,7 +1078,6 @@ export component MainWindow inherits Window {
     in-out property <int> dep-tree-tab: 0;
     callback load-dep-tree(string);
 
-    // Package info modal
     in-out property <bool> pkg-info-open: false;
     in-out property <string> pkg-info-name: "";
     in-out property <string> pkg-info-subtitle: "Installed files";
@@ -1135,13 +1086,12 @@ export component MainWindow inherits Window {
     callback load-pkg-info(string);
     callback load-flatpak-info(string);
 
-    // Repos browser (view 7/8)
     in-out property <[string]> pacman-repos: [];
     in-out property <string> selected-repo: "";
     in-out property <[PackageData]> repo-packages: [];
     in-out property <bool> repo-loading: false;
     in-out property <int> repo-total-matches: 0;
-    in-out property <int> repo-page: 0; // 0-based browse page
+    in-out property <int> repo-page: 0;
     property <int> repo-per-page: 100;
     in-out property <bool> show-repo-detail: false;
     in-out property <PackageData> repo-detail-pkg;
@@ -1162,7 +1112,6 @@ export component MainWindow inherits Window {
     callback open-url(string);
     callback install-local-package(string);
     callback cancel-local-install;
-    // AppImage
     callback load-installed-appimages;
     callback install-appimage-file;
     callback install-appimage-url(string);
@@ -1170,8 +1119,8 @@ export component MainWindow inherits Window {
     callback update-appimage(string);
     callback reinstall-appimage(string);
     callback load-appimage-catalog;
-    callback reload-appimage-catalog; // force-refresh catalog from remote
-    callback filter-appimage-catalog(string, int); // query, page
+    callback reload-appimage-catalog;
+    callback filter-appimage-catalog(string, int);
     callback install-appimage-catalog(string);
     callback load-appimage-icon(string);
     callback change-appimage-dir;
@@ -1229,14 +1178,11 @@ export component MainWindow inherits Window {
     callback remove-orphans;
     callback export-package-list;
     callback import-package-list;
-    // DB lock
     in-out property <bool> show-unlock-db-confirm: false;
     callback unlock-db;
-    // Distro warning
     in-out property <bool> show-distro-warning: false;
     in-out property <bool> distro-warning-dismissed: false;
     callback distro-warning-dismiss();
-    // IgnorePkg
     in-out property <bool> ignorepkg-active: false;
     in-out property <string> ignorepkg-value: "";
     in-out property <string> ignorepkg-edit-text: "";
@@ -1251,7 +1197,6 @@ export component MainWindow inherits Window {
     in-out property <bool> arch-news-loading: false;
     callback refresh-arch-news;
 
-    // Repo Manager
     in-out property <[RepoEntry]> repo-mgr-list: [];
     in-out property <[bool]> repo-mgr-enabled: [];
     in-out property <bool> repo-mgr-loading: false;
@@ -1281,7 +1226,6 @@ export component MainWindow inherits Window {
     callback load-pacman-opts;
     callback save-pacman-opts;
 
-    // Firmware updates (fwupd)
     in-out property <[FwupdDevice]> firmware-devices: [];
     in-out property <bool> firmware-detecting: false;
     in-out property <bool> firmware-refreshing: false;
@@ -1296,7 +1240,7 @@ export component MainWindow inherits Window {
     callback refresh-firmware-db;
     callback check-firmware-updates;
     callback apply-firmware-updates;
-    callback update-device(/* device-id */ string);
+    callback update-device( string);
 
     property <string> icon-home: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10";
     property <string> icon-grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z";
@@ -1330,8 +1274,6 @@ export component MainWindow inherits Window {
     property <string> icon-trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6";
 
 
-    // Forces ScrollView viewport-y bindings to re-evaluate while output is live.
-    // Without this, Slint may not re-evaluate the binding when text grows.
     property <int> _scroll-tick: 0;
     Timer {
         interval: 80ms;
@@ -1494,7 +1436,6 @@ export component MainWindow inherits Window {
             }
 
             sync-btn := Rectangle {
-                // "checking" = manual sync (busy) OR startup/refresh package load (loading)
                 property <bool> checking: busy || loading;
                 height: 31px;
                 border-radius: 8px;
@@ -1564,7 +1505,6 @@ export component MainWindow inherits Window {
         height: parent.height;
         clip: true;
 
-        // ── Font size control - Home view only ─────────────────────────────
         Rectangle {
             visible: view == 9;
             x: parent.width - self.width - 10px;
@@ -1580,7 +1520,6 @@ export component MainWindow inherits Window {
             HorizontalLayout {
                 padding: 0px; spacing: 0px;
 
-                // A- button
                 Rectangle {
                     width: 26px; height: 26px; border-radius: 6px;
                     background: fs-dec-ta.has-hover ? Cat.surface1 : transparent;
@@ -1599,7 +1538,6 @@ export component MainWindow inherits Window {
 
                 Rectangle { width: 1px; height: 14px; y: 6px; background: Cat.surface1; }
 
-                // Scale indicator
                 Rectangle {
                     width: 28px; height: 26px;
                     Text {
@@ -1619,7 +1557,6 @@ export component MainWindow inherits Window {
 
                 Rectangle { width: 1px; height: 14px; y: 6px; background: Cat.surface1; }
 
-                // A+ button
                 Rectangle {
                     width: 26px; height: 26px; border-radius: 6px;
                     background: fs-inc-ta.has-hover ? Cat.surface1 : transparent;
@@ -1720,11 +1657,9 @@ export component MainWindow inherits Window {
 
             if view != 11 && view != 12 && view != 15: Rectangle { height: 1px; background: Cat.surface0; opacity: 0.6; }
 
-            // ── Pinned search bars for Native Packages (view 0) ─────────────
             if view == 0: VerticalLayout {
                 spacing: 0px;
 
-                // Bar 1: Filter installed (instant client-side)
                 Rectangle {
                     height: 62px;
                     background: transparent;
@@ -1802,7 +1737,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Bar 2: Search all packages in repos
                 Rectangle {
                     height: 62px;
                     background: transparent;
@@ -1885,7 +1819,6 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Search results empty state (view 2)
             if !loading && view == 2 && search-installed.length == 0 && search-available.length == 0: VerticalLayout {
                 vertical-stretch: 1;
                 alignment: center;
@@ -1907,7 +1840,6 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Loading skeleton for view 0 / 1
             if loading && (view == 0 || view == 1): VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 1px;
@@ -1931,7 +1863,6 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Empty state for view 0/1 (not loading, no results)
             if !loading && (view == 0 || view == 1) && get-list().length == 0: VerticalLayout {
                 vertical-stretch: 1;
                 alignment: center;
@@ -1953,7 +1884,6 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Installed packages (view 0) - paginated
             if !loading && view == 0 && installed-packages.length > 0: VerticalLayout {
                 vertical-stretch: 1;
 
@@ -1976,14 +1906,12 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Updates (view 1) - three sections: Native + Flatpaks + AppImages
             if !loading && view == 1 && total-update-count > 0: ScrollView {
                 vertical-stretch: 1;
                 VerticalLayout {
                     alignment: start;
                     spacing: 0px;
 
-                    // ── Native section ─────────────────────────────────────────
                     if update-packages.length > 0: Rectangle {
                         height: 29px;
                         background: Cat.surface0.with-alpha(0.4);
@@ -2011,7 +1939,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Flatpak section ────────────────────────────────────────
                     if flatpak-update-packages.length > 0: Rectangle {
                         height: 29px;
                         background: Cat.surface0.with-alpha(0.4);
@@ -2039,7 +1966,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── AppImage section ───────────────────────────────────────
                     if appimage-update-packages.length > 0: Rectangle {
                         height: 29px;
                         background: Cat.surface0.with-alpha(0.4);
@@ -2074,12 +2000,10 @@ export component MainWindow inherits Window {
                 Text { text: @tr("System is up to date"); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
             }
 
-            // Flatpaks (view 10) - flat list with pill search + multi-select + detail
             if view == 10: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 0;
 
-                // ── Tab strip: Browse | Installed ─────────────────────────────
                 Rectangle {
                     height: 40px;
                     background: transparent;
@@ -2151,12 +2075,10 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Browse tab ────────────────────────────────────────────────
                 if flatpak-tab == 0: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                // ── Search bar ────────────────────────────────────────────
                 Rectangle {
                     height: 62px;
                     background: transparent;
@@ -2228,7 +2150,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Category pills - centered ───────────────────────────────────────
                 Rectangle {
                     height: 40px;
 
@@ -2251,7 +2172,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Add-ons info pill ────────────────────────────────────────────────
                 if !show-flatpak-detail: HorizontalLayout {
                     height: 34px;
                     alignment: center;
@@ -2283,13 +2203,11 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Loading - geeky terminal card ───────────────────────────────────
                 if remote-apps-loading || !flatpak-store-ready: VerticalLayout {
                     vertical-stretch: 1;
                     alignment: center;
                     spacing: 0;
 
-                    // Centre the card
                     HorizontalLayout {
                         alignment: center;
 
@@ -2305,7 +2223,6 @@ export component MainWindow inherits Window {
                                 padding: 20px;
                                 spacing: 14px;
 
-                                // Title bar dots
                                 HorizontalLayout {
                                     spacing: 6px;
                                     Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Cat.red.with-alpha(0.7); }
@@ -2315,7 +2232,6 @@ export component MainWindow inherits Window {
                                     Text { text: "appstream.xml"; font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
                                 }
 
-                                // Fake terminal lines
                                 VerticalLayout {
                                     spacing: 5px;
 
@@ -2336,7 +2252,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Progress bar + spinner row
                                 HorizontalLayout {
                                     spacing: 10px;
 
@@ -2359,7 +2274,6 @@ export component MainWindow inherits Window {
                                     LoadingCircle { diameter: 14px; }
                                 }
 
-                                // Status line
                                 Text {
                                     text: remote-apps-loading ? "Fetching from remote..." : "Building index...";
                                     font-size: Cat.fs10;
@@ -2371,7 +2285,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Detail view ──────────────────────────────────────────────────────
                 if !remote-apps-loading && show-flatpak-detail: ScrollView {
                     vertical-stretch: 1;
 
@@ -2379,7 +2292,6 @@ export component MainWindow inherits Window {
                         padding: 0;
                         spacing: 0;
 
-                        // Screenshot banner
                         if flatpak-screenshot.width > 0: Rectangle {
                             height: 300px;
                             clip: true;
@@ -2404,7 +2316,6 @@ export component MainWindow inherits Window {
                             padding: 24px;
                             spacing: 22px;
 
-                            // Back row
                             HorizontalLayout {
                                 spacing: 8px;
                                 Rectangle {
@@ -2448,11 +2359,9 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // App header: icon + name + buttons
                             HorizontalLayout {
                                 spacing: 18px;
 
-                                // Icon
                                 VerticalLayout {
                                     alignment: center;
                                     Rectangle {
@@ -2479,7 +2388,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Name + app_id + developer
                                 VerticalLayout {
                                     horizontal-stretch: 1;
                                     spacing: 6px;
@@ -2511,12 +2419,10 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Install/Remove + Add-Ons buttons
                                 VerticalLayout {
                                     alignment: center;
                                     spacing: 8px;
 
-                                    // Install / Remove button
                                     if !flatpak-detail-installed: Rectangle {
                                         width: fp-inst-lbl.preferred-width + 32px;
                                         height: 38px;
@@ -2549,12 +2455,10 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Add-Ons button - shown if any addons exist (installed or not)
                                     if flatpak-addons.length > 0 || flatpak-addons-installed.length > 0: Rectangle {
                                         width: fp-addons-lbl.preferred-width + 36px;
                                         height: 31px;
                                         border-radius: 10px;
-                                        // all-installed = nothing left to install
                                         property <bool> all-installed: flatpak-addons.length == 0;
                                         property <bool> some-installed: flatpak-addons-installed.length > 0 && flatpak-addons.length > 0;
                                         background: all-installed
@@ -2600,7 +2504,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Summary tagline
                             if flatpak-detail-summary != "": Text {
                                 text: flatpak-detail-summary;
                                 font-size: Cat.fs16;
@@ -2610,7 +2513,6 @@ export component MainWindow inherits Window {
 
                             Rectangle { height: 1px; background: Cat.surface0; opacity: 0.6; }
 
-                            // Description
                             Text {
                                 text: flatpak-detail-description != "" ? flatpak-detail-description : "No description available.";
                                 font-size: Cat.fs14;
@@ -2619,7 +2521,6 @@ export component MainWindow inherits Window {
                                 opacity: 0.9;
                             }
 
-                            // ── Changelog card ───────────────────────────────────────
                             if flatpak-detail-version != "" && flatpak-detail-changelog != "": Rectangle {
                                 border-radius: 10px;
                                 background: Cat.surface0.with-alpha(0.5);
@@ -2654,7 +2555,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // ── Links section ────────────────────────────────────────
                             if flatpak-detail-url-homepage != "" || flatpak-detail-url-bug != "" || flatpak-detail-url-translate != "" || flatpak-detail-url-vcs != "": Rectangle {
                                 border-radius: 10px;
                                 background: Cat.surface0.with-alpha(0.5);
@@ -2720,7 +2620,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // ── Tags row ─────────────────────────────────────────────
                             if flatpak-detail-tags.length > 0: HorizontalLayout {
                                 spacing: 6px;
                                 alignment: start;
@@ -2741,23 +2640,19 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Bottom padding
                             Rectangle { height: 12px; }
                         }
                     }
                 }
 
-                // ── Flat app list (replaces AppTile grid) ────────────────────────────
                 if !remote-apps-loading && flatpak-store-ready && !show-flatpak-detail: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                    // Hero watermark area
                     Rectangle {
                         height: 65px;
                         clip: true;
 
-                        // Package glyph
                         NavIcon {
                             d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
                             icon-color: Cat.mauve.with-alpha(0.07);
@@ -2767,7 +2662,6 @@ export component MainWindow inherits Window {
                             y: (parent.height - 44px) / 2;
                         }
 
-                        // Column headers
                         HorizontalLayout {
                             padding-left: 16px;
                             padding-right: 14px;
@@ -2775,7 +2669,7 @@ export component MainWindow inherits Window {
 
                             VerticalLayout {
                                 alignment: center;
-                                width: 44px; // avatar placeholder
+                                width: 44px;
                             }
 
                             Text {
@@ -2800,7 +2694,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Bottom separator
                         Rectangle {
                             y: parent.height - 1px;
                             height: 1px;
@@ -2827,7 +2720,6 @@ export component MainWindow inherits Window {
                                 background: fk-row-touch.has-hover ? Cat.surface0.with-alpha(0.4) : transparent;
                                 animate background { duration: 60ms; }
 
-                                // Row tap → open detail (defined first so it's behind the checkbox)
                                 fk-row-touch := TouchArea {
                                     clicked => {
                                         current-flatpak-id = pkg.name;
@@ -2859,7 +2751,6 @@ export component MainWindow inherits Window {
                                     padding-right: 14px;
                                     spacing: 10px;
 
-                                    // Checkbox
                                     VerticalLayout {
                                         alignment: center;
                                         CheckBox {
@@ -2870,7 +2761,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Avatar (letter + category color)
                                     VerticalLayout {
                                         alignment: center;
                                         AppAvatar {
@@ -2882,7 +2772,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Name + app id + description + add-ons tag
                                     VerticalLayout {
                                         horizontal-stretch: 1;
                                         alignment: center;
@@ -2905,7 +2794,6 @@ export component MainWindow inherits Window {
                                                 overflow: elide;
                                                 horizontal-stretch: 1;
                                             }
-                                            // Add-ons indicator tag
                                             if pkg.explicit: Rectangle {
                                                 width: addon-tag-lbl.preferred-width + 12px;
                                                 height: 14px;
@@ -2925,7 +2813,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Install / Remove button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -2953,7 +2840,6 @@ export component MainWindow inherits Window {
                                                         root.fp-confirm-name = pkg.display-name;
                                                         root.fp-confirm-open = true;
                                                     } else {
-                                                        // Open detail view - install button is there
                                                         current-flatpak-id = pkg.name;
                                                         flatpak-detail-installed = pkg.installed;
                                                         flatpak-detail-name = pkg.display-name;
@@ -2982,7 +2868,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Row separator
                                 Rectangle {
                                     x: 16px;
                                     y: parent.height - 1px;
@@ -2996,7 +2881,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination - shown when matches span more than one page
                     if flatpak-total-matches > flatpak-per-page: Paginator {
                         current-page: flatpak-page;
                         total-pages: Math.ceil(flatpak-total-matches / flatpak-per-page);
@@ -3006,14 +2890,12 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                } // end browse tab VerticalLayout (if flatpak-tab == 0)
+                }
 
-                // ── Installed Flatpaks tab ────────────────────────────────────
                 if flatpak-tab == 1: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                    // Search bar for installed flatpaks
                     Rectangle {
                         height: 62px;
                         background: transparent;
@@ -3090,7 +2972,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Column header
                     Rectangle {
                         height: 38px;
 
@@ -3126,7 +3007,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Empty state
                     if installed-flatpaks.length == 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center;
@@ -3148,7 +3028,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Installed list
                     if installed-flatpaks.length > 0: ScrollView {
                         vertical-stretch: 1;
 
@@ -3160,7 +3039,6 @@ export component MainWindow inherits Window {
                                 background: ifk-touch.has-hover ? Cat.surface0.with-alpha(0.4) : transparent;
                                 animate background { duration: 60ms; }
 
-                                // TouchArea FIRST so Remove button's TouchArea sits on top of it
                                 ifk-touch := TouchArea {}
 
                                 HorizontalLayout {
@@ -3168,7 +3046,6 @@ export component MainWindow inherits Window {
                                     padding-right: 14px;
                                     spacing: 10px;
 
-                                    // Avatar (letter initial)
                                     VerticalLayout {
                                         alignment: center;
                                         AppAvatar {
@@ -3180,7 +3057,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Name + app_id
                                     VerticalLayout {
                                         horizontal-stretch: 1;
                                         alignment: center;
@@ -3195,7 +3071,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Version pill
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -3213,7 +3088,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Info button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -3239,7 +3113,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Remove button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -3283,11 +3156,10 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-                } // end installed tab VerticalLayout (if flatpak-tab == 1)
+                }
 
-            } // end view 10 VerticalLayout
+            }
 
-            // AppImages (view 14) - browse catalog, install from file/URL, manage installed
             if view == 14: VerticalLayout {
                 init => {
                     root.load-installed-appimages();
@@ -3296,12 +3168,9 @@ export component MainWindow inherits Window {
                 vertical-stretch: 1;
                 spacing: 10px;
 
-                // Single combined warning - content-fit, centered
                 HorizontalLayout {
                     alignment: center;
                     Rectangle {
-                        // Hug content on wide screens; clamp to available width so
-                        // the warning text elides instead of overflowing off-screen.
                         width: min(ai-warn-text.preferred-width + 20px + 8px + 24px, parent.width);
                         border-radius: 8px;
                         background: Cat.red.with-alpha(0.08);
@@ -3326,7 +3195,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Tab strip: Browse | Installed
                 Rectangle {
                     height: 40px;
                     HorizontalLayout {
@@ -3364,12 +3232,10 @@ export component MainWindow inherits Window {
                     Rectangle { y: parent.height - 1px; height: 1px; background: Cat.surface0; }
                 }
 
-                // ── Browse tab ──────────────────────────────────────────────
                 if appimage-tab == 0: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 10px;
 
-                    // Catalog search + force-reload
                     HorizontalLayout {
                         height: 40px;
                         spacing: 8px;
@@ -3389,9 +3255,6 @@ export component MainWindow inherits Window {
                             }
                             Rectangle {
                                 horizontal-stretch: 1;
-                                // Debounce: filter fires 1s after the latest keypress, off the
-                                // UI thread's per-keystroke path so typing stays smooth on the
-                                // ~1k-app feed. Restarted on every edit; page reset to first.
                                 ai-search-debounce := Timer {
                                     interval: 1s;
                                     running: false;
@@ -3432,7 +3295,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Manual install - direct URL or local file
                     HorizontalLayout {
                         height: 38px;
                         spacing: 8px;
@@ -3473,7 +3335,6 @@ export component MainWindow inherits Window {
                         VerticalLayout { alignment: center; Btn { label: @tr("Install File"); width: 104px; horizontal-stretch: 0; clicked => { root.install-appimage-file(); } } }
                     }
 
-                    // Result count (range shown for the current page)
                     if !appimage-catalog-loading && appimage-catalog-total > 0: Text {
                         text: "Showing " + (appimage-page * appimage-per-page + 1)
                             + "–" + min((appimage-page + 1) * appimage-per-page, appimage-catalog-total)
@@ -3482,7 +3343,6 @@ export component MainWindow inherits Window {
                         color: Cat.overlay0;
                     }
 
-                    // Catalog states
                     if appimage-catalog-loading: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center;
@@ -3548,7 +3408,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination - shown when matches span more than one page
                     if !appimage-catalog-loading && appimage-catalog-total > appimage-per-page: HorizontalLayout {
                         height: 36px;
                         spacing: 10px;
@@ -3586,7 +3445,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Installed tab ───────────────────────────────────────────
                 if appimage-tab == 1: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 10px;
@@ -3597,9 +3455,6 @@ export component MainWindow inherits Window {
                         Text { text: @tr("No AppImages installed yet."); font-size: Cat.fs15; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
-                    // Updates are surfaced on the unified Updates page (per-row), and
-                    // detected by the global "Check for Updates". A green "New version"
-                    // pill below marks apps with a pending update.
 
                     if installed-appimages.length > 0: ScrollView {
                         vertical-stretch: 1;
@@ -3626,7 +3481,6 @@ export component MainWindow inherits Window {
                                         Text { text: pkg.name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
                                         Text { text: pkg.detail; font-size: Cat.fs11; color: Cat.subtext0; overflow: elide; }
                                     }
-                                    // Green pill marks rows with a pending update (after a check).
                                     if pkg.update-available: VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -3647,7 +3501,6 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                     }
-                                    // No embedded update support: warning icon (tooltip) + Reinstall.
                                     if !pkg.supports-update: VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -3687,14 +3540,12 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-            } // end view 14 VerticalLayout
+            }
 
-            // Repos browser - Flatpak-style layout with search + repo tabs + hero
             if view == 7 || view == 8: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 0;
 
-                // ── Tab strip: Browse | Installed ─────────────────────────
                 Rectangle {
                     height: 40px;
                     background: transparent;
@@ -3765,12 +3616,10 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Browse tab ─────────────────────────────────────────────
                 if repos-view == 0: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                // ── Search bar ────────────────────────────────────────────
                 Rectangle {
                     height: 62px;
                     background: transparent;
@@ -3834,7 +3683,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Repo tabs as centered pills ─────────────────────────────
                 Rectangle {
                     height: 50px;
 
@@ -3856,7 +3704,6 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         padding: 10px;
 
-                        // "All" pill - shows combined packages from all repos
                         Rectangle {
                             width: all-pill-lbl.preferred-width + 28px;
                             height: 30px;
@@ -3917,18 +3764,15 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Package list ─────────────────────────────────────────────
                 VerticalLayout {
                     vertical-stretch: 1;
 
-                    // Loading state
                     if repo-loading: VerticalLayout {
                         vertical-stretch: 1; alignment: center; spacing: 8px;
                         LoadingCircle { diameter: 24px; x: (parent.width - 24px) / 2; }
                         Text { text: selected-repo != "" ? "Loading " + selected-repo + "..." : "Loading packages..."; font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                     }
 
-                    // Column header
                     if !repo-loading: Rectangle {
                         height: 30px;
                         background: Cat.surface0.with-alpha(0.5);
@@ -3974,7 +3818,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Pagination - shown when matches span more than one page
                     if !repo-loading && repo-total-matches > repo-per-page: Paginator {
                         current-page: repo-page;
                         total-pages: Math.ceil(repo-total-matches / repo-per-page);
@@ -4073,14 +3916,12 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                } // end browse tab (repos-view == 0)
+                }
 
-                // ── Installed tab - packages grouped by repo ───────────────
                 if repos-view == 1: VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 0;
 
-                    // Search bar for installed native packages
                     Rectangle {
                         height: 62px;
                         background: transparent;
@@ -4158,7 +3999,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Column header - filter pills only, centered
                     Rectangle {
                         height: 46px;
 
@@ -4168,7 +4008,6 @@ export component MainWindow inherits Window {
                             spacing: 8px;
                             alignment: center;
 
-                            // Filter pills: All / Explicit / Deps
                             for opt[idx] in ["All", "Explicit", "Deps"]: Rectangle {
                                 property <bool> active: installed-explicit-filter == idx;
                                 width: pill-lbl.preferred-width + 16px;
@@ -4222,10 +4061,8 @@ export component MainWindow inherits Window {
                                     ? Cat.surface0.with-alpha(0.35) : transparent;
                                 animate background { duration: 60ms; }
 
-                                // hover area BEHIND content so buttons get clicks
                                 ri-touch := TouchArea {}
 
-                                // ── Repo header ─────────────────────────────
                                 if pkg.backend == -1: HorizontalLayout {
                                     padding-left: 16px;
                                     padding-right: 16px;
@@ -4260,13 +4097,11 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // ── Package row ──────────────────────────────
                                 if pkg.backend != -1: HorizontalLayout {
                                     padding-left: 16px;
                                     padding-right: 14px;
                                     spacing: 10px;
 
-                                    // Avatar
                                     VerticalLayout {
                                         alignment: center;
                                         AppAvatar {
@@ -4278,7 +4113,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Name + description
                                     VerticalLayout {
                                         horizontal-stretch: 1;
                                         alignment: center;
@@ -4299,7 +4133,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Version pill
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -4317,7 +4150,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Explicit badge
                                     VerticalLayout {
                                         alignment: center;
                                         visible: pkg.explicit;
@@ -4339,7 +4171,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Tree button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -4373,7 +4204,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Downgrade button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -4399,7 +4229,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Remove button
                                     VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -4437,7 +4266,6 @@ export component MainWindow inherits Window {
                             }
                     }
 
-                    // Load All button
                     if !installed-grouped-all-loaded: Rectangle {
                         height: 40px;
                         background: Cat.surface0.with-alpha(0.3);
@@ -4476,9 +4304,9 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-                } // end installed tab (repos-view == 1)
+                }
 
-            } // end view 7/8 VerticalLayout
+            }
 
             if view == 5: ScrollView {
                 vertical-stretch: 1;
@@ -4493,7 +4321,6 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("GENERAL"); }
 
-                        // Toggles - 2-column grid
                         HorizontalLayout {
                             spacing: 8px;
                             SettingsRow {
@@ -4556,7 +4383,6 @@ export component MainWindow inherits Window {
                                 checked: setting-notify-on-updates;
                                 toggled(val) => { setting-notify-on-updates = val; root.save-settings(); }
                             }
-                            // Parallel Downloads - compact, opens popup
                             SettingsLinkRow {
                                 width: settings-col-w;
                                 accent: Cat.sapphire;
@@ -4566,7 +4392,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Manage sub-panels - shown when the feature is enabled
                         if setting-flatpak-enabled || setting-appimage-enabled: SectionLabel {
                             section-title: @tr("REMOTE MANAGER");
                         }
@@ -4628,7 +4453,6 @@ export component MainWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
 
-                            // Enable / Disable button
                             Rectangle {
                                 height: 66px;
                                 horizontal-stretch: 1;
@@ -4673,7 +4497,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Add / Remove button
                             Rectangle {
                                 height: 66px;
                                 horizontal-stretch: 1;
@@ -4717,7 +4540,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Edit pacman.conf button
                             Rectangle {
                                 height: 66px;
                                 horizontal-stretch: 1;
@@ -4760,7 +4582,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── FIRMWARE UPDATES ──────────────────────────────────────
                     VerticalLayout {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("FIRMWARE UPDATES"); }
@@ -4828,7 +4649,6 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("ABOUT"); }
 
-                        // ── Geeky about card ──────────────────────────────────
                         Rectangle {
                             height: 176px;
                             border-radius: 12px;
@@ -4838,7 +4658,6 @@ export component MainWindow inherits Window {
                             clip: true;
 
                             VerticalLayout {
-                                // Terminal title bar with traffic-light dots
                                 Rectangle {
                                     height: 26px;
                                     background: Cat.mantle;
@@ -4869,14 +4688,12 @@ export component MainWindow inherits Window {
 
                                 Rectangle { height: 1px; background: Cat.surface0; }
 
-                                // Centered content body
                                 VerticalLayout {
                                     alignment: center;
                                     padding-left: 16px; padding-right: 16px;
                                     padding-top: 6px; padding-bottom: 6px;
                                     spacing: 4px;
 
-                                    // App info - centered
                                     VerticalLayout {
                                         spacing: 2px;
                                         Text {
@@ -4893,11 +4710,9 @@ export component MainWindow inherits Window {
 
                                     Rectangle { height: 1px; background: Cat.surface0; }
 
-                                    // Social links row
                                     HorizontalLayout {
                                         spacing: 6px;
 
-                                        // GitHub
                                         Rectangle {
                                             horizontal-stretch: 1; height: 26px; border-radius: 7px;
                                             background: gh-ta.has-hover ? Cat.surface1 : Cat.surface0;
@@ -4916,7 +4731,6 @@ export component MainWindow inherits Window {
                                             gh-ta := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://github.com/xerolinux"); } }
                                         }
 
-                                        // Ko-Fi
                                         Rectangle {
                                             horizontal-stretch: 1; height: 26px; border-radius: 7px;
                                             background: kofi-ta2.has-hover ? #ff5e5b.with-alpha(0.28) : #ff5e5b.with-alpha(0.12);
@@ -4930,7 +4744,6 @@ export component MainWindow inherits Window {
                                             kofi-ta2 := TouchArea { mouse-cursor: pointer; clicked => { root.open-url("https://ko-fi.com/xerolinux"); } }
                                         }
 
-                                        // Discord
                                         Rectangle {
                                             horizontal-stretch: 1; height: 26px; border-radius: 7px;
                                             background: disc-ta.has-hover ? #5865f2.with-alpha(0.28) : #5865f2.with-alpha(0.12);
@@ -4952,7 +4765,6 @@ export component MainWindow inherits Window {
 
                                     Rectangle { height: 1px; background: Cat.surface0; }
 
-                                    // Credits
                                     VerticalLayout {
                                         spacing: 3px;
                                         Text {
@@ -4960,7 +4772,6 @@ export component MainWindow inherits Window {
                                             font-size: Cat.fs10; font-weight: 800; letter-spacing: 1px;
                                             color: Cat.overlay0; horizontal-alignment: center;
                                         }
-                                        // AppImage Update All : Ivan-HC (link)
                                         HorizontalLayout {
                                             alignment: center; spacing: 5px;
                                             Text {
@@ -4983,7 +4794,6 @@ export component MainWindow inherits Window {
                                                 }
                                             }
                                         }
-                                        // AppImage Idea : Sharktooth (nagged for it) 😂
                                         HorizontalLayout {
                                             alignment: center; spacing: 5px;
                                             Text {
@@ -5007,7 +4817,6 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // ─── View 12: Dependency Tree ─────────────────────────────────────
             if view == 12: Rectangle {
                 vertical-stretch: 1;
                 border-radius: 14px;
@@ -5018,7 +4827,6 @@ export component MainWindow inherits Window {
 
               VerticalLayout {
 
-                // ── Header - pill card + back button ─────────────────────────
                 Rectangle {
                     height: 88px;
                     background: Cat.crust;
@@ -5028,7 +4836,6 @@ export component MainWindow inherits Window {
                         padding-top: 12px; padding-bottom: 12px;
                         spacing: 12px;
 
-                        // Back button - VerticalLayout centers the 30px button in the 64px height
                         VerticalLayout {
                             alignment: center;
                             Rectangle {
@@ -5047,7 +4854,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Pill card - horizontal-stretch:1 now works (no alignment: center on parent)
                         Rectangle {
                             horizontal-stretch: 1;
                             border-radius: 14px;
@@ -5057,7 +4863,6 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 16px; padding-right: 16px; spacing: 12px;
 
-                                // Icon badge
                                 VerticalLayout {
                                     alignment: center;
                                     Rectangle {
@@ -5067,7 +4872,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Package name + version/status
                                 VerticalLayout {
                                     alignment: center; horizontal-stretch: 1; spacing: 3px;
                                     Text { text: dep-tree-pkg; font-size: Cat.fs16; font-weight: 700; color: Cat.mauve; overflow: elide; }
@@ -5078,7 +4882,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Stat badges (hidden while loading)
                                 if !dep-tree-loading: VerticalLayout {
                                     alignment: center; spacing: 5px;
                                     Rectangle {
@@ -5095,7 +4898,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Loading spinner
                                 if dep-tree-loading: VerticalLayout {
                                     alignment: center;
                                     LoadingCircle { diameter: 22px; }
@@ -5105,7 +4907,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Tab strip ────────────────────────────────────────────────
                 Rectangle {
                     height: 40px;
                     background: Cat.mantle;
@@ -5139,7 +4940,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Legend row (clearly separated from tabs) ──────────────────
                 Rectangle {
                     height: 25px;
                     background: Cat.crust;
@@ -5161,17 +4961,14 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 1px; background: Cat.surface0; }
 
-                // ── Loading ──────────────────────────────────────────────────
                 if dep-tree-loading: Rectangle {
                     vertical-stretch: 1;
                     Text { text: @tr("Resolving…"); horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs13; }
                 }
 
-                // ── Depends On tab ───────────────────────────────────────────
                 if !dep-tree-loading && dep-tree-tab == 0: VerticalLayout {
                     vertical-stretch: 1;
 
-                    // ── Dependency tree list ──────────────────────────────────
                     if dep-tree-nodes.length == 0: Rectangle {
                         vertical-stretch: 1;
                         Text { text: @tr("No dependencies found."); horizontal-alignment: center; vertical-alignment: center; color: Cat.overlay0; font-size: Cat.fs14; }
@@ -5181,7 +4978,6 @@ export component MainWindow inherits Window {
                         vertical-stretch: 1;
 
                         for node[i] in dep-tree-nodes: Rectangle {
-                            // depth -1 = section separator; depth 1 = direct dep; depth 2 = transitive
                             height: node.depth == -1 ? 32px : 42px;
                             background: node.depth != -1 && dt-node-ta.has-hover
                                 ? Cat.surface0.with-alpha(0.25) : transparent;
@@ -5189,7 +4985,6 @@ export component MainWindow inherits Window {
 
                             dt-node-ta := TouchArea {}
 
-                            // Section separator row (optional deps divider)
                             if node.depth == -1: HorizontalLayout {
                                 padding-left: 16px; padding-right: 16px; spacing: 10px;
                                 VerticalLayout {
@@ -5206,11 +5001,9 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Normal dep row
                             if node.depth != -1: HorizontalLayout {
                                 padding-left: 16px; padding-right: 16px; spacing: 0px;
 
-                                // Tree prefix - fixed width prevents squeezing the name
                                 VerticalLayout {
                                     alignment: center;
                                     Text {
@@ -5222,7 +5015,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Status dot
                                 VerticalLayout {
                                     alignment: center; width: 18px;
                                     Rectangle {
@@ -5232,8 +5024,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Name + hard badge
-                                // Rectangle propagates width correctly; no alignment on inner HLayout
                                 Rectangle {
                                     horizontal-stretch: 1;
                                     HorizontalLayout {
@@ -5263,10 +5053,9 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Version pill / install button
                                 VerticalLayout {
                                     alignment: center; width: 80px;
-                                    
+
                                     if node.installable && !node.installed: dt-install-btn := Rectangle {
                                         width: dt-inst-lbl.preferred-width + 20px; height: 24px;
                                         border-radius: 6px;
@@ -5286,7 +5075,7 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                 }
-                                
+
                                 if !(node.installable && !node.installed): VerticalLayout {
                                     alignment: center; width: 80px;
                                     Rectangle {
@@ -5312,7 +5101,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Required By tab ──────────────────────────────────────────
                 if !dep-tree-loading && dep-tree-tab == 1: VerticalLayout {
                     vertical-stretch: 1;
 
@@ -5329,7 +5117,6 @@ export component MainWindow inherits Window {
                     if dep-reqby-nodes.length > 0: VerticalLayout {
                         vertical-stretch: 1;
 
-                        // Required-by pill header
                         Rectangle { height: 20px; background: transparent; }
                         HorizontalLayout {
                             padding-left: 20px; padding-right: 20px;
@@ -5387,10 +5174,9 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-              } // end inner VerticalLayout
-            } // end view 12 Rectangle
+              }
+            }
 
-            // ─── View 15: Firmware Updates ────────────────────────────────────
             if view == 15: Rectangle {
                 vertical-stretch: 1;
                 border-radius: 14px;
@@ -5402,7 +5188,6 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     spacing: 0;
 
-                    // ── Header ────────────────────────────────────────────────
                     Rectangle {
                         height: 68px;
                         background: Cat.crust;
@@ -5412,7 +5197,6 @@ export component MainWindow inherits Window {
                             padding-top: 10px; padding-bottom: 10px;
                             spacing: 12px;
 
-                            // Back → Settings
                             VerticalLayout {
                                 alignment: center;
                                 Rectangle {
@@ -5431,7 +5215,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Title pill
                             Rectangle {
                                 horizontal-stretch: 1;
                                 border-radius: 12px;
@@ -5462,7 +5245,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Check for Updates button
                                     VerticalLayout { alignment: center;
                                         Rectangle {
                                             width: fw-check-lbl.preferred-width + 42px; height: 30px; border-radius: 7px;
@@ -5505,7 +5287,6 @@ export component MainWindow inherits Window {
 
                     Rectangle { height: 1px; background: Cat.surface0; }
 
-                    // ── Caution pill ──────────────────────────────────────────
                     HorizontalLayout {
                         alignment: center;
                         padding-top: 14px; padding-bottom: 2px;
@@ -5535,7 +5316,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Device list ───────────────────────────────────────────
                     if firmware-detecting || firmware-detected-count < 0: VerticalLayout {
                         vertical-stretch: 1;
                         alignment: center; spacing: 12px;
@@ -5571,7 +5351,6 @@ export component MainWindow inherits Window {
                                     padding-top: 12px; padding-bottom: 12px;
                                     spacing: 12px;
 
-                                    // Left: name + vendor + version + plugin + flags
                                     VerticalLayout {
                                         horizontal-stretch: 1;
                                         alignment: center;
@@ -5619,7 +5398,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Right: Update button (only when update available)
                                     if device.has-pending-update: VerticalLayout {
                                         alignment: center;
                                         Rectangle {
@@ -5653,9 +5431,8 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-            } // end view 15 Rectangle
+            }
 
-            // ─── View 13: Arch News RSS ───────────────────────────────────────
             if view == 13: VerticalLayout {
                 vertical-stretch: 1;
                 spacing: 0px;
@@ -5684,7 +5461,6 @@ export component MainWindow inherits Window {
 
                         for item[i] in arch-news-items: Rectangle {
                             border-radius: 10px;
-                            // Highlight the latest article (first in the feed).
                             background: i == 0 ? Cat.green.with-alpha(0.07) : Cat.surface0.with-alpha(0.45);
                             border-width: i == 0 ? 1.5px : 1px;
                             border-color: i == 0 ? Cat.green.with-alpha(0.6) : Cat.surface1.with-alpha(0.6);
@@ -5759,11 +5535,9 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // ─── View 11: Troubleshooting ─────────────────────────────────────
             if view == 11: VerticalLayout {
                 vertical-stretch: 1;
 
-                // Header
                 Rectangle {
                     height: 70px;
                     background: Cat.crust;
@@ -5797,7 +5571,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Use at own risk warning strip
                 Rectangle {
                     height: 38px;
                     background: Cat.peach.with-alpha(0.08);
@@ -5809,83 +5582,65 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Circuit decoration ────────────────────────────────────────
                 Rectangle {
                     height: 76px;
                     background: transparent;
                     clip: true;
 
-                    // Pulsing glow on center icon
                     property <float> glow: 0.18;
                     animate glow { duration: 1100ms; easing: ease-in-out; }
                     Timer { interval: 1200ms; running: true; triggered => { glow = glow > 0.12 ? 0.04 : 0.22; } }
 
-                    // Traveling pulse along left wire
                     property <float> lp: 0.0;
                     animate lp { duration: 1600ms; easing: linear; }
                     Timer { interval: 1700ms; running: true; triggered => { lp = lp < 0.5 ? 1.0 : 0.0; } }
 
-                    // Traveling pulse along right wire
                     property <float> rp: 1.0;
                     animate rp { duration: 1600ms; easing: linear; }
                     Timer { interval: 1700ms; running: true; triggered => { rp = rp > 0.5 ? 0.0 : 1.0; } }
 
-                    // ── Left circuit ─────────────────────────────────────────
-                    // Main bus line (fades left→right toward icon)
                     Rectangle {
                         x: 0; y: 37px;
                         width: parent.width / 2 - 42px;
                         height: 1px;
                         background: @linear-gradient(90deg, transparent 0%, Cat.mauve.with-alpha(0.12) 20%, Cat.mauve.with-alpha(0.38) 100%);
                     }
-                    // Traveling pulse dot on left bus
                     Rectangle {
                         x: lp * (parent.width / 2 - 42px) - 3px;
                         y: 35px; width: 5px; height: 5px; border-radius: 3px;
                         background: Cat.mauve.with-alpha(0.7);
                     }
-                    // Branch up-1
                     Rectangle { x: parent.width / 2 - 130px; y: 22px; width: 32px; height: 1px; background: Cat.mauve.with-alpha(0.22); }
                     Rectangle { x: parent.width / 2 - 130px; y: 22px; width: 1px; height: 15px; background: Cat.mauve.with-alpha(0.22); }
                     Rectangle { x: parent.width / 2 - 132px; y: 20px; width: 5px; height: 5px; border-radius: 1px; background: Cat.mauve.with-alpha(0.45); }
-                    // Branch down-1
                     Rectangle { x: parent.width / 2 - 165px; y: 38px; width: 1px; height: 16px; background: Cat.mauve.with-alpha(0.18); }
                     Rectangle { x: parent.width / 2 - 165px; y: 54px; width: 28px; height: 1px; background: Cat.mauve.with-alpha(0.18); }
                     Rectangle { x: parent.width / 2 - 167px; y: 36px; width: 5px; height: 5px; border-radius: 1px; background: Cat.mauve.with-alpha(0.35); }
-                    // Branch up-2 (far left)
                     Rectangle { x: parent.width / 2 - 210px; y: 28px; width: 20px; height: 1px; background: Cat.mauve.with-alpha(0.14); }
                     Rectangle { x: parent.width / 2 - 210px; y: 28px; width: 1px; height: 9px; background: Cat.mauve.with-alpha(0.14); }
-                    // Small component box
                     Rectangle { x: parent.width / 2 - 104px; y: 19px; width: 10px; height: 6px; border-radius: 1px; border-width: 1px; border-color: Cat.mauve.with-alpha(0.3); background: Cat.mauve.with-alpha(0.08); }
 
-                    // ── Right circuit (mirrored) ──────────────────────────────
                     Rectangle {
                         x: parent.width / 2 + 42px; y: 37px;
                         width: parent.width / 2 - 42px;
                         height: 1px;
                         background: @linear-gradient(90deg, Cat.mauve.with-alpha(0.38) 0%, Cat.mauve.with-alpha(0.12) 80%, transparent 100%);
                     }
-                    // Traveling pulse dot on right bus
                     Rectangle {
                         x: parent.width / 2 + 42px + rp * (parent.width / 2 - 42px) - 3px;
                         y: 35px; width: 5px; height: 5px; border-radius: 3px;
                         background: Cat.mauve.with-alpha(0.7);
                     }
-                    // Branch up-1
                     Rectangle { x: parent.width / 2 + 98px; y: 22px; width: 32px; height: 1px; background: Cat.mauve.with-alpha(0.22); }
                     Rectangle { x: parent.width / 2 + 129px; y: 22px; width: 1px; height: 15px; background: Cat.mauve.with-alpha(0.22); }
                     Rectangle { x: parent.width / 2 + 127px; y: 20px; width: 5px; height: 5px; border-radius: 1px; background: Cat.mauve.with-alpha(0.45); }
-                    // Branch down-1
                     Rectangle { x: parent.width / 2 + 137px; y: 38px; width: 1px; height: 16px; background: Cat.mauve.with-alpha(0.18); }
                     Rectangle { x: parent.width / 2 + 137px; y: 54px; width: 28px; height: 1px; background: Cat.mauve.with-alpha(0.18); }
                     Rectangle { x: parent.width / 2 + 135px; y: 36px; width: 5px; height: 5px; border-radius: 1px; background: Cat.mauve.with-alpha(0.35); }
-                    // Branch up-2 (far right)
                     Rectangle { x: parent.width / 2 + 190px; y: 28px; width: 20px; height: 1px; background: Cat.mauve.with-alpha(0.14); }
                     Rectangle { x: parent.width / 2 + 209px; y: 28px; width: 1px; height: 9px; background: Cat.mauve.with-alpha(0.14); }
-                    // Small component box
                     Rectangle { x: parent.width / 2 + 94px; y: 19px; width: 10px; height: 6px; border-radius: 1px; border-width: 1px; border-color: Cat.mauve.with-alpha(0.3); background: Cat.mauve.with-alpha(0.08); }
 
-                    // ── Center icon ───────────────────────────────────────────
                     Rectangle {
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -5896,7 +5651,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Content - scrollable, no stretch
                 ScrollView {
                 VerticalLayout {
                     alignment: window-width > 1200 ? center : start;
@@ -5904,7 +5658,6 @@ export component MainWindow inherits Window {
                     padding-top: 16px; padding-bottom: 16px;
                     spacing: 14px;
 
-                    // ── AUR malware scan - prominent, centered, on top ───────
                     HorizontalLayout {
                         alignment: center;
                         Rectangle {
@@ -5928,7 +5681,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── SYSTEM label ─────────────────────────────────────────
                     HorizontalLayout {
                         spacing: 8px;
                         Rectangle { width: 3px; border-radius: 2px; background: Cat.green; }
@@ -5936,11 +5688,9 @@ export component MainWindow inherits Window {
                         Rectangle { height: 1px; horizontal-stretch: 1; background: Cat.green.with-alpha(0.2); y: parent.height / 2; }
                     }
 
-                    // ── SYSTEM 2×2 grid ───────────────────────────────────────
                     GridLayout {
                         spacing: 10px;
 
-                        // Rebuild InitRamFS
                         Rectangle {
                             row: 0; col: 0; height: 125px; border-radius: 12px;
                             background: ini-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -5964,7 +5714,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Fix GnuPG Keyring
                         Rectangle {
                             row: 0; col: 1; height: 125px; border-radius: 12px;
                             background: key-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -5988,7 +5737,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Rebuild Grub
                         Rectangle {
                             row: 1; col: 0; height: 125px; border-radius: 12px;
                             background: grb-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -6012,7 +5760,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Orphan Manager
                         Rectangle {
                             row: 1; col: 1; height: 125px; border-radius: 12px;
                             background: orp-ts-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -6037,7 +5784,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── PACMAN label ──────────────────────────────────────────
                     HorizontalLayout {
                         spacing: 8px;
                         Rectangle { width: 3px; border-radius: 2px; background: Cat.blue; }
@@ -6045,11 +5791,9 @@ export component MainWindow inherits Window {
                         Rectangle { height: 1px; horizontal-stretch: 1; background: Cat.blue.with-alpha(0.2); y: parent.height / 2; }
                     }
 
-                    // ── PACMAN 2×2 grid ───────────────────────────────────────
                     GridLayout {
                         spacing: 10px;
 
-                        // Export Package List
                         Rectangle {
                             row: 0; col: 0; height: 125px; border-radius: 12px;
                             background: exp-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -6073,7 +5817,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Import Package List
                         Rectangle {
                             row: 0; col: 1; height: 125px; border-radius: 12px;
                             background: imp-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -6097,7 +5840,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Unlock Database
                         Rectangle {
                             row: 1; col: 0; height: 125px; border-radius: 12px;
                             background: ulk-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
@@ -6121,7 +5863,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // IgnorePkg
                         Rectangle {
                             row: 1; col: 1;
                             height: 125px;
@@ -6138,7 +5879,6 @@ export component MainWindow inherits Window {
                                     padding-top: 10px; padding-bottom: 10px;
                                     spacing: 8px;
 
-                                    // Top row
                                     HorizontalLayout {
                                         spacing: 12px;
                                         VerticalLayout { alignment: center;
@@ -6177,7 +5917,6 @@ export component MainWindow inherits Window {
                                         }
                                     }
 
-                                    // Editor row (only when active)
                                     if ignorepkg-active: HorizontalLayout {
                                         spacing: 6px;
                                         Rectangle {
@@ -6220,8 +5959,8 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-                } // end content VerticalLayout
-                } // end ScrollView
+                }
+                }
             }
 
             if view == 9: ScrollView {
@@ -6232,14 +5971,9 @@ export component MainWindow inherits Window {
                     spacing: 20px;
                     alignment: start;
 
-                    // AUR info pill - centered, width = content; hidden once dismissed
                     if !aur-pill-dismissed: HorizontalLayout {
                         alignment: center;
                         Rectangle {
-                            // Hug the text on wide screens, but never exceed the
-                            // content width - clamp so the row can't overflow. Derived
-                            // from root.width (not parent.width) to avoid a ScrollView
-                            // viewport binding loop.
                             width: min(aur-pill-text.preferred-width + 15px + 8px + 24px + 28px, root.width - sidebar-vl.preferred-width - 12px);
                             border-radius: 8px;
                             background: Cat.yellow.with-alpha(0.08);
@@ -6296,7 +6030,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Stat cards
                     VerticalLayout {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("SYSTEM OVERVIEW"); }
@@ -6391,7 +6124,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // AppImages installed
                             Rectangle {
                                 horizontal-stretch: 1;
                                 height: 82px;
@@ -6423,7 +6155,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Quick actions
                     VerticalLayout {
                         spacing: 8px;
                         SectionLabel { section-title: @tr("QUICK ACTIONS"); }
@@ -6531,13 +6262,11 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── SYSTEM ──────────────────────────────────────────────
                     VerticalLayout {
                         spacing: 8px;
 
                         SectionLabel { section-title: @tr("SYSTEM"); }
 
-                        // System info terminal card
                         Rectangle {
                             border-radius: 12px;
                             background: Cat.crust.with-alpha(0.25);
@@ -6546,7 +6275,6 @@ export component MainWindow inherits Window {
                             clip: true;
 
                             VerticalLayout {
-                                // Terminal title bar
                                 Rectangle {
                                     height: 31px;
                                     background: Cat.mantle.with-alpha(0.5);
@@ -6577,12 +6305,10 @@ export component MainWindow inherits Window {
 
                                 Rectangle { height: 1px; background: Cat.surface0; }
 
-                                // Specs grid
                                 VerticalLayout {
                                     padding: 14px;
                                     spacing: 9px;
 
-                                    // Hostname + distro row
                                     HorizontalLayout {
                                         spacing: 8px;
                                         Text { text: @tr("HOST"); font-size: Cat.fs9; font-weight: 700; color: Cat.overlay0; letter-spacing: 0.6px; vertical-alignment: center; width: 44px; }
@@ -6649,7 +6375,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── RECENT ACTIVITY ──────────────────────────────────────
                     VerticalLayout {
                         spacing: 8px;
 
@@ -6731,14 +6456,12 @@ export component MainWindow inherits Window {
                     }
                 }
 
-            // Catch-all stretch: keeps all content pinned to top when no view provides a flex child
             if view == 2 || view == 3 || view == 4: Rectangle { vertical-stretch: 1; }
         }
     }
 
     }
 
-    // ── Top-right loading / progress indicator ──────────────────────────────
 
     if selected-count > 0: Rectangle {
         x: (parent.width - 420px) / 2;
@@ -6846,7 +6569,7 @@ export component MainWindow inherits Window {
             drop-shadow-color: Cat.crust.with-alpha(0.7);
             drop-shadow-offset-y: 10px;
 
-            TouchArea {} // intercept backdrop click
+            TouchArea {}
 
             property <bool> all-selected: flatpak-addons.length > 0 && addon-selected-count == flatpak-addons.length;
 
@@ -6854,7 +6577,6 @@ export component MainWindow inherits Window {
                 padding: 24px;
                 spacing: 0;
 
-                // ── Header ───────────────────────────────────────────────────
                 HorizontalLayout {
                     spacing: 10px;
 
@@ -6867,7 +6589,6 @@ export component MainWindow inherits Window {
                         font-size: Cat.fs17; font-weight: 700; color: Cat.text;
                         vertical-alignment: center; horizontal-stretch: 1;
                     }
-                    // Select All button - only when there are uninstalled addons
                     if flatpak-addons.length > 0: Rectangle {
                         width: sel-all-lbl.preferred-width + 24px; height: 32px; border-radius: 6px;
                         background: sel-all-t.has-hover
@@ -6901,14 +6622,12 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 14px; }
 
-                // ── Scrollable list: two sections ────────────────────────────
                 ScrollView {
                     vertical-stretch: 1;
 
                     VerticalLayout {
                         spacing: 0;
 
-                        // ── Section: Available to Install ─────────────────────
                         if flatpak-addons.length > 0: Rectangle {
                             height: 25px;
                             background: Cat.surface0.with-alpha(0.4);
@@ -6974,7 +6693,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // ── Section: Already Installed ────────────────────────
                         if flatpak-addons.length > 0 && flatpak-addons-installed.length > 0: Rectangle {
                             height: 8px; background: transparent;
                         }
@@ -7004,7 +6722,6 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 10px; padding-right: 10px; spacing: 12px;
 
-                                // Green installed indicator
                                 VerticalLayout {
                                     alignment: center;
                                     Rectangle {
@@ -7029,7 +6746,6 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                // Remove button
                                 VerticalLayout {
                                     alignment: center;
                                     Rectangle {
@@ -7064,7 +6780,6 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 16px; }
 
-                // ── Footer ───────────────────────────────────────────────────
                 HorizontalLayout {
                     alignment: end; spacing: 8px;
 
@@ -7206,7 +6921,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Title bar
                 Rectangle {
                     height: 48px;
                     background: Cat.mantle;
@@ -7268,7 +6982,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Status strip (replaces fake progress bar)
                 Rectangle {
                     height: 46px;
                     background: Cat.mantle;
@@ -7287,7 +7000,6 @@ export component MainWindow inherits Window {
                         alignment: center;
                         spacing: 10px;
 
-                        // Pulsing dot - vertically centred, only while running
                         if !progress-popup-done: VerticalLayout {
                             alignment: center;
                             width: 8px;
@@ -7321,7 +7033,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Expand / collapse strip - hidden in external-terminal mode (no PTY output to show)
                 if !progress-popup-external: Rectangle {
                     height: 32px;
                     background: Cat.mantle;
@@ -7333,7 +7044,6 @@ export component MainWindow inherits Window {
                         padding-right: 20px;
                         spacing: 12px;
 
-                        // Left divider line
                         VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
@@ -7346,7 +7056,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Center pill
                         expand-pill := Rectangle {
                             width: expand-row.preferred-width + 22px;
                             height: 22px;
@@ -7407,7 +7116,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Right divider line
                         VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
@@ -7422,7 +7130,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Error summary bar - visible when error and details collapsed
                 if progress-error-summary != "" && !progress-show-details: Rectangle {
                     height: 28px;
                     background: Cat.red.with-alpha(0.08);
@@ -7465,7 +7172,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Live log output - visible only when details expanded
                 if progress-show-details: Rectangle {
                     height: 1px;
                     background: Cat.surface0;
@@ -7477,7 +7183,6 @@ export component MainWindow inherits Window {
                     background: Cat.crust;
 
                     ScrollView {
-                        // _scroll-tick dependency forces re-eval every 80ms while live
                         viewport-y: { let _ = root._scroll-tick; min(0px, self.visible-height - self.viewport-height); }
 
                         VerticalLayout {
@@ -7497,7 +7202,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // User input prompt (conflict resolution / password / questions)
                 if progress-popup-show-input: Rectangle {
                     height: 76px;
                     background: Cat.mantle;
@@ -7511,7 +7215,6 @@ export component MainWindow inherits Window {
                         padding-right: 16px;
                         spacing: 8px;
 
-                        // Prompt label
                         HorizontalLayout {
                             spacing: 6px;
                             NavIcon {
@@ -7531,10 +7234,8 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Proceed/Cancel buttons OR text input
                         if progress-popup-show-buttons: HorizontalLayout {
                             spacing: 8px;
-                            // Proceed button
                             Rectangle {
                                 horizontal-stretch: 1;
                                 height: 28px;
@@ -7556,7 +7257,6 @@ export component MainWindow inherits Window {
                                     clicked => { root.progress-popup-proceed(); }
                                 }
                             }
-                            // Cancel button
                             Rectangle {
                                 horizontal-stretch: 1;
                                 height: 28px;
@@ -7590,8 +7290,6 @@ export component MainWindow inherits Window {
                                 : Cat.surface2;
                             animate border-color { duration: 80ms; }
 
-                            // Deferred focus via Timer avoids Slint's "Recursion detected" panic
-                            // that occurs when focus() is called directly during init/property eval.
                             Timer {
                                 interval: 8ms;
                                 running: root.progress-input-focus-pending;
@@ -7632,7 +7330,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer when done
                 if progress-popup-done: Rectangle {
                     height: 46px;
                     background: progress-popup-success ? Cat.green.with-alpha(0.06) : Cat.red.with-alpha(0.06);
@@ -7645,7 +7342,6 @@ export component MainWindow inherits Window {
                         alignment: end;
                         spacing: 10px;
 
-                        // Reboot button - only when terminal-is-upgrade AND success
                         if terminal-is-upgrade && progress-popup-success: VerticalLayout {
                             alignment: center;
                             Rectangle {
@@ -7702,7 +7398,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Flatpak remove confirmation dialog ────────────────────────────────────
     if fp-confirm-open: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.70);
@@ -7723,7 +7418,6 @@ export component MainWindow inherits Window {
             fp-dlg-layout := VerticalLayout {
                 padding: 24px; spacing: 16px;
 
-                // Header
                 HorizontalLayout {
                     spacing: 10px;
                     VerticalLayout {
@@ -7741,7 +7435,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Data question
                 Rectangle {
                     height: 40px; border-radius: 8px;
                     background: Cat.surface0;
@@ -7755,11 +7448,9 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Buttons
                 HorizontalLayout {
                     spacing: 8px;
 
-                    // Cancel
                     Rectangle {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
@@ -7768,7 +7459,6 @@ export component MainWindow inherits Window {
                         fp-cancel-ta := TouchArea { mouse-cursor: pointer; clicked => { root.fp-confirm-open = false; } }
                     }
 
-                    // Remove only
                     Rectangle {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-remonly-ta.has-hover ? Cat.red.with-alpha(0.25) : Cat.red.with-alpha(0.14);
@@ -7783,7 +7473,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Remove + Data
                     Rectangle {
                         horizontal-stretch: 1; height: 29px; border-radius: 7px;
                         background: fp-remdata-ta.has-hover ? Cat.red.with-alpha(0.5) : Cat.red.with-alpha(0.3);
@@ -7802,7 +7491,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Package Info Modal ───────────────────────────────────────────────────
     if pkg-info-open: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.72);
@@ -7824,7 +7512,6 @@ export component MainWindow inherits Window {
 
             VerticalLayout {
 
-                // ── Header ─────────────────────────────────────────────────
                 Rectangle {
                     height: 68px;
                     background: Cat.mantle;
@@ -7876,14 +7563,12 @@ export component MainWindow inherits Window {
                     Rectangle { y: parent.height - 1px; height: 1px; width: 100%; background: Cat.surface0.with-alpha(0.6); }
                 }
 
-                // ── Loading spinner ─────────────────────────────────────────
                 if pkg-info-loading: VerticalLayout {
                     vertical-stretch: 1; alignment: center; spacing: 12px;
                     HorizontalLayout { alignment: center; LoadingCircle { diameter: 28px; } }
                     Text { text: @tr("Loading…"); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
                 }
 
-                // ── File list ───────────────────────────────────────────────
                 if !pkg-info-loading: ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
@@ -7901,7 +7586,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Orphan Removal Dialog ────────────────────────────────────────────────
     if show-orphan-dialog: Rectangle {
         width: 100%;
         height: 100%;
@@ -7926,7 +7610,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 56px;
                     background: Cat.red.with-alpha(0.1);
@@ -7970,7 +7653,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Close button
                         VerticalLayout {
                             alignment: center;
                             Rectangle {
@@ -7986,7 +7668,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ⚠ Scary warning banner - no fixed height, auto-sizes to wrapped text
                 Rectangle {
                     background: Cat.red.with-alpha(0.07);
                     border-width: 0;
@@ -8039,7 +7720,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Select-all row
                 Rectangle {
                     height: 32px;
                     background: Cat.surface0.with-alpha(0.3);
@@ -8097,7 +7777,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Package checklist
                 ListView {
                     vertical-stretch: 1;
 
@@ -8116,7 +7795,6 @@ export component MainWindow inherits Window {
                             padding-right: 16px;
                             spacing: 10px;
 
-                            // Checkbox
                             VerticalLayout {
                                 alignment: center;
                                 Rectangle {
@@ -8134,7 +7812,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Name + description
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 alignment: center;
@@ -8154,7 +7831,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Version
                             VerticalLayout {
                                 alignment: center;
                                 Text {
@@ -8165,7 +7841,6 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Tag badge: Explicit / Dep (clickable → shows dep info)
                             VerticalLayout {
                                 alignment: center;
                                 Rectangle {
@@ -8210,7 +7885,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Dep-info panel (shown when tag clicked)
                 if show-orphan-dep-info: Rectangle {
                     height: 80px;
                     background: Cat.surface0.with-alpha(0.5);
@@ -8257,7 +7931,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer buttons
                 Rectangle {
                     height: 60px;
                     background: Cat.surface0.with-alpha(0.3);
@@ -8275,7 +7948,6 @@ export component MainWindow inherits Window {
                         spacing: 10px;
                         alignment: end;
 
-                        // Cancel
                         Rectangle {
                             width: 88px; height: 32px; border-radius: 8px;
                             background: oph-cancel-ta.has-hover ? Cat.surface1 : Cat.surface0;
@@ -8294,7 +7966,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Remove selected
                         Rectangle {
                             width: 150px; height: 32px; border-radius: 8px;
                             background: orphan-selected-count == 0 ? Cat.red.with-alpha(0.3) :
@@ -8324,7 +7995,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Unlock DB confirmation dialog ─────────────────────────────────────────
     if show-unlock-db-confirm: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -8344,7 +8014,6 @@ export component MainWindow inherits Window {
             drop-shadow-offset-y: 10px;
             VerticalLayout {
                 spacing: 0;
-                // Header
                 Rectangle {
                     height: 47px;
                     background: Cat.red.with-alpha(0.1);
@@ -8372,7 +8041,6 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                // Body
                 VerticalLayout {
                     vertical-stretch: 1;
                     alignment: center;
@@ -8394,7 +8062,6 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                // Footer
                 Rectangle {
                     height: 56px;
                     background: Cat.surface0.with-alpha(0.3);
@@ -8451,7 +8118,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 47px;
                     background: Cat.yellow.with-alpha(0.08);
@@ -8499,7 +8165,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Conflict details (scrollable)
                 Rectangle {
                     vertical-stretch: 1;
                     background: Cat.crust;
@@ -8520,7 +8185,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Advice
                 Rectangle {
                     height: 32px;
                     background: conflict-can-force ? Cat.yellow.with-alpha(0.06) : Cat.red.with-alpha(0.06);
@@ -8543,7 +8207,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Buttons
                 Rectangle {
                     height: 47px;
                     background: Cat.mantle;
@@ -8606,7 +8269,6 @@ export component MainWindow inherits Window {
     }
 
 
-    // ── Distro warning dialog ──────────────────────────────────────────────────
     if show-distro-warning: Rectangle {
         width: 100%; height: 100%;
         background: #000000.with-alpha(0.72);
@@ -8630,14 +8292,12 @@ export component MainWindow inherits Window {
                 spacing: 20px;
                 property <bool> never-show-checked: false;
 
-                // Red top stripe
                 Rectangle {
                     height: 4px;
                     border-radius: 2px;
                     background: @linear-gradient(90deg, Cat.red, Cat.red.with-alpha(0.3));
                 }
 
-                // Header
                 HorizontalLayout {
                     spacing: 14px;
                     VerticalLayout {
@@ -8665,10 +8325,8 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Divider
                 Rectangle { height: 1px; background: Cat.red.with-alpha(0.2); }
 
-                // Body
                 Text {
                     text: @tr("This application was built specifically for XeroLinux.\n\nUsing it on any other Arch-based distribution is entirely at your own risk. No support, warranty, or guarantees of any kind are provided. \n\nFunctionality may be incomplete or incorrect on unsupported systems.");
                     font-size: Cat.fs14;
@@ -8676,15 +8334,12 @@ export component MainWindow inherits Window {
                     wrap: word-wrap;
                 }
 
-                // Divider
                 Rectangle { height: 1px; background: Cat.red.with-alpha(0.2); }
 
-                // Buttons + never-show checkbox on same row
                 HorizontalLayout {
                     spacing: 12px;
                     alignment: end;
 
-                    // Never show again checkbox - left side
                     VerticalLayout {
                         alignment: center;
                         horizontal-stretch: 1;
@@ -8726,7 +8381,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Source code link
                     Rectangle {
                         width: src-lbl.preferred-width + 28px;
                         height: 36px;
@@ -8748,7 +8402,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Dismiss
                     Rectangle {
                         width: ack-lbl.preferred-width + 28px;
                         height: 36px;
@@ -8780,7 +8433,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Repo Manager: Enable/Disable modal ───────────────────────────────────
     if show-repo-enable-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -8803,7 +8455,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 56px;
                     background: Cat.green.with-alpha(0.1);
@@ -8841,7 +8492,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Info note
                 Rectangle {
                     background: Cat.blue.with-alpha(0.06);
                     Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0; }
@@ -8862,7 +8512,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Loading spinner
                 if repo-mgr-loading: Rectangle {
                     vertical-stretch: 1;
                     HorizontalLayout {
@@ -8871,7 +8520,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Repo list
                 if !repo-mgr-loading: ListView {
                     vertical-stretch: 1;
 
@@ -8941,7 +8589,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer
                 Rectangle {
                     height: 60px; background: Cat.mantle;
                     Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
@@ -8985,7 +8632,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Repo Manager: Add/Remove modal ───────────────────────────────────────
     if show-repo-manage-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -9008,7 +8654,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 56px;
                     background: Cat.blue.with-alpha(0.1);
@@ -9047,7 +8692,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Danger warning
                 Rectangle {
                     background: Cat.red.with-alpha(0.07);
                     Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.red.with-alpha(0.18); }
@@ -9068,7 +8712,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Delete confirm bar (inline, shown when a repo is targeted for removal)
                 if show-repo-delete-confirm: Rectangle {
                     height: 48px;
                     background: Cat.red.with-alpha(0.12);
@@ -9126,7 +8769,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Loading spinner
                 if repo-mgr-loading: Rectangle {
                     vertical-stretch: 1;
                     HorizontalLayout {
@@ -9135,7 +8777,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Repo list - height capped to content so add form isn't pushed down
                 if !repo-mgr-loading: ListView {
                     height: min(repo-mgr-list.length * 52px, 280px);
 
@@ -9200,7 +8841,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Add repo form
                 Rectangle {
                     background: Cat.surface0.with-alpha(0.3);
                     border-width: 1px; border-color: Cat.surface1;
@@ -9213,7 +8853,6 @@ export component MainWindow inherits Window {
 
                         Text { text: @tr("Add New Repository"); font-size: Cat.fs12; font-weight: 700; color: Cat.subtext0; }
 
-                        // Row 1: Name + URL
                         HorizontalLayout {
                             spacing: 6px;
 
@@ -9254,7 +8893,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Row 2: SigLevel + Add button
                         HorizontalLayout {
                             spacing: 6px;
 
@@ -9306,7 +8944,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer close
                 Rectangle {
                     height: 52px; background: Cat.mantle;
                     Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
@@ -9335,7 +8972,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── pacman.conf Options modal ─────────────────────────────────────────────
     if show-pacman-opts-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.65);
@@ -9356,7 +8992,6 @@ export component MainWindow inherits Window {
             drop-shadow-offset-y: 8px;
 
             opts-card-layout := VerticalLayout {
-                // Header
                 Rectangle {
                     height: 52px;
                     background: Cat.teal.with-alpha(0.12);
@@ -9378,13 +9013,11 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Option rows
                 VerticalLayout {
                     padding-left: 16px; padding-right: 16px;
                     padding-top: 8px; padding-bottom: 4px;
                     spacing: 0px;
 
-                    // Color
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9417,7 +9050,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ILoveCandy
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9450,7 +9082,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // VerbosePkgLists
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9483,7 +9114,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // DisableDownloadTimeout
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9516,7 +9146,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // CheckSpace
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9549,7 +9178,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // DisableSandbox
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9582,7 +9210,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // NoProgressBar
                     Rectangle {
                         height: 46px; background: transparent;
                         Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0.with-alpha(0.5); }
@@ -9615,7 +9242,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // UseSyslog
                     Rectangle {
                         height: 46px; background: transparent;
                         HorizontalLayout {
@@ -9648,7 +9274,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // CleanMethod selector
                 Rectangle {
                     background: Cat.surface0.with-alpha(0.3);
                     border-width: 1px; border-color: Cat.surface1;
@@ -9681,7 +9306,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer
                 Rectangle {
                     height: 56px; background: Cat.mantle;
                     Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
@@ -9725,7 +9349,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Parallel Downloads popup ─────────────────────────────────────────────
     if show-pd-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.65);
@@ -9745,7 +9368,6 @@ export component MainWindow inherits Window {
             drop-shadow-color: Cat.mauve.with-alpha(0.15);
             drop-shadow-offset-y: 8px;
 
-            // swallow clicks so they don't dismiss via the backdrop
             TouchArea {}
 
             property <bool> is-preset: setting-parallel-downloads == 5
@@ -9755,7 +9377,6 @@ export component MainWindow inherits Window {
                 || setting-parallel-downloads == 25;
 
             pd-card := VerticalLayout {
-                // Header
                 Rectangle {
                     height: 52px;
                     background: Cat.mauve.with-alpha(0.12);
@@ -9776,7 +9397,6 @@ export component MainWindow inherits Window {
                     padding-left: 16px; padding-right: 16px; padding-top: 14px; padding-bottom: 14px;
                     spacing: 12px;
 
-                    // Preset pills + Custom
                     HorizontalLayout {
                         alignment: center;
                         spacing: 6px;
@@ -9822,7 +9442,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Custom input
                     if setting-pd-custom-mode: HorizontalLayout {
                         spacing: 8px;
                         Rectangle {
@@ -9869,7 +9488,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Caution - centered, hugs content
                     HorizontalLayout {
                         alignment: center;
                         Rectangle {
@@ -9890,7 +9508,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Footer
                 Rectangle {
                     height: 56px; background: Cat.mantle;
                     Rectangle { y: 0; width: 100%; height: 1px; background: Cat.surface0; }
@@ -9911,7 +9528,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Missing dependency warning popup ─────────────────────────────────────
     if show-warning-popup: Rectangle {
         width: 100%;
         height: 100%;
@@ -9937,7 +9553,6 @@ export component MainWindow inherits Window {
                 padding: 20px;
                 spacing: 14px;
 
-                // Title row
                 HorizontalLayout {
                     spacing: 10px;
                     VerticalLayout {
@@ -9957,7 +9572,6 @@ export component MainWindow inherits Window {
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
-                    // X close button
                     Rectangle {
                         width: 28px;
                         height: 28px;
@@ -9986,10 +9600,8 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Divider
                 Rectangle { height: 1px; background: Cat.yellow.with-alpha(0.22); }
 
-                // Message body
                 Text {
                     text: warning-popup-message;
                     font-size: Cat.fs13;
@@ -9997,7 +9609,6 @@ export component MainWindow inherits Window {
                     wrap: word-wrap;
                 }
 
-                // Chaotic-AUR path: install button
                 if warning-popup-chaotic-aur: Rectangle {
                     background: Cat.green.with-alpha(0.08);
                     border-radius: 8px;
@@ -10022,7 +9633,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // No Chaotic-AUR: AUR helper hint
                 if !warning-popup-chaotic-aur: Rectangle {
                     background: Cat.yellow.with-alpha(0.06);
                     border-radius: 8px;
@@ -10054,7 +9664,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Install button - only when Chaotic-AUR available
                 if warning-popup-chaotic-aur: Rectangle {
                     height: 36px;
                     border-radius: 8px;
@@ -10083,7 +9692,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Flatpak Remotes modal ─────────────────────────────────────────────────
     if show-flatpak-remotes-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -10106,7 +9714,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 56px;
                     background: Cat.teal.with-alpha(0.1);
@@ -10132,7 +9739,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Remote list
                 ScrollView {
                     vertical-stretch: 1;
 
@@ -10173,7 +9779,6 @@ export component MainWindow inherits Window {
                                     Text { text: remote.url; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
                                 }
                                 VerticalLayout { alignment: center;
-                                    // Default remote (flathub) is protected - no delete.
                                     if remote.name == "flathub": Rectangle {
                                         width: 60px; height: 22px; border-radius: 6px;
                                         background: Cat.teal.with-alpha(0.15);
@@ -10195,12 +9800,10 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Divider
                 Rectangle {
                     height: 1px; background: Cat.surface0;
                 }
 
-                // Add remote form
                 Rectangle {
                     height: 106px;
                     background: Cat.mantle;
@@ -10263,7 +9866,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── AppImage manager modal (install location + catalog sources) ────────────
     if show-appimage-mgr-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -10286,7 +9888,6 @@ export component MainWindow inherits Window {
             VerticalLayout {
                 spacing: 0;
 
-                // Header
                 Rectangle {
                     height: 66px;
                     background: Cat.blue.with-alpha(0.1);
@@ -10316,7 +9917,6 @@ export component MainWindow inherits Window {
                         spacing: 20px;
                         alignment: start;
 
-                        // Install location
                         VerticalLayout {
                             spacing: 8px;
                             Text { text: @tr("Install / Download Location"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
@@ -10337,7 +9937,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // GitHub API token (optional) - raises update-check rate limit
                         VerticalLayout {
                             spacing: 8px;
                             Text { text: @tr("GitHub Token (optional)"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
@@ -10375,7 +9974,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Catalog sources
                         VerticalLayout {
                             spacing: 8px;
                             Text { text: @tr("Catalog Sources"); font-size: Cat.fs15; font-weight: 700; color: Cat.subtext0; }
@@ -10399,7 +9997,6 @@ export component MainWindow inherits Window {
                                         Text { text: src.url; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
                                     }
                                     VerticalLayout { alignment: center;
-                                        // Default AppImageHub feed is protected - no delete.
                                         if src.url == "https://appimage.github.io/feed.json": Rectangle {
                                             width: 68px; height: 26px; border-radius: 6px;
                                             background: Cat.blue.with-alpha(0.15);
@@ -10419,10 +10016,8 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Divider
                 Rectangle { height: 1px; background: Cat.surface0; }
 
-                // Add source form
                 Rectangle {
                     height: 122px;
                     background: Cat.mantle;
@@ -10478,7 +10073,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Nav tooltip - declared last so it renders above all other elements
     if NavTooltip.text != "": Rectangle {
         x: sidebar-vl.preferred-width + 10px;
         y: NavTooltip.y;

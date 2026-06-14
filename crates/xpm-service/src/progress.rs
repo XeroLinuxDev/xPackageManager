@@ -26,7 +26,6 @@ impl ProgressTracker {
         });
     }
 
-    // track download rate from recent samples
     pub fn update(&mut self, progress: OperationProgress) {
         if let Some(ref mut op) = self.current {
             if progress.status == OperationStatus::Downloading {
@@ -71,7 +70,6 @@ impl ProgressTracker {
         }
     }
 
-    // eta based on curent speed
     pub fn estimated_remaining(&self) -> Option<f64> {
         let op = self.current.as_ref()?;
         let speed = self.download_speed()?;

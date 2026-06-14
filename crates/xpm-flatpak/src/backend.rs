@@ -33,7 +33,6 @@ pub struct FlatpakBackend {
     _remote_manager: RemoteManager,
 }
 
-// glib types arent thread safe so we just force it here
 unsafe impl Send for FlatpakBackend {}
 unsafe impl Sync for FlatpakBackend {}
 
@@ -116,7 +115,6 @@ impl FlatpakBackend {
                         let branch = rref.branch().map(|s| s.to_string()).unwrap_or_else(|| "stable".to_string());
                         let is_installed = installed_names.contains(&name);
 
-                        // flatpak app ids are reverse-dns so we grab the last part as display name
                         let display_name = name.split('.').next_back().unwrap_or(&name).to_string();
 
                         let status = if is_installed {
@@ -219,7 +217,6 @@ impl PackageSource for FlatpakBackend {
                             .installed_ref(RefKind::App, &name, Some(&arch), Some(&branch), gio::Cancellable::NONE)
                             .is_ok();
 
-                        // no description availabe from remote refs sadly
                         results.push(SearchResult {
                             name: name.clone(),
                             version: Version::new(&branch),
@@ -326,7 +323,6 @@ impl PackageSource for FlatpakBackend {
                         .unwrap_or_else(|| "unknown".to_string());
                     let origin = iref.origin().map(|s| s.to_string()).unwrap_or_default();
 
-                    // flatpak doesnt expose the new version easily so we just reuse current
                     updates.push(UpdateInfo {
                         name,
                         current_version: Version::new(&current),
