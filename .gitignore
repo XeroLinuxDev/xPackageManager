@@ -3,3 +3,15 @@
 *.kate-swp
 push.sh
 session-*.md
+
+# makepkg build output / work dirs (xpm-gui + the deps/ standalone packages)
+*.pkg.tar.*
+/packaging/src/
+/packaging/pkg/
+/packaging/deps/*/src/
+/packaging/deps/*/pkg/
+# VCS clones + extracted sources pulled by the deps PKGBUILDs at build time
+/packaging/deps/appimageupdate-git/AppImageUpdate/
+/packaging/deps/appimageupdate-git/argagg/
+/packaging/deps/appimageupdate-git/build/
+/packaging/deps/downgrade/downgrade-*/

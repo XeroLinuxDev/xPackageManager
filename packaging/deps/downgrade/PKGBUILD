@@ -1,0 +1,29 @@
+# Standalone `downgrade` package (no AUR). Built by xPackageManager's build.sh
+# when no enabled repo provides `downgrade`. Carries downgrade's OWN version,
+# tracking the latest upstream release (pkgver() resolves it).
+pkgname=downgrade
+pkgver=12.0.2
+pkgrel=1
+pkgdesc="Bash script for downgrading one or more packages to a version in your cache or the A.L.A."
+arch=('any')
+url="https://github.com/archlinux-downgrade/downgrade"
+license=('GPL')
+depends=('pacman-contrib' 'fzf' 'gettext')
+makedepends=('curl' 'gettext')
+backup=('etc/xdg/downgrade/downgrade.conf')
+options=('!debug')
+
+# Resolve the real latest release version (becomes pkgver).
+pkgver() {
+    curl -fsSL "https://api.github.com/repos/archlinux-downgrade/downgrade/releases/latest" \
+        | sed -n 's/.*"tag_name": *"v\?\([^"]*\)".*/\1/p' | head -1
+}
+
+build() {
+    curl -fsSL "https://github.com/archlinux-downgrade/downgrade/releases/download/v${pkgver}/downgrade-${pkgver}.tar.gz" \
+        | tar xz -C "$srcdir"
+}
+
+package() {
+    make -C "$srcdir/downgrade-${pkgver}" DESTDIR="$pkgdir" PREFIX=/usr install
+}

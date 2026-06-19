@@ -191,9 +191,10 @@ impl AppImageBackend {
             }
         }
 
-        if !done && entry.update_info.is_some() && which("appimageupdatetool").is_some() {
+        if !done && entry.update_info.is_some() {
+          if let Some(tool) = xpm_core::resolve_tool("appimageupdatetool") {
             log("Updating via appimageupdatetool…\n");
-            match Command::new("appimageupdatetool")
+            match Command::new(&tool)
                 .arg("--overwrite")
                 .arg(&path)
                 .status()
@@ -208,6 +209,7 @@ impl AppImageBackend {
                     e
                 )),
             }
+          }
         }
 
         if !done {
@@ -256,8 +258,13 @@ impl AppImageBackend {
             let latest = crate::catalog::resolve_download(gh)?;
             return Ok(Some(latest.as_str()) != entry.source_url.as_deref());
         }
-        if entry.update_info.is_some() && which("appimageupdatetool").is_some() {
-            let status = Command::new("appimageupdatetool")
+        if let Some(tool) = entry
+            .update_info
+            .is_some()
+            .then(|| xpm_core::resolve_tool("appimageupdatetool"))
+            .flatten()
+        {
+            let status = Command::new(&tool)
                 .arg("--check-for-update")
                 .arg(&entry.path)
                 .status()

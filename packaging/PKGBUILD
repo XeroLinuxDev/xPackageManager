@@ -1,10 +1,15 @@
 # Maintainer: Your Name <your.email@example.com>
+#
+# Build with ./build.sh (in this directory). On systems whose repos don't provide
+# `downgrade` / `appimageupdate`, build.sh first builds those from the standalone
+# PKGBUILDs under deps/ (real, separately-removable packages with their OWN
+# versions - never the AUR), then builds this. Clean with: ./build.sh --clean
 pkgname=xpm-gui
 pkgver=0.6.2
-pkgrel=3
+pkgrel=5
 pkgdesc="A modern package manager for Arch Linux supporting pacman, Flatpak and AppImage"
 arch=('x86_64')
-url="https://github.com/example/xpackagemanager"
+url="https://github.com/xerolinux/xPackageManager"
 license=('GPL-3.0-or-later')
 depends=(
     'pacman'
@@ -16,18 +21,14 @@ depends=(
     'freetype2'
     'qt6-base'
     'curl'
-    'downgrade'
-    'appimageupdate-git'
     'desktop-file-utils'
     'fuse2'
     'fuse3'
     'zenity'
+    'downgrade'        # repo package, or built by build.sh from deps/downgrade
+    'appimageupdate'   # provided by appimageupdate-git (repo or deps/appimageupdate-git)
 )
-makedepends=(
-    'rust'
-    'cargo'
-    'qt6-base'
-)
+makedepends=('rust' 'cargo' 'qt6-base')
 optdepends=(
     'sccache: faster incremental Rust builds'
     'mold: faster linker (cuts link time significantly)'
@@ -35,6 +36,7 @@ optdepends=(
 )
 provides=('xpackagemanager')
 conflicts=('xpackagemanager-git')
+options=('!debug')
 source=()
 sha256sums=()
 
@@ -80,32 +82,18 @@ build() {
 package() {
     cd "$_projectdir"
 
-    # Install binary
     install -Dm755 "target/pkg/xpackagemanager" "$pkgdir/usr/bin/xpackagemanager"
-
-    # Install desktop file
     install -Dm644 "packaging/xpackagemanager.desktop" "$pkgdir/usr/share/applications/xpackagemanager.desktop"
-
-    # Install app icon (hicolor theme, 512×512)
     install -Dm644 "packaging/xPM.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/xpackagemanager.png"
-
-    # Install MIME type for .pkg.tar.zst files
     install -Dm644 "packaging/x-alpm-package.xml" "$pkgdir/usr/share/mime/packages/x-alpm-package.xml"
-
-    # Install polkit policy
     install -Dm644 "packaging/org.xpackagemanager.policy" "$pkgdir/usr/share/polkit-1/actions/org.xpackagemanager.policy"
 
-    # Clean up build artifacts
     rm -rf target/pkg
-
 }
 
 post_install() {
-    # Update MIME database
     update-mime-database /usr/share/mime &>/dev/null || true
-    # Update desktop database
     update-desktop-database -q || true
-    # Rebuild icon cache so KDE/GTK pick up the new icon
     gtk-update-icon-cache -f -t /usr/share/icons/hicolor &>/dev/null || true
 }
 

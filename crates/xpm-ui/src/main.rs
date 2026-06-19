@@ -6014,13 +6014,13 @@ fn main() {
         info!("Downgrade: {}", name);
         let tx = tx_dg.clone();
 
-        if !std::path::Path::new("/usr/bin/downgrade").exists() {
+        let Some(dg_bin) = xpm_core::resolve_tool("downgrade") else {
             let _ = tx.send(UiMessage::ShowWarning {
                 message: "The downgrade package is not installed on this system.\n\nThis feature requires it to function.".to_string(),
                 chaotic_aur: is_chaotic_aur_enabled(),
             });
             return;
-        }
+        };
 
         let input = dg_input.clone();
         let pid = dg_pid.clone();
@@ -6035,8 +6035,9 @@ fn main() {
                 let _ = std::fs::set_permissions(&fzf_path, perms);
             }
             let bash_cmd = format!(
-                "export PATH={dir}:\"$PATH\"; /usr/bin/downgrade {name}",
+                "export PATH={dir}:\"$PATH\"; {dg} {name}",
                 dir = fake_dir,
+                dg = dg_bin.display(),
                 name = name,
             );
             run_in_terminal_expanded(

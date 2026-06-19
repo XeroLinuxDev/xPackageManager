@@ -1,0 +1,65 @@
+# Standalone `appimageupdate-git` package, AUR-free. Same upstream source as the
+# AUR package (github.com/AppImageCommunity/AppImageUpdate), but cpr + zsync2 are
+# vendored (chaotic-only, not in core/extra) and libappimage comes from extra.
+# Built by xPackageManager's build.sh when no repo provides appimageupdate.
+# Carries its OWN version (from git describe), tracking the latest release tag.
+pkgname=appimageupdate-git
+pkgver=2.0.0.alpha.1.20251018.r0.ga211784
+pkgrel=1
+pkgdesc="Tool to update AppImages using embedded zsync/GitHub update information"
+arch=('x86_64')
+url="https://github.com/AppImageCommunity/AppImageUpdate"
+license=('MIT')
+depends=('gpgme' 'libgcrypt' 'curl')
+makedepends=('git' 'cmake' 'nlohmann-json' 'libxpm' 'libappimage'
+             'gpgme' 'libgcrypt' 'zlib' 'xz' 'openssl')
+provides=('appimageupdate')
+conflicts=('appimageupdate')
+options=('!debug')
+source=('git+https://github.com/AppImageCommunity/AppImageUpdate.git'
+        'argagg::git+https://github.com/vietjtnguyen/argagg.git#commit=aab29c364a68890e0d438ce06f26268b5e1a70fb')
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+    cd "$srcdir/AppImageUpdate"
+    # Newest real release tag (skip the rolling 'continuous'/'latest' tags).
+    git checkout -q "$(git tag --sort=-creatordate | grep -viE '^(continuous|latest)$' | head -1)"
+    git submodule update --init --recursive
+}
+
+pkgver() {
+    cd "$srcdir/AppImageUpdate"
+    git describe --long --tags --exclude latest --exclude continuous \
+        | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+    # LTO breaks some of the vendored C/C++; drop it for this build.
+    local _c="${CFLAGS//-flto*/}" _cxx="${CXXFLAGS//-flto*/}"
+    # zsync2 (old C) trips GCC's now-fatal pointer/int warnings; cpr's headers use
+    # intptr_t without <cstdint>. Relax those + force-include cstdint + vendored argagg.
+    _c="${_c} -Wno-incompatible-pointer-types -Wno-implicit-function-declaration -Wno-int-conversion -Wno-implicit-int"
+    _cxx="${_cxx} -include cstdint -I${srcdir}/argagg/include"
+    cmake -S "$srcdir/AppImageUpdate" -B "$srcdir/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_BINDIR=bin \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_C_FLAGS="${_c}" \
+        -DCMAKE_CXX_FLAGS="${_cxx}" \
+        -DUSE_SYSTEM_CPR=OFF \
+        -DUSE_SYSTEM_ZSYNC2=OFF \
+        -DUSE_SYSTEM_LIBAPPIMAGE=ON \
+        -DBUILD_QT_UI=OFF
+    cmake --build "$srcdir/build" --target appimageupdatetool
+}
+
+package() {
+    # CMake install rewrites the tool's RUNPATH to $ORIGIN/../lib; with prefix
+    # /usr that's /usr/lib, where we drop the companion libappimageupdate.so.
+    cmake --install "$srcdir/build" --component APPIMAGEUPDATETOOL --prefix "$pkgdir/usr"
+    local _so
+    _so=$(find "$srcdir/build" -type f -name 'libappimageupdate.so*' | head -n1)
+    install -Dm755 "$_so" "$pkgdir/usr/lib/libappimageupdate.so"
+    install -Dm644 "$srcdir/AppImageUpdate/LICENSE.txt" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE.txt"
+}
