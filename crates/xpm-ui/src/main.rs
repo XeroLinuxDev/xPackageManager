@@ -2021,6 +2021,15 @@ fn run_in_terminal_impl(
     let _ = tx.send(UiMessage::OperationDone(success));
 }
 
+// Full system update: native + system flatpaks under one pkexec (root), then USER
+// flatpaks as the invoking user. Running flatpak only as root misses user-install
+// apps (e.g. user-added remotes like cosmic), so both scopes are updated.
+const FULL_UPDATE_SCRIPT: &str = "pkexec bash -c 'pacman -Syu && echo \"\" && echo \"=== System flatpaks ===\" && flatpak update --system --noninteractive -y' && echo \"\" && echo \"=== User flatpaks ===\" && flatpak update --user --noninteractive -y && echo \"\" && echo \"System fully updated\"";
+
+// Update every flatpak: user-scope as the user, system-scope via pkexec. Updating
+// only one scope misses the other installation's apps (incl. user remotes).
+const FLATPAK_UPDATE_ALL_SCRIPT: &str = "echo \"=== User flatpaks ===\" && flatpak update --user --noninteractive -y && echo \"\" && echo \"=== System flatpaks ===\" && pkexec flatpak update --system --noninteractive -y && echo \"\" && echo \"Flatpaks updated\"";
+
 fn build_pacman_command(action: &str, names: &[String], backend: i32) -> (String, Vec<String>) {
     match (action, backend) {
         ("install", 1) | ("bulk-install", 1) => {
@@ -4806,11 +4815,8 @@ fn main() {
             run_in_terminal_expanded(
                 &tx,
                 "Full System Update",
-                "pkexec",
-                &[
-                    "bash", "-c",
-                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update --noninteractive -y && echo '' && echo '✓ System fully updated'",
-                ],
+                "bash",
+                &["-c", FULL_UPDATE_SCRIPT],
                 &input,
                 &pid,
             );
@@ -4847,9 +4853,10 @@ fn main() {
         let input = upd_flt_input.clone();
         let pid = upd_flt_pid.clone();
         let ctx = upd_flt_ctx.clone();
+        let _ = ctx;
         thread::spawn(move || {
             let _ = tx.send(UiMessage::SetTerminalIsUpgrade(false));
-            run_managed_operation(&tx, "Flatpak Update", "update-all", &[], 1, &input, &pid, &ctx);
+            run_in_terminal_expanded(&tx, "Flatpak Update", "bash", &["-c", FLATPAK_UPDATE_ALL_SCRIPT], &input, &pid);
         });
     });
 
@@ -4870,11 +4877,8 @@ fn main() {
             run_in_terminal_expanded(
                 &tx,
                 "Full System Update",
-                "pkexec",
-                &[
-                    "bash", "-c",
-                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update --noninteractive -y && echo '' && echo '✓ System fully updated'",
-                ],
+                "bash",
+                &["-c", FULL_UPDATE_SCRIPT],
                 &input,
                 &pid,
             );

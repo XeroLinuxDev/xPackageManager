@@ -1837,9 +1837,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                if view == 1: RefreshButton {
-                    clicked => { root.refresh(); }
-                }
 
                 if view == 13: Btn {
                     label: arch-news-loading ? "Loading..." : "Refresh";
