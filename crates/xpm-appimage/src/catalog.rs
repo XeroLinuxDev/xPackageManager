@@ -1,8 +1,5 @@
-//! AppImage catalog - the default browse source.
-//!
-//! Pulls the community AppImageHub feed (https://appimage.github.io/feed.json),
-//! which lists ~1400 apps with their GitHub repo. Installing resolves the repo's
-//! latest GitHub release to a downloadable `.AppImage` asset.
+//! AppImage catalog. Pulls the AppImageHub feed (~1400 apps + their GitHub repo);
+//! install resolves the repo's latest release to a downloadable `.AppImage`.
 
 use std::process::Command;
 use std::path::PathBuf;
@@ -20,6 +17,8 @@ pub struct CatalogEntry {
     /// GitHub "owner/repo" - used to resolve the download.
     pub github: String,
     pub icon_url: Option<String>,
+    /// Name of the catalog source this entry came from (set by fetch_sources_named).
+    pub source: String,
 }
 
 /// Feed descriptions often contain raw AppStream HTML (`<p>`, `<ul>`, `<li>`)
@@ -121,28 +120,33 @@ fn curl_text(url: &str, accept: Option<&str>) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Fetch and merge multiple feed-JSON sources. Per-source errors are logged and
-/// skipped; entries are de-duplicated by GitHub repo (case-insensitive), then name.
-///
-/// The feed is messy - keys may be present-but-null and arrays may contain null
-/// elements - so we traverse a `Value` tolerantly rather than via typed structs.
+/// Fetch + merge feed-JSON sources, de-duped by GitHub repo then name. Per-source
+/// errors are logged and skipped.
 pub fn fetch_sources(urls: &[String]) -> Vec<CatalogEntry> {
+    let named: Vec<(String, String)> = urls.iter().map(|u| (u.clone(), u.clone())).collect();
+    fetch_sources_named(&named)
+}
+
+/// Like `fetch_sources` but tags each entry with the source NAME it came from
+/// (so the UI can offer a per-source dropdown). `sources` is (name, url) pairs.
+pub fn fetch_sources_named(sources: &[(String, String)]) -> Vec<CatalogEntry> {
     let mut merged: Vec<CatalogEntry> = Vec::new();
     let mut seen_repo = std::collections::HashSet::new();
     let mut seen_name = std::collections::HashSet::new();
 
-    for url in urls {
+    for (name, url) in sources {
         if url.trim().is_empty() {
             continue;
         }
         match fetch_one(url) {
             Ok(entries) => {
-                for e in entries {
+                for mut e in entries {
                     let repo_key = e.github.to_lowercase();
                     let name_key = e.name.to_lowercase();
                     if !seen_repo.insert(repo_key) || !seen_name.insert(name_key) {
                         continue;
                     }
+                    e.source = name.clone();
                     merged.push(e);
                 }
             }
@@ -258,7 +262,7 @@ fn fetch_one(url: &str) -> Result<Vec<CatalogEntry>> {
                 }
             });
 
-        entries.push(CatalogEntry { name, description, categories, github, icon_url });
+        entries.push(CatalogEntry { name, description, categories, github, icon_url, source: String::new() });
     }
     entries.sort_by_key(|e| e.name.to_lowercase());
     Ok(entries)

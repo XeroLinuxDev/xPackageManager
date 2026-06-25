@@ -304,6 +304,21 @@ impl PackageSource for FlatpakBackend {
             .collect();
 
             for installation in installations {
+                // list_installed_refs_for_update only sees remotes whose summary is
+                // cached, so refresh every enabled remote first (else non-flathub
+                // updates are missed).
+                if let Ok(remotes) = installation.list_remotes(gio::Cancellable::NONE) {
+                    for remote in remotes {
+                        if remote.is_disabled() {
+                            continue;
+                        }
+                        if let Some(name) = remote.name() {
+                            let _ = installation
+                                .list_remote_refs_sync(name.as_str(), gio::Cancellable::NONE);
+                        }
+                    }
+                }
+
                 let refs = match installation
                     .list_installed_refs_for_update(gio::Cancellable::NONE)
                 {

@@ -105,7 +105,19 @@ export struct RepoEntry {
     server: string,
 }
 
-export struct FlatpakRemote { name: string, url: string }
+export struct FlatpakRemote { name: string, url: string, enabled: bool, system: bool }
+
+// Flatpak permission editor models.
+export struct PermApp { id: string, name: string, initial: string, system: bool }
+// A boolean permission toggle. `overridden` = differs from the app default.
+export struct PermToggle { key: string, label: string, value: bool, overridden: bool }
+// A list-type permission entry: filesystem path (mode=ro/rw/create), bus name
+// (mode=policy), env var (value in `mode`), or persist path (mode empty).
+export struct PermEntry { value: string, mode: string, overridden: bool }
+
+// Transaction history models.
+export struct HistTxn { when: string, command: string, summary: string, rollbackable: bool }
+export struct HistAction { kind: string, pkg: string, change: string }
 
 export struct FwupdDetected {
     name: string,
@@ -255,6 +267,52 @@ component Btn inherits Rectangle {
     }
 
     btn-touch := TouchArea {
+        mouse-cursor: enabled ? pointer : default;
+        clicked => { if enabled { root.clicked(); } }
+    }
+}
+
+// Shared refresh control: small glyph + "Refresh" pill with a visible outline,
+// identical on every page. Width hugs its content (sits compact in the corner).
+component RefreshButton inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <bool> loading: false;
+    callback clicked;
+
+    height: 30px;
+    width: rb-row.preferred-width;
+    horizontal-stretch: 0;
+    border-radius: 8px;
+    background: !enabled ? Cat.surface0.with-alpha(0.5) : (rb-touch.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.6));
+    border-width: 1px;
+    border-color: rb-touch.has-hover ? Cat.mauve.with-alpha(0.7) : Cat.overlay0.with-alpha(0.45);
+    animate background, border-color { duration: 100ms; }
+
+    rb-row := HorizontalLayout {
+        alignment: center;
+        padding-left: 10px; padding-right: 11px;
+        spacing: 6px;
+        VerticalLayout {
+            alignment: center;
+            NavIcon {
+                d: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15";
+                icon-color: enabled ? Cat.subtext0 : Cat.overlay0;
+                width: 13px; height: 13px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: loading ? @tr("Refreshing...") : @tr("Refresh");
+                font-size: Cat.fs12;
+                font-weight: 600;
+                color: enabled ? Cat.text : Cat.overlay0;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    rb-touch := TouchArea {
         mouse-cursor: enabled ? pointer : default;
         clicked => { if enabled { root.clicked(); } }
     }
@@ -886,6 +944,72 @@ component DetailProperty inherits HorizontalLayout {
 }
 
 
+// One boolean permission row: marker dot (overridden) + label + switch.
+component PermToggleRow inherits Rectangle {
+    in property <PermToggle> t;
+    callback changed(bool);
+    height: 36px;
+    HorizontalLayout {
+        padding-left: 8px; padding-right: 8px; spacing: 8px;
+        VerticalLayout { alignment: center;
+            Rectangle { width: 6px; height: 6px; border-radius: 3px; background: t.overridden ? Cat.mauve : transparent; }
+        }
+        VerticalLayout { alignment: center; horizontal-stretch: 1;
+            Text { text: t.label; font-size: Cat.fs13; color: Cat.text; overflow: elide; }
+        }
+        VerticalLayout { alignment: center;
+            Rectangle {
+                width: 40px; height: 22px; border-radius: 11px;
+                background: t.value ? Cat.green.with-alpha(0.85) : Cat.surface1;
+                animate background { duration: 90ms; }
+                Rectangle {
+                    width: 16px; height: 16px; border-radius: 8px; background: Cat.text; y: 3px;
+                    x: t.value ? parent.width - self.width - 3px : 3px;
+                    animate x { duration: 100ms; easing: ease-out; }
+                }
+                ptr-ta := TouchArea { mouse-cursor: pointer; clicked => { root.changed(!t.value); } }
+            }
+        }
+    }
+}
+
+// One list-type permission row (filesystem/bus/env/persist): text + remove.
+component PermEntryRow inherits Rectangle {
+    in property <PermEntry> e;
+    callback removed();
+    height: 32px;
+    HorizontalLayout {
+        padding-left: 8px; padding-right: 8px; spacing: 8px;
+        VerticalLayout { alignment: center;
+            Rectangle { width: 6px; height: 6px; border-radius: 3px; background: e.overridden ? Cat.mauve : transparent; }
+        }
+        VerticalLayout { alignment: center; horizontal-stretch: 1;
+            Text { text: e.mode == "" ? e.value : e.value + "  (" + e.mode + ")"; font-size: Cat.fs13; color: Cat.text; overflow: elide; }
+        }
+        VerticalLayout { alignment: center;
+            Rectangle {
+                width: 24px; height: 24px; border-radius: 6px;
+                background: per-rm.has-hover ? Cat.red.with-alpha(0.25) : Cat.surface1;
+                animate background { duration: 60ms; }
+                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.red; width: 11px; height: 11px; x: 6px; y: 6px; }
+                per-rm := TouchArea { mouse-cursor: pointer; clicked => { root.removed(); } }
+            }
+        }
+    }
+}
+
+// Section heading inside the permission panel.
+component PermSectionLabel inherits Rectangle {
+    in property <string> text-value;
+    height: 28px;
+    HorizontalLayout {
+        padding-left: 8px;
+        VerticalLayout { alignment: center;
+            Text { text: text-value; font-size: Cat.fs11; font-weight: 700; color: Cat.mauve; letter-spacing: 0.6px; }
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     title: @tr("XeroLinux Package Manager GUI");
     preferred-width: 1600px;
@@ -946,6 +1070,7 @@ export component MainWindow inherits Window {
     in-out property <int> appimage-page: 0;
     property <int> appimage-per-page: 50;
     in-out property <[AppImageSource]> appimage-sources: [];
+    in-out property <string> selected-appimage-source: "All";
     in-out property <bool> show-appimage-mgr-modal: false;
     in-out property <string> new-appimage-source-name: "";
     in-out property <string> new-appimage-source-url: "";
@@ -961,7 +1086,8 @@ export component MainWindow inherits Window {
     in-out property <string> new-remote-url: "";
     callback load-flatpak-remotes;
     callback add-flatpak-remote(string, string);
-    callback remove-flatpak-remote(string);
+    callback remove-flatpak-remote(string, bool); // name, system
+    callback set-flatpak-remote-enabled(string, bool, bool); // name, system, enable
 
     property <int> window-width: root.width / 1px;
     property <int> window-height: root.height / 1px;
@@ -1011,6 +1137,7 @@ export component MainWindow inherits Window {
     in-out property <[PackageData]> search-available: [];
 
     in-out property <[string]> flatpak-remotes: [];
+    in-out property <int> flatpak-remote-count: 0;
     in-out property <string> selected-remote: "";
     in-out property <[PackageData]> remote-apps: [];
     in-out property <bool> remote-apps-loading: false;
@@ -1070,6 +1197,58 @@ export component MainWindow inherits Window {
     in-out property <int> repos-view: 0;
     callback downgrade-package(string);
 
+    // --- Flatpak permission editor ---
+    in-out property <bool> show-flatpak-perms-modal: false;
+    in-out property <bool> perm-single-app: false; // opened from a row (hide app list)
+    in-out property <[PermApp]> perm-apps: [];
+    in-out property <string> perm-app-filter: "";
+    in-out property <string> perm-selected-id: "";
+    in-out property <string> perm-selected-name: "";
+    in-out property <bool> perm-scope-system: false;
+    in-out property <bool> perm-loading: false;
+    in-out property <bool> perm-dirty: false; // staged (unapplied) system changes
+    in-out property <[PermToggle]> perm-shares: [];
+    in-out property <[PermToggle]> perm-sockets: [];
+    in-out property <[PermToggle]> perm-devices: [];
+    in-out property <[PermToggle]> perm-features: [];
+    in-out property <[PermToggle]> perm-filesystems: [];
+    in-out property <[PermEntry]> perm-filesystems-custom: [];
+    in-out property <[PermEntry]> perm-session-bus: [];
+    in-out property <[PermEntry]> perm-system-bus: [];
+    in-out property <[PermEntry]> perm-env: [];
+    in-out property <[PermEntry]> perm-persist: [];
+    callback open-flatpak-perms(string, string); // app-id, display-name (single app)
+    callback open-flatpak-perms-manager;         // unified, with app list
+    callback select-perm-app(string);
+    callback filter-perm-apps(string);
+    callback set-perm-scope(bool);
+    callback toggle-perm(string, string, bool); // category, token, on
+    callback add-perm-fs(string, string);       // path, mode
+    callback remove-perm-fs(string);
+    callback add-perm-bus(bool, string);        // system, name
+    callback remove-perm-bus(bool, string);
+    callback add-perm-env(string, string);      // key, value
+    callback remove-perm-env(string);
+    callback add-perm-persist(string);
+    callback reset-perm;
+    callback apply-perm-system;
+
+    // --- Transaction history ---
+    in-out property <bool> show-history-modal: false;
+    in-out property <bool> history-loading: false;
+    in-out property <[HistTxn]> history-txns: [];
+    in-out property <int> history-selected: -1;
+    in-out property <string> history-detail-title: "";
+    in-out property <[HistAction]> history-actions: [];
+    in-out property <bool> history-can-rollback: false;
+    in-out property <bool> history-warn-open: false;
+    in-out property <bool> history-warn-dontshow: false;
+    in-out property <string> history-snapshot-note: "";
+    callback open-transaction-history;
+    callback proceed-history-warning(bool); // dont-show-again
+    callback select-transaction(int);
+    callback confirm-rollback;
+
     in-out property <string> dep-tree-pkg: "";
     in-out property <string> dep-tree-root-version: "";
     in-out property <[DepNode]> dep-tree-nodes: [];
@@ -1100,6 +1279,7 @@ export component MainWindow inherits Window {
     in-out property <string> repo-search: "";
 
     callback refresh;
+    callback refresh-flatpaks;
     callback search(string);
     callback install-package(string, int);
     callback remove-package(string, int);
@@ -1120,6 +1300,7 @@ export component MainWindow inherits Window {
     callback reinstall-appimage(string);
     callback load-appimage-catalog;
     callback reload-appimage-catalog;
+    callback browse-appimage-source(string);
     callback filter-appimage-catalog(string, int);
     callback install-appimage-catalog(string);
     callback load-appimage-icon(string);
@@ -1643,8 +1824,20 @@ export component MainWindow inherits Window {
 
 
 
-                if view == 0: Btn {
-                    label: @tr("Refresh");
+                if view == 0: RefreshButton {
+                    clicked => { root.refresh(); }
+                }
+
+                if view == 7 || view == 8: RefreshButton {
+                    loading: repo-loading;
+                    enabled: !repo-loading;
+                    clicked => {
+                        root.load-pacman-repos();
+                        root.browse-repo(view == 8 ? selected-repo : "");
+                    }
+                }
+
+                if view == 1: RefreshButton {
                     clicked => { root.refresh(); }
                 }
 
@@ -2065,6 +2258,109 @@ export component MainWindow inherits Window {
                         }
 
                         Rectangle { horizontal-stretch: 1; }
+
+                        // Refresh the current flatpak list (re-pull appstream).
+                        if flatpak-tab == 0: VerticalLayout {
+                            alignment: center;
+                            padding-right: flatpak-remote-count > 1 ? 8px : 14px;
+                            RefreshButton {
+                                loading: remote-apps-loading;
+                                enabled: !remote-apps-loading;
+                                clicked => { show-flatpak-detail = false; flatpak-page = 0; root.refresh-flatpaks(); }
+                            }
+                        }
+
+                        // Remote selector. Shown only when more than one remote is
+                        // enabled; with just Flathub it collapses to a static label.
+                        if flatpak-tab == 0 && flatpak-remote-count > 1: VerticalLayout {
+                            alignment: center;
+                            padding-right: 14px;
+                            Rectangle {
+                                width: rem-sel-lbl.preferred-width + 58px;
+                                height: 30px;
+                                border-radius: 8px;
+                                background: rem-sel-ta.has-hover ? Cat.surface1 : Cat.surface0.with-alpha(0.7);
+                                border-width: 1px;
+                                border-color: rem-sel-ta.has-hover ? Cat.overlay0.with-alpha(0.4) : Cat.surface0;
+                                animate background, border-color { duration: 80ms; }
+                                HorizontalLayout {
+                                    padding-left: 11px; padding-right: 9px;
+                                    spacing: 7px;
+                                    VerticalLayout {
+                                        alignment: center;
+                                        NavIcon { d: "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z"; icon-color: Cat.mauve.with-alpha(0.8); width: 14px; height: 14px; }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        horizontal-stretch: 1;
+                                        rem-sel-lbl := Text {
+                                            text: selected-remote;
+                                            font-size: Cat.fs13;
+                                            font-weight: 600;
+                                            color: Cat.subtext0;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        NavIcon { d: "M6 9l6 6 6-6"; icon-color: Cat.overlay1; width: 12px; height: 12px; }
+                                    }
+                                }
+                                rem-sel-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { remote-popup.show(); }
+                                }
+                                remote-popup := PopupWindow {
+                                    x: parent.width - 200px;
+                                    y: parent.height + 4px;
+                                    width: 200px;
+                                    height: Math.min(remote-list-layout.preferred-height + 8px, 320px);
+                                    Rectangle {
+                                        background: Cat.surface0;
+                                        border-radius: 10px;
+                                        border-width: 1px;
+                                        border-color: Cat.overlay0.with-alpha(0.3);
+                                        ScrollView {
+                                            remote-list-layout := VerticalLayout {
+                                                padding: 4px;
+                                                spacing: 2px;
+                                                for r[ri] in flatpak-remotes: Rectangle {
+                                                    height: 32px;
+                                                    border-radius: 6px;
+                                                    background: rem-opt-ta.has-hover ? Cat.surface1
+                                                        : (r == selected-remote ? Cat.surface1.with-alpha(0.6) : transparent);
+                                                    HorizontalLayout {
+                                                        alignment: start;
+                                                        padding-left: 10px; padding-right: 10px;
+                                                        spacing: 8px;
+                                                        Text {
+                                                            text: r;
+                                                            font-size: Cat.fs13;
+                                                            color: r == selected-remote ? Cat.mauve : Cat.text;
+                                                            vertical-alignment: center;
+                                                            horizontal-stretch: 1;
+                                                        }
+                                                        if r == selected-remote: VerticalLayout {
+                                                            alignment: center;
+                                                            NavIcon { d: "M20 6L9 17l-5-5"; icon-color: Cat.mauve; width: 13px; height: 13px; }
+                                                        }
+                                                    }
+                                                    rem-opt-ta := TouchArea {
+                                                        mouse-cursor: pointer;
+                                                        clicked => {
+                                                            selected-remote = r;
+                                                            show-flatpak-detail = false;
+                                                            flatpak-page = 0;
+                                                            root.browse-remote(r);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -2140,7 +2436,7 @@ export component MainWindow inherits Window {
 
                                 if flatpak-search == "" && !fk-ti.has-focus: Text {
                                     width: 100%; height: 100%;
-                                    text: @tr("Search Flathub apps...");
+                                    text: selected-remote == "" ? @tr("Search apps...") : @tr("Search {} apps...", selected-remote);
                                     font-size: Cat.fs15;
                                     color: Cat.subtext0.with-alpha(0.5);
                                     vertical-alignment: center;
@@ -2990,6 +3286,44 @@ export component MainWindow inherits Window {
                                 vertical-alignment: center;
                             }
 
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: mgr-perm-row.preferred-width;
+                                    height: 30px;
+                                    border-radius: 8px;
+                                    background: mgr-perm-ta.has-hover ? Cat.mauve.with-alpha(0.18) : Cat.surface0.with-alpha(0.6);
+                                    border-width: 1px;
+                                    border-color: mgr-perm-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.55);
+                                    animate background, border-color { duration: 80ms; }
+                                    mgr-perm-row := HorizontalLayout {
+                                        alignment: center;
+                                        padding-left: 12px; padding-right: 13px; spacing: 7px;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            NavIcon {
+                                                d: "M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4";
+                                                icon-color: Cat.mauve; width: 13px; height: 14px;
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            mgr-perm-lbl := Text {
+                                                text: @tr("Manage Permissions");
+                                                font-size: Cat.fs12;
+                                                font-weight: 600;
+                                                color: Cat.text;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                    mgr-perm-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.perm-single-app = false; root.open-flatpak-perms-manager(); }
+                                    }
+                                }
+                            }
+
                             Text {
                                 text: installed-flatpaks.length + " apps";
                                 font-size: Cat.fs14;
@@ -3109,6 +3443,24 @@ export component MainWindow inherits Window {
                                                     pkg-info-open = true;
                                                     root.load-flatpak-info(pkg.name);
                                                 }
+                                            }
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 64px;
+                                            height: 32px;
+                                            border-radius: 6px;
+                                            background: ifk-perm-touch.has-hover ? Cat.mauve.with-alpha(0.25) : Cat.mauve.with-alpha(0.12);
+                                            border-width: 1px;
+                                            border-color: Cat.mauve.with-alpha(0.35);
+                                            animate background { duration: 60ms; }
+                                            VerticalLayout { alignment: center; Text { text: @tr("Perms"); font-size: Cat.fs15; font-weight: 600; color: Cat.mauve; horizontal-alignment: center; } }
+                                            ifk-perm-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.perm-single-app = true; root.open-flatpak-perms(pkg.name, pkg.display-name); }
                                             }
                                         }
                                     }
@@ -3289,9 +3641,119 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
+                        // Source selector. Shown only when more than one source is
+                        // configured; otherwise the single source is implied.
+                        if appimage-sources.length > 1: VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: ai-src-lbl.preferred-width + 58px;
+                                height: 32px;
+                                border-radius: 8px;
+                                background: ai-src-ta.has-hover ? Cat.surface1 : Cat.surface0;
+                                border-width: 1px;
+                                border-color: ai-src-ta.has-hover ? Cat.overlay0.with-alpha(0.4) : Cat.surface1;
+                                animate background, border-color { duration: 80ms; }
+                                HorizontalLayout {
+                                    padding-left: 11px; padding-right: 9px;
+                                    spacing: 7px;
+                                    VerticalLayout {
+                                        alignment: center;
+                                        NavIcon { d: "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z"; icon-color: Cat.mauve.with-alpha(0.8); width: 14px; height: 14px; }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        horizontal-stretch: 1;
+                                        ai-src-lbl := Text {
+                                            text: selected-appimage-source == "" ? "All" : selected-appimage-source;
+                                            font-size: Cat.fs13;
+                                            font-weight: 600;
+                                            color: Cat.subtext0;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        NavIcon { d: "M6 9l6 6 6-6"; icon-color: Cat.overlay1; width: 12px; height: 12px; }
+                                    }
+                                }
+                                ai-src-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { ai-src-popup.show(); }
+                                }
+                                ai-src-popup := PopupWindow {
+                                    x: parent.width - 200px;
+                                    y: parent.height + 4px;
+                                    width: 200px;
+                                    height: Math.min(ai-src-list.preferred-height + 8px, 320px);
+                                    Rectangle {
+                                        background: Cat.surface0;
+                                        border-radius: 10px;
+                                        border-width: 1px;
+                                        border-color: Cat.overlay0.with-alpha(0.3);
+                                        ScrollView {
+                                            ai-src-list := VerticalLayout {
+                                                padding: 4px;
+                                                spacing: 2px;
+                                                Rectangle {
+                                                    height: 32px;
+                                                    border-radius: 6px;
+                                                    background: ai-all-ta.has-hover ? Cat.surface1
+                                                        : (selected-appimage-source == "All" || selected-appimage-source == "" ? Cat.surface1.with-alpha(0.6) : transparent);
+                                                    HorizontalLayout {
+                                                        alignment: start;
+                                                        padding-left: 10px; padding-right: 10px;
+                                                        Text {
+                                                            text: @tr("All Sources");
+                                                            font-size: Cat.fs13;
+                                                            color: (selected-appimage-source == "All" || selected-appimage-source == "") ? Cat.mauve : Cat.text;
+                                                            vertical-alignment: center;
+                                                            horizontal-stretch: 1;
+                                                        }
+                                                    }
+                                                    ai-all-ta := TouchArea {
+                                                        mouse-cursor: pointer;
+                                                        clicked => { root.browse-appimage-source("All"); }
+                                                    }
+                                                }
+                                                for s[si] in appimage-sources: Rectangle {
+                                                    height: 32px;
+                                                    border-radius: 6px;
+                                                    background: ai-src-opt-ta.has-hover ? Cat.surface1
+                                                        : (s.name == selected-appimage-source ? Cat.surface1.with-alpha(0.6) : transparent);
+                                                    HorizontalLayout {
+                                                        alignment: start;
+                                                        padding-left: 10px; padding-right: 10px;
+                                                        spacing: 8px;
+                                                        Text {
+                                                            text: s.name;
+                                                            font-size: Cat.fs13;
+                                                            color: s.name == selected-appimage-source ? Cat.mauve : Cat.text;
+                                                            vertical-alignment: center;
+                                                            horizontal-stretch: 1;
+                                                        }
+                                                        if s.name == selected-appimage-source: VerticalLayout {
+                                                            alignment: center;
+                                                            NavIcon { d: "M20 6L9 17l-5-5"; icon-color: Cat.mauve; width: 13px; height: 13px; }
+                                                        }
+                                                    }
+                                                    ai-src-opt-ta := TouchArea {
+                                                        mouse-cursor: pointer;
+                                                        clicked => { root.browse-appimage-source(s.name); }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         VerticalLayout { alignment: center;
-                            Btn { label: @tr("Reload List"); width: 116px; horizontal-stretch: 0;
-                                clicked => { root.reload-appimage-catalog(); } }
+                            RefreshButton {
+                                loading: appimage-catalog-loading;
+                                enabled: !appimage-catalog-loading;
+                                clicked => { root.reload-appimage-catalog(); }
+                            }
                         }
                     }
 
@@ -5695,21 +6157,21 @@ export component MainWindow inherits Window {
                             row: 0; col: 0; height: 125px; border-radius: 12px;
                             background: ini-ta.has-hover ? Cat.surface0.with-alpha(0.7) : Cat.surface0.with-alpha(0.45);
                             animate background { duration: 80ms; }
-                            ini-ta := TouchArea {}
+                            ini-ta := TouchArea { mouse-cursor: pointer; clicked => { root.open-transaction-history(); } }
                             HorizontalLayout {
                                 Rectangle { width: 3px; background: Cat.mauve; }
                                 HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 10px; padding-bottom: 10px; spacing: 12px;
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 38px; height: 38px; border-radius: 19px; background: Cat.mauve.with-alpha(0.12); border-width: 1px; border-color: Cat.mauve.with-alpha(0.25);
-                                            NavIcon { d: icon-cpu; icon-color: Cat.mauve; width: 18px; height: 18px; x: 10px; y: 10px; } } }
+                                            NavIcon { d: "M3 3v5h5M3.05 13a9 9 0 105.5-7.6L3 8M12 7v5l4 2"; icon-color: Cat.mauve; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
-                                        Text { text: @tr("Rebuild InitRamFS"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: @tr("Regenerate initramfs images via mkinitcpio"); font-size: Cat.fs14; color: Cat.overlay1; }
-                                        Text { text: "$ mkinitcpio -P"; font-size: Cat.fs13; color: Cat.mauve.with-alpha(0.7); } }
+                                        Text { text: @tr("Transaction History"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
+                                        Text { text: @tr("Review past pacman transactions and roll back a bad update"); font-size: Cat.fs14; color: Cat.overlay1; }
+                                        Text { text: @tr("reads /var/log/pacman.log"); font-size: Cat.fs13; color: Cat.mauve.with-alpha(0.7); } }
                                     VerticalLayout { alignment: center;
-                                        Rectangle { width: 58px; height: 26px; border-radius: 6px; background: ini-btn.has-hover ? Cat.mauve.with-alpha(0.25) : Cat.mauve.with-alpha(0.1); border-width: 1px; border-color: Cat.mauve.with-alpha(0.35); animate background { duration: 70ms; }
-                                            Text { text: @tr("▶  RUN"); font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; vertical-alignment: center; }
-                                            ini-btn := TouchArea { mouse-cursor: pointer; clicked => { root.rebuild-initramfs(); } } } }
+                                        Rectangle { width: 62px; height: 26px; border-radius: 6px; background: ini-btn.has-hover ? Cat.mauve.with-alpha(0.25) : Cat.mauve.with-alpha(0.1); border-width: 1px; border-color: Cat.mauve.with-alpha(0.35); animate background { duration: 70ms; }
+                                            Text { text: @tr("OPEN"); font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; vertical-alignment: center; }
+                                            ini-btn := TouchArea { mouse-cursor: pointer; clicked => { root.open-transaction-history(); } } } }
                                 }
                             }
                         }
@@ -9692,6 +10154,548 @@ export component MainWindow inherits Window {
         }
     }
 
+    if show-history-modal: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.75);
+        TouchArea {}
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(1000px, parent.width - 40px);
+            height: min(700px, parent.height - 40px);
+            background: Cat.base;
+            border-radius: 12px;
+            clip: true;
+            border-width: 1px;
+            border-color: Cat.mauve.with-alpha(0.4);
+            drop-shadow-blur: 36px;
+            drop-shadow-color: Cat.crust.with-alpha(0.8);
+            drop-shadow-offset-y: 12px;
+
+            VerticalLayout {
+                spacing: 0;
+                // Header
+                Rectangle {
+                    height: 56px;
+                    background: Cat.mauve.with-alpha(0.1);
+                    Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.mauve.with-alpha(0.25); }
+                    HorizontalLayout {
+                        padding-left: 18px; padding-right: 18px; spacing: 12px;
+                        VerticalLayout { alignment: center;
+                            NavIcon { d: "M3 3v5h5M3.05 13a9 9 0 105.5-7.6L3 8M12 7v5l4 2"; icon-color: Cat.mauve; width: 20px; height: 20px; }
+                        }
+                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
+                            Text { text: @tr("Transaction History"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Review and roll back pacman transactions"); font-size: Cat.fs11; color: Cat.subtext0; }
+                        }
+                        VerticalLayout { alignment: center;
+                            Rectangle {
+                                width: 28px; height: 25px; border-radius: 8px;
+                                background: hist-close-ta.has-hover ? Cat.surface1 : transparent;
+                                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 14px; height: 14px; x: 7px; y: 7px; }
+                                hist-close-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-history-modal = false; } }
+                            }
+                        }
+                    }
+                }
+
+                if history-loading: VerticalLayout { alignment: center; LoadingCircle { diameter: 26px; } }
+
+                if !history-loading: HorizontalLayout {
+                    spacing: 0;
+                    // Left: transaction timeline
+                    Rectangle {
+                        width: 420px;
+                        background: Cat.mantle;
+                        Rectangle { x: parent.width - 1px; width: 1px; height: 100%; background: Cat.surface0; }
+                        ScrollView {
+                            VerticalLayout {
+                                padding: 8px; spacing: 3px; alignment: start;
+                                for tx[i] in history-txns: Rectangle {
+                                    height: 68px; border-radius: 8px;
+                                    background: i == history-selected ? Cat.mauve.with-alpha(0.18) : (htx-ta.has-hover ? Cat.surface0 : transparent);
+                                    animate background { duration: 60ms; }
+                                    HorizontalLayout {
+                                        padding-left: 10px; padding-right: 10px; spacing: 8px;
+                                        VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 3px;
+                                            Text { text: tx.when; font-size: Cat.fs14; font-weight: 700; color: Cat.text; overflow: elide; }
+                                            Text { text: tx.command == "" ? @tr("(direct transaction)") : tx.command; font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; overflow: elide; }
+                                            Text { text: tx.summary; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
+                                        }
+                                        if tx.rollbackable: VerticalLayout { alignment: center;
+                                            Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Cat.mauve; }
+                                        }
+                                    }
+                                    htx-ta := TouchArea { mouse-cursor: pointer; clicked => { root.select-transaction(i); } }
+                                }
+                                if history-txns.length == 0: VerticalLayout { alignment: center; padding-top: 20px;
+                                    Text { text: @tr("No transactions found"); font-size: Cat.fs13; color: Cat.overlay0; horizontal-alignment: center; }
+                                }
+                            }
+                        }
+                    }
+
+                    // Right: detail + rollback
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: Cat.base;
+                        if history-selected < 0: VerticalLayout { alignment: center;
+                            Text { text: @tr("Select a transaction to see its changes"); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                        }
+                        if history-selected >= 0: VerticalLayout {
+                            spacing: 0;
+                            Rectangle {
+                                height: 48px; background: Cat.surface0.with-alpha(0.4);
+                                Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0; }
+                                HorizontalLayout {
+                                    padding-left: 14px; padding-right: 14px; spacing: 8px;
+                                    VerticalLayout { alignment: center; horizontal-stretch: 1;
+                                        Text { text: history-detail-title; font-size: Cat.fs15; font-weight: 700; color: Cat.text; overflow: elide; }
+                                    }
+                                    if history-can-rollback: VerticalLayout { alignment: center;
+                                        Rectangle {
+                                            width: hrb-lbl.preferred-width + 26px; height: 30px; border-radius: 8px;
+                                            background: hrb-ta.has-hover ? Cat.red.with-alpha(0.28) : Cat.red.with-alpha(0.15);
+                                            border-width: 1px; border-color: Cat.red.with-alpha(0.5);
+                                            animate background { duration: 70ms; }
+                                            hrb-lbl := Text { text: @tr("Roll back upgrades"); font-size: Cat.fs12; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                            hrb-ta := TouchArea { mouse-cursor: pointer; clicked => { root.confirm-rollback(); } }
+                                        }
+                                    }
+                                }
+                            }
+                            ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    padding: 8px; spacing: 1px; alignment: start;
+                                    for a in history-actions: Rectangle {
+                                        height: 34px;
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 8px;
+                                            VerticalLayout { alignment: center;
+                                                Rectangle {
+                                                    width: 72px; height: 20px; border-radius: 4px;
+                                                    background: a.kind == "removed" ? Cat.red.with-alpha(0.15) : (a.kind == "installed" ? Cat.green.with-alpha(0.15) : Cat.mauve.with-alpha(0.15));
+                                                    Text { text: a.kind; font-size: Cat.fs11; font-weight: 700; color: a.kind == "removed" ? Cat.red : (a.kind == "installed" ? Cat.green : Cat.mauve); horizontal-alignment: center; vertical-alignment: center; }
+                                                }
+                                            }
+                                            VerticalLayout { alignment: center; horizontal-stretch: 1;
+                                                Text { text: a.pkg; font-size: Cat.fs14; font-weight: 500; color: Cat.text; overflow: elide; }
+                                            }
+                                            VerticalLayout { alignment: center;
+                                                Text { text: a.change; font-size: Cat.fs13; color: Cat.subtext0; overflow: elide; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+
+    // Transaction-history entry warning (gate before opening; persisted opt-out).
+    if history-warn-open: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.78);
+        TouchArea {}
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(640px, parent.width - 60px);
+            height: warn-col.preferred-height + 48px;
+            background: Cat.base;
+            border-radius: 12px;
+            border-width: 1px; border-color: Cat.red.with-alpha(0.55);
+            drop-shadow-blur: 32px; drop-shadow-color: Cat.crust.with-alpha(0.85);
+            warn-col := VerticalLayout {
+                padding: 24px; spacing: 18px;
+                HorizontalLayout { spacing: 12px;
+                    VerticalLayout { alignment: start;
+                        NavIcon { d: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"; icon-color: Cat.red; width: 28px; height: 28px; }
+                    }
+                    VerticalLayout { horizontal-stretch: 1; alignment: center;
+                        Text { text: @tr("Before you use rollback"); font-size: Cat.fs17; font-weight: 800; color: Cat.text; }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: @tr("This tool is built to be safe: rollbacks are atomic, signature-verified, and never force-downgrade past dependency checks.");
+                        font-size: Cat.fs14; color: Cat.subtext0; wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("But it cannot foresee everything, and rolling packages back can still have unintended effects on your system.");
+                        font-size: Cat.fs14; color: Cat.subtext0; wrap: word-wrap;
+                    }
+                }
+                VerticalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: @tr("Strongly recommended: take a Timeshift or Btrfs snapshot first.");
+                        font-size: Cat.fs14; font-weight: 700; color: Cat.text; wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("Backups are your responsibility; the tool cannot guarantee against every outcome.");
+                        font-size: Cat.fs14; font-weight: 700; color: Cat.text; wrap: word-wrap;
+                    }
+                }
+                // What happens after a rollback (Option 2: no hold, repeatable).
+                Rectangle {
+                    background: Cat.mauve.with-alpha(0.1);
+                    border-radius: 8px;
+                    border-width: 1px; border-color: Cat.mauve.with-alpha(0.3);
+                    VerticalLayout {
+                        padding: 12px; spacing: 7px;
+                        Text {
+                            text: @tr("After rolling back: these packages stay at the OLDER version only until your next update. A normal update will upgrade them again and re-apply the change.");
+                            font-size: Cat.fs13; color: Cat.subtext0; wrap: word-wrap;
+                        }
+                        Text {
+                            text: @tr("So do NOT run a full system update until you have figured out and fixed the cause, or taken a Timeshift / Btrfs snapshot. If the newer version still breaks things, just roll back again.");
+                            font-size: Cat.fs13; font-weight: 600; color: Cat.mauve; wrap: word-wrap;
+                        }
+                    }
+                }
+                if history-snapshot-note != "": Text {
+                    text: history-snapshot-note; font-size: Cat.fs13; font-weight: 600; color: Cat.mauve; wrap: word-wrap;
+                }
+                // Don't-show-again checkbox
+                HorizontalLayout {
+                    spacing: 9px;
+                    VerticalLayout { alignment: center;
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 5px;
+                            background: history-warn-dontshow ? Cat.mauve : Cat.surface0;
+                            border-width: 1px; border-color: history-warn-dontshow ? Cat.mauve : Cat.overlay0.with-alpha(0.5);
+                            if history-warn-dontshow: NavIcon { d: "M20 6L9 17l-5-5"; icon-color: Cat.crust; width: 13px; height: 13px; x: 3px; y: 3px; }
+                            TouchArea { mouse-cursor: pointer; clicked => { root.history-warn-dontshow = !root.history-warn-dontshow; } }
+                        }
+                    }
+                    VerticalLayout { alignment: center;
+                        Text { text: @tr("Don't show this warning again"); font-size: Cat.fs13; color: Cat.subtext0; }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+                HorizontalLayout {
+                    spacing: 10px;
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle {
+                        width: 90px; height: 36px; border-radius: 8px;
+                        background: warn-cancel.has-hover ? Cat.surface1 : Cat.surface0;
+                        border-width: 1px; border-color: Cat.overlay0.with-alpha(0.4);
+                        Text { text: @tr("Cancel"); font-size: Cat.fs14; font-weight: 600; color: Cat.text; horizontal-alignment: center; vertical-alignment: center; }
+                        warn-cancel := TouchArea { mouse-cursor: pointer; clicked => { root.history-warn-open = false; } }
+                    }
+                    Rectangle {
+                        width: 200px; height: 36px; border-radius: 8px;
+                        background: warn-ok.has-hover ? Cat.red : Cat.red.with-alpha(0.85);
+                        Text { text: @tr("I understand, continue"); font-size: Cat.fs14; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                        warn-ok := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.history-warn-open = false; root.proceed-history-warning(root.history-warn-dontshow); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if show-flatpak-perms-modal: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.75);
+        TouchArea {}
+
+        property <string> fs-add-path: "";
+        property <string> fs-add-mode: "rw";
+        property <string> bus-add-name: "";
+        property <string> env-add-key: "";
+        property <string> env-add-val: "";
+        property <string> persist-add: "";
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(1080px, parent.width - 40px);
+            height: min(740px, parent.height - 40px);
+            background: Cat.base;
+            border-radius: 12px;
+            clip: true;
+            border-width: 1px;
+            border-color: Cat.mauve.with-alpha(0.4);
+            drop-shadow-blur: 36px;
+            drop-shadow-color: Cat.crust.with-alpha(0.8);
+            drop-shadow-offset-y: 12px;
+
+            VerticalLayout {
+                spacing: 0;
+
+                // Header
+                Rectangle {
+                    height: 56px;
+                    background: Cat.mauve.with-alpha(0.1);
+                    Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.mauve.with-alpha(0.25); }
+                    HorizontalLayout {
+                        padding-left: 18px; padding-right: 18px; spacing: 12px;
+                        VerticalLayout { alignment: center;
+                            NavIcon { d: "M3 6h18M3 12h18M3 18h18"; icon-color: Cat.mauve; width: 20px; height: 20px; }
+                        }
+                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
+                            Text { text: @tr("Flatpak Permissions"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Control what installed Flatpak apps are allowed to access"); font-size: Cat.fs11; color: Cat.subtext0; }
+                        }
+                        VerticalLayout { alignment: center;
+                            Rectangle {
+                                width: 28px; height: 25px; border-radius: 8px;
+                                background: fperm-close-ta.has-hover ? Cat.surface1 : transparent;
+                                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 14px; height: 14px; x: 7px; y: 7px; }
+                                fperm-close-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-flatpak-perms-modal = false; } }
+                            }
+                        }
+                    }
+                }
+
+                // Body: left app list | right permission panel
+                HorizontalLayout {
+                    spacing: 0;
+
+                    // Left: installed app list + search (hidden when opened for a single app)
+                    if !perm-single-app: Rectangle {
+                        width: 280px;
+                        background: Cat.mantle;
+                        Rectangle { x: parent.width - 1px; width: 1px; height: 100%; background: Cat.surface0; }
+                        VerticalLayout {
+                            padding: 10px; spacing: 8px;
+                            Rectangle {
+                                height: 34px; border-radius: 8px; background: Cat.surface0;
+                                border-width: fperm-search.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                clip: true;
+                                if perm-app-filter == "" && !fperm-search.has-focus: Text { x: 10px; height: 100%; text: @tr("Search apps..."); font-size: Cat.fs13; color: Cat.overlay0; vertical-alignment: center; }
+                                fperm-search := TextInput {
+                                    x: 10px; width: parent.width - 20px; height: 100%;
+                                    text <=> perm-app-filter; font-size: Cat.fs13; color: Cat.text; single-line: true; vertical-alignment: center;
+                                    edited => { root.filter-perm-apps(self.text); }
+                                }
+                            }
+                            ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    spacing: 2px; alignment: start;
+                                    for a in perm-apps: Rectangle {
+                                        height: 44px; border-radius: 8px;
+                                        background: a.id == perm-selected-id ? Cat.mauve.with-alpha(0.18) : (pa-ta.has-hover ? Cat.surface0 : transparent);
+                                        animate background { duration: 60ms; }
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 8px;
+                                            VerticalLayout { alignment: center;
+                                                AppAvatar { initial: a.initial; category: "System"; width: 28px; height: 28px; border-radius: 7px; }
+                                            }
+                                            VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 1px;
+                                                Text { text: a.name; font-size: Cat.fs13; font-weight: 600; color: Cat.text; overflow: elide; }
+                                                Text { text: a.id; font-size: Cat.fs10; color: Cat.overlay1; overflow: elide; }
+                                            }
+                                        }
+                                        pa-ta := TouchArea { mouse-cursor: pointer; clicked => { root.select-perm-app(a.id); } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Right: permission panel
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: Cat.base;
+
+                        if perm-selected-id == "": VerticalLayout {
+                            alignment: center;
+                            Text { text: @tr("Select an app to edit its permissions"); font-size: Cat.fs14; color: Cat.overlay0; horizontal-alignment: center; }
+                        }
+
+                        if perm-selected-id != "": VerticalLayout {
+                            spacing: 0;
+
+                            // Scope / reset / apply bar
+                            Rectangle {
+                                height: 48px;
+                                background: Cat.surface0.with-alpha(0.4);
+                                Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.surface0; }
+                                HorizontalLayout {
+                                    padding-left: 14px; padding-right: 14px; spacing: 8px;
+                                    VerticalLayout { alignment: center; horizontal-stretch: 1;
+                                        Text { text: perm-selected-name; font-size: Cat.fs14; font-weight: 700; color: Cat.text; overflow: elide; }
+                                    }
+                                    // User/System scope toggle
+                                    VerticalLayout { alignment: center;
+                                        Rectangle {
+                                            width: 150px; height: 30px; border-radius: 8px; background: Cat.surface0;
+                                            HorizontalLayout {
+                                                padding: 3px; spacing: 3px;
+                                                Rectangle {
+                                                    horizontal-stretch: 1; border-radius: 6px;
+                                                    background: !perm-scope-system ? Cat.mauve.with-alpha(0.85) : transparent;
+                                                    Text { text: @tr("User"); font-size: Cat.fs12; font-weight: 600; color: !perm-scope-system ? Cat.crust : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                                    TouchArea { mouse-cursor: pointer; clicked => { root.set-perm-scope(false); } }
+                                                }
+                                                Rectangle {
+                                                    horizontal-stretch: 1; border-radius: 6px;
+                                                    background: perm-scope-system ? Cat.mauve.with-alpha(0.85) : transparent;
+                                                    Text { text: @tr("System"); font-size: Cat.fs12; font-weight: 600; color: perm-scope-system ? Cat.crust : Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                                    TouchArea { mouse-cursor: pointer; clicked => { root.set-perm-scope(true); } }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if perm-scope-system && perm-dirty: VerticalLayout { alignment: center;
+                                        Rectangle {
+                                            width: 70px; height: 30px; border-radius: 8px;
+                                            background: papply-ta.has-hover ? Cat.green : Cat.green.with-alpha(0.85);
+                                            Text { text: @tr("Apply"); font-size: Cat.fs13; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                            papply-ta := TouchArea { mouse-cursor: pointer; clicked => { root.apply-perm-system(); } }
+                                        }
+                                    }
+                                    VerticalLayout { alignment: center;
+                                        Rectangle {
+                                            width: 64px; height: 30px; border-radius: 8px;
+                                            background: preset-ta.has-hover ? Cat.surface1 : Cat.surface0;
+                                            border-width: 1px; border-color: Cat.overlay0.with-alpha(0.4);
+                                            Text { text: @tr("Reset"); font-size: Cat.fs12; font-weight: 600; color: Cat.text; horizontal-alignment: center; vertical-alignment: center; }
+                                            preset-ta := TouchArea { mouse-cursor: pointer; clicked => { root.reset-perm(); } }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if perm-loading: VerticalLayout { alignment: center; LoadingCircle { diameter: 26px; } }
+
+                            if !perm-loading: ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    padding: 10px; spacing: 2px; alignment: start;
+
+                                    PermSectionLabel { text-value: @tr("SHARED"); }
+                                    for t in perm-shares: PermToggleRow { t: t; changed(v) => { root.toggle-perm("shared", t.key, v); } }
+
+                                    PermSectionLabel { text-value: @tr("SOCKETS"); }
+                                    for t in perm-sockets: PermToggleRow { t: t; changed(v) => { root.toggle-perm("socket", t.key, v); } }
+
+                                    PermSectionLabel { text-value: @tr("DEVICES"); }
+                                    for t in perm-devices: PermToggleRow { t: t; changed(v) => { root.toggle-perm("device", t.key, v); } }
+
+                                    PermSectionLabel { text-value: @tr("FEATURES"); }
+                                    for t in perm-features: PermToggleRow { t: t; changed(v) => { root.toggle-perm("feature", t.key, v); } }
+
+                                    PermSectionLabel { text-value: @tr("FILESYSTEMS"); }
+                                    for t in perm-filesystems: PermToggleRow { t: t; changed(v) => { root.toggle-perm("filesystem", t.key, v); } }
+                                    for e in perm-filesystems-custom: PermEntryRow { e: e; removed() => { root.remove-perm-fs(e.value); } }
+                                    // Add custom filesystem path
+                                    Rectangle {
+                                        height: 36px;
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 6px;
+                                            Rectangle {
+                                                horizontal-stretch: 1; height: 30px; border-radius: 6px; background: Cat.surface0; clip: true;
+                                                border-width: fsin.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                                if fs-add-path == "" && !fsin.has-focus: Text { x: 8px; height: 100%; text: @tr("Add path (e.g. ~/Games or /data)"); font-size: Cat.fs12; color: Cat.overlay0; vertical-alignment: center; }
+                                                fsin := TextInput { x: 8px; width: parent.width - 16px; height: 100%; text <=> fs-add-path; font-size: Cat.fs12; color: Cat.text; single-line: true; vertical-alignment: center; }
+                                            }
+                                            Rectangle {
+                                                width: 60px; height: 30px; border-radius: 6px; background: fsmode-ta.has-hover ? Cat.surface1 : Cat.surface0;
+                                                border-width: 1px; border-color: Cat.overlay0.with-alpha(0.3);
+                                                Text { text: fs-add-mode; font-size: Cat.fs12; color: Cat.subtext0; horizontal-alignment: center; vertical-alignment: center; }
+                                                fsmode-ta := TouchArea { mouse-cursor: pointer; clicked => { fs-add-mode = fs-add-mode == "rw" ? "ro" : (fs-add-mode == "ro" ? "create" : "rw"); } }
+                                            }
+                                            Rectangle {
+                                                width: 54px; height: 30px; border-radius: 6px; background: fsadd-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
+                                                Text { text: @tr("Add"); font-size: Cat.fs12; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                                fsadd-ta := TouchArea { mouse-cursor: pointer; clicked => { if fs-add-path != "" { root.add-perm-fs(fs-add-path, fs-add-mode); fs-add-path = ""; } } }
+                                            }
+                                        }
+                                    }
+
+                                    PermSectionLabel { text-value: @tr("SESSION BUS (talk)"); }
+                                    for e in perm-session-bus: PermEntryRow { e: e; removed() => { root.remove-perm-bus(false, e.value); } }
+                                    Rectangle {
+                                        height: 36px;
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 6px;
+                                            Rectangle {
+                                                horizontal-stretch: 1; height: 30px; border-radius: 6px; background: Cat.surface0; clip: true;
+                                                border-width: busin.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                                if bus-add-name == "" && !busin.has-focus: Text { x: 8px; height: 100%; text: @tr("Add bus name (e.g. org.freedesktop.Flatpak)"); font-size: Cat.fs12; color: Cat.overlay0; vertical-alignment: center; }
+                                                busin := TextInput { x: 8px; width: parent.width - 16px; height: 100%; text <=> bus-add-name; font-size: Cat.fs12; color: Cat.text; single-line: true; vertical-alignment: center; }
+                                            }
+                                            Rectangle {
+                                                width: 54px; height: 30px; border-radius: 6px; background: busadd-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
+                                                Text { text: @tr("Add"); font-size: Cat.fs12; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                                busadd-ta := TouchArea { mouse-cursor: pointer; clicked => { if bus-add-name != "" { root.add-perm-bus(false, bus-add-name); bus-add-name = ""; } } }
+                                            }
+                                        }
+                                    }
+
+                                    PermSectionLabel { text-value: @tr("SYSTEM BUS (talk)"); }
+                                    for e in perm-system-bus: PermEntryRow { e: e; removed() => { root.remove-perm-bus(true, e.value); } }
+
+                                    PermSectionLabel { text-value: @tr("ENVIRONMENT"); }
+                                    for e in perm-env: PermEntryRow { e: e; removed() => { root.remove-perm-env(e.value); } }
+                                    Rectangle {
+                                        height: 36px;
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 6px;
+                                            Rectangle {
+                                                width: 40%; height: 30px; border-radius: 6px; background: Cat.surface0; clip: true;
+                                                border-width: envk.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                                if env-add-key == "" && !envk.has-focus: Text { x: 8px; height: 100%; text: @tr("KEY"); font-size: Cat.fs12; color: Cat.overlay0; vertical-alignment: center; }
+                                                envk := TextInput { x: 8px; width: parent.width - 16px; height: 100%; text <=> env-add-key; font-size: Cat.fs12; color: Cat.text; single-line: true; vertical-alignment: center; }
+                                            }
+                                            Rectangle {
+                                                horizontal-stretch: 1; height: 30px; border-radius: 6px; background: Cat.surface0; clip: true;
+                                                border-width: envv.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                                if env-add-val == "" && !envv.has-focus: Text { x: 8px; height: 100%; text: @tr("value"); font-size: Cat.fs12; color: Cat.overlay0; vertical-alignment: center; }
+                                                envv := TextInput { x: 8px; width: parent.width - 16px; height: 100%; text <=> env-add-val; font-size: Cat.fs12; color: Cat.text; single-line: true; vertical-alignment: center; }
+                                            }
+                                            Rectangle {
+                                                width: 54px; height: 30px; border-radius: 6px; background: envadd-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
+                                                Text { text: @tr("Set"); font-size: Cat.fs12; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                                envadd-ta := TouchArea { mouse-cursor: pointer; clicked => { if env-add-key != "" { root.add-perm-env(env-add-key, env-add-val); env-add-key = ""; env-add-val = ""; } } }
+                                            }
+                                        }
+                                    }
+
+                                    PermSectionLabel { text-value: @tr("PERSISTENT"); }
+                                    for e in perm-persist: PermEntryRow { e: e; removed() => { } }
+                                    Rectangle {
+                                        height: 36px;
+                                        HorizontalLayout {
+                                            padding-left: 8px; padding-right: 8px; spacing: 6px;
+                                            Rectangle {
+                                                horizontal-stretch: 1; height: 30px; border-radius: 6px; background: Cat.surface0; clip: true;
+                                                border-width: persin.has-focus ? 1px : 0px; border-color: Cat.mauve.with-alpha(0.5);
+                                                if persist-add == "" && !persin.has-focus: Text { x: 8px; height: 100%; text: @tr("Add persisted relative path (e.g. .mozilla)"); font-size: Cat.fs12; color: Cat.overlay0; vertical-alignment: center; }
+                                                persin := TextInput { x: 8px; width: parent.width - 16px; height: 100%; text <=> persist-add; font-size: Cat.fs12; color: Cat.text; single-line: true; vertical-alignment: center; }
+                                            }
+                                            Rectangle {
+                                                width: 54px; height: 30px; border-radius: 6px; background: persadd-ta.has-hover ? Cat.mauve : Cat.mauve.with-alpha(0.85);
+                                                Text { text: @tr("Add"); font-size: Cat.fs12; font-weight: 700; color: Cat.crust; horizontal-alignment: center; vertical-alignment: center; }
+                                                persadd-ta := TouchArea { mouse-cursor: pointer; clicked => { if persist-add != "" { root.add-perm-persist(persist-add); persist-add = ""; } } }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { height: 8px; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if show-flatpak-remotes-modal: Rectangle {
         width: 100%; height: 100%;
         background: Cat.crust.with-alpha(0.75);
@@ -9775,8 +10779,44 @@ export component MainWindow inherits Window {
                                     NavIcon { d: "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z"; icon-color: Cat.teal; width: 16px; height: 16px; }
                                 }
                                 VerticalLayout { alignment: center; horizontal-stretch: 1; spacing: 2px;
-                                    Text { text: remote.name; font-size: Cat.fs14; font-weight: 600; color: Cat.text; overflow: elide; }
+                                    HorizontalLayout { alignment: start; spacing: 6px;
+                                        Text { text: remote.name; font-size: Cat.fs14; font-weight: 600; color: remote.enabled ? Cat.text : Cat.overlay0; overflow: elide; }
+                                        VerticalLayout { alignment: center;
+                                            Rectangle {
+                                                width: rem-tag-lbl.preferred-width + 12px; height: 16px; border-radius: 4px;
+                                                background: Cat.surface1;
+                                                rem-tag-lbl := Text { text: remote.system ? @tr("System") : @tr("User"); font-size: Cat.fs10; font-weight: 700; color: Cat.overlay1; horizontal-alignment: center; vertical-alignment: center; }
+                                            }
+                                        }
+                                        if !remote.enabled: VerticalLayout { alignment: center;
+                                            Rectangle {
+                                                width: dis-lbl.preferred-width + 12px; height: 16px; border-radius: 4px;
+                                                background: Cat.red.with-alpha(0.15);
+                                                dis-lbl := Text { text: @tr("Disabled"); font-size: Cat.fs10; font-weight: 700; color: Cat.red; horizontal-alignment: center; vertical-alignment: center; }
+                                            }
+                                        }
+                                    }
                                     Text { text: remote.url; font-size: Cat.fs13; color: Cat.overlay1; overflow: elide; }
+                                }
+                                // Enable/disable toggle. The default remote (flathub)
+                                // cannot be disabled, so it shows no toggle.
+                                if remote.name != "flathub": VerticalLayout { alignment: center;
+                                    Rectangle {
+                                        width: 44px; height: 24px; border-radius: 12px;
+                                        background: remote.enabled ? Cat.green.with-alpha(0.85) : Cat.surface1;
+                                        animate background { duration: 90ms; }
+                                        Rectangle {
+                                            width: 18px; height: 18px; border-radius: 9px;
+                                            background: Cat.text;
+                                            y: 3px;
+                                            x: remote.enabled ? parent.width - self.width - 3px : 3px;
+                                            animate x { duration: 110ms; easing: ease-out; }
+                                        }
+                                        fr-tog-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.set-flatpak-remote-enabled(remote.name, remote.system, !remote.enabled); }
+                                        }
+                                    }
                                 }
                                 VerticalLayout { alignment: center;
                                     if remote.name == "flathub": Rectangle {
@@ -9791,7 +10831,7 @@ export component MainWindow inherits Window {
                                         NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.red; width: 12px; height: 12px; x: 7px; y: 7px; }
                                         fr-del-ta := TouchArea {
                                             mouse-cursor: pointer;
-                                            clicked => { root.remove-flatpak-remote(remote.name); }
+                                            clicked => { root.remove-flatpak-remote(remote.name, remote.system); }
                                         }
                                     }
                                 }
@@ -9854,7 +10894,6 @@ export component MainWindow inherits Window {
                                             root.add-flatpak-remote(new-remote-name, new-remote-url);
                                             new-remote-name = "";
                                             new-remote-url = "";
-                                            root.load-flatpak-remotes();
                                         }
                                     }
                                 }

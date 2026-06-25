@@ -101,18 +101,14 @@ sudo pacman -Syy xpm-gui
 - Dependencies :
 
 ```bash
-sudo pacman -S rust cargo flatpak alpm curl fuse2
-```
-
-```bash
-yay/paru -S cpr zsync2 appimageupdate-git
+sudo pacman -S --needed base-devel git
 ```
 
 - Build & Install :
 
 ```bash
 git clone https://github.com/xerolinux/xPackageManager
-cd xPackageManager/packaging/ && makepkg -rsifcd
+cd xPackageManager/packaging && ./build.sh
 ```
 
 > This will require you to manually do a git pull and rebuild with every update...
@@ -121,12 +117,19 @@ cd xPackageManager/packaging/ && makepkg -rsifcd
 
 ```bash
 cd xPackageManager/ && git pull
-cd packaging/ && makepkg -rsifcd
+cd packaging/ && ./build.sh
 ```
 
 ---
 
 ## Changelog
+
+### v0.6.3
+
+- Added Flatpak permission support (Flatseal-style editor).
+- Added pacman rollback support (Transaction History).
+- Made search more robust across the app.
+- Various app optimizations.
 
 ### v0.6.2
 

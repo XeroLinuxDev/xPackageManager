@@ -18,8 +18,10 @@ use std::thread;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 use xpm_alpm::AlpmBackend;
+use xpm_alpm::history as alpmhist;
 use xpm_core::source::PackageSource;
 use xpm_flatpak::FlatpakBackend;
+use xpm_flatpak::permissions as fperm;
 use xpm_appimage::{AppImageBackend, AppImageEntry, CatalogEntry};
 
 slint::include_modules!();
@@ -27,49 +29,6 @@ slint::include_modules!();
 /// Embedded AUR malware scanner (no external script dependency). Run via
 /// `bash -c AUR_CHECK_SCRIPT xpm-aur-check --full --log-file=<path>`.
 const AUR_CHECK_SCRIPT: &str = include_str!("aur_check.sh");
-
-/// KDE (KWin) Wayland focus-stealing-prevention workaround.
-///
-/// On slow cold-boot / first-launch-of-the-day starts, the app's XDG activation
-/// token expires before the (large) binary finishes loading and the window
-/// finishes mapping. KWin then refuses to focus the window, so it appears mapped
-/// but unresponsive until the user clicks away and back. (Confirmed via KWin
-/// scripting: the window is `active=false` right after launch.)
-///
-/// Re-activate our own window through KWin's scripting DBus interface, which is
-/// the one path that re-grants focus after the token is gone. Best-effort and
-/// silent: a no-op on non-KDE sessions or when `dbus-send` is unavailable, and
-/// harmless (re-activates an already-focused window) on fast/warm launches.
-fn kde_self_activate() {
-    use std::process::{Command, Stdio};
-
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-    if !desktop.to_ascii_lowercase().contains("kde") {
-        return;
-    }
-
-    let script = r#"var ws=workspace.windowList?workspace.windowList():workspace.clientList();for(var i=0;i<ws.length;i++){if((""+ws[i].resourceClass).toLowerCase().indexOf("xpackage")>=0&&!ws[i].active){workspace.activeWindow=ws[i];}}"#;
-    let path = std::env::temp_dir().join("xpm-kwin-activate.js");
-    if std::fs::write(&path, script).is_err() {
-        return;
-    }
-    let arg = format!("string:{}", path.to_string_lossy());
-
-    let call = |method_args: &[&str]| {
-        let mut args = vec!["--session", "--dest=org.kde.KWin", "/Scripting"];
-        args.extend_from_slice(method_args);
-        let _ = Command::new("dbus-send")
-            .args(&args)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    };
-
-    call(&["org.kde.kwin.Scripting.unloadScript", &arg]);
-    call(&["org.kde.kwin.Scripting.loadScript", &arg]);
-    call(&["org.kde.kwin.Scripting.start"]);
-}
-
 
 fn instance_lock_path() -> String {
     let uid = unsafe { libc::getuid() };
@@ -151,6 +110,7 @@ enum UiMessage {
     ProgressLogLine(String, u8),
     ProgressErrorSummary(String),
     ProgressAutoExpand,
+    ProgressShowInput,
     OperationDone(bool),
     ActivityLoaded(Vec<ActivityItem>),
     SysInfoLoaded(SysInfo),
@@ -639,10 +599,20 @@ struct AppConfig {
     appimage_feeds: Vec<AppImageFeed>,
     #[serde(default)]
     appimage_github_token: String,
+    #[serde(default)]
+    flatpak_remotes: Vec<FlatpakRemoteCfg>,
+    #[serde(default)]
+    history_warn_dismissed: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct AppImageFeed {
+    name: String,
+    url: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct FlatpakRemoteCfg {
     name: String,
     url: String,
 }
@@ -672,6 +642,8 @@ impl Default for AppConfig {
             appimage_dir: String::new(),
             appimage_feeds: default_appimage_feeds(),
             appimage_github_token: String::new(),
+            flatpak_remotes: Vec::new(),
+            history_warn_dismissed: false,
         }
     }
 }
@@ -722,7 +694,50 @@ fn build_config(window: &MainWindow) -> AppConfig {
             .map(|s| AppImageFeed { name: s.name.to_string(), url: s.url.to_string() })
             .collect(),
         appimage_github_token: window.get_setting_appimage_github_token().to_string(),
+        // Not UI-editable fields; preserve whatever xpm has recorded.
+        flatpak_remotes: load_config().flatpak_remotes,
+        history_warn_dismissed: load_config().history_warn_dismissed,
     }
+}
+
+/// User-scoped flatpak remotes (name + url) as xpm currently sees them.
+fn list_user_flatpak_remotes() -> Vec<FlatpakRemoteCfg> {
+    std::process::Command::new("flatpak")
+        .args(["--user", "remotes", "--columns=name,url"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty() && l.trim() != "Name")
+        .filter_map(|l| {
+            let mut parts = l.split('\t');
+            let name = parts.next()?.trim().to_string();
+            let url = parts.next().unwrap_or("").trim().to_string();
+            if name.is_empty() { None } else { Some(FlatpakRemoteCfg { name, url }) }
+        })
+        .collect()
+}
+
+/// Persist the user-scoped flatpak remotes into xpm's config, preserving the
+/// rest of the settings.
+fn save_xpm_remotes() {
+    let mut cfg = load_config();
+    cfg.flatpak_remotes = list_user_flatpak_remotes();
+    save_config(&cfg);
+}
+
+/// If the browse dropdown's selected remote is no longer in `remotes` (removed or
+/// disabled), fall back to flathub/first and reload its content.
+fn switch_remote_if_gone(window: &MainWindow, _gone: &str, remotes: &[String]) {
+    let selected = window.get_selected_remote().to_string();
+    if remotes.iter().any(|r| r == &selected) {
+        return;
+    }
+    let fallback = remotes.iter().find(|r| r.as_str() == "flathub").cloned()
+        .or_else(|| remotes.first().cloned())
+        .unwrap_or_default();
+    window.set_selected_remote(SharedString::from(fallback.as_str()));
+    window.invoke_browse_remote(SharedString::from(fallback.as_str()));
 }
 
 fn read_pacman_parallel_downloads() -> Option<u32> {
@@ -1015,12 +1030,17 @@ fn render_repo_page(w: &MainWindow, filtered: &[PackageData], page: usize) {
 fn filter_catalog(
     catalog: &[CatalogEntry],
     query: &str,
+    source: &str,
     installed: &std::collections::HashMap<String, String>,
     page: usize,
 ) -> (Vec<AppImageCard>, usize) {
     let q = query.trim().to_lowercase();
+    // Empty source or "All" means every source.
+    let src = source.trim();
+    let all_sources = src.is_empty() || src.eq_ignore_ascii_case("All");
     let matches: Vec<&CatalogEntry> = catalog
         .iter()
+        .filter(|e| all_sources || e.source == src)
         .filter(|e| {
             q.is_empty()
                 || e.name.to_lowercase().contains(&q)
@@ -1149,12 +1169,8 @@ fn run_appimage_op<F>(
     let _ = tx.send(UiMessage::AppImageCardsRefresh);
 }
 
-/// Strip ANSI/VT100 escape sequences, preserving all other characters including \r and \n.
-/// The caller is responsible for interpreting \r (carriage return) for overwrite semantics.
-/// Replace typographic Unicode (curly quotes, dashes, ellipsis, bidi marks) with
-/// plain ASCII. The terminal popup renders in Slint's "monospace" font, which lacks
-/// glyphs for U+2018/U+2019 etc and shows them as '?'. flatpak/glib quote refs with
-/// these chars (e.g. Similar refs found for 'org.gimp...'), so normalize for display.
+/// Map typographic Unicode (curly quotes, dashes, ellipsis, bidi marks) to plain
+/// ASCII so the monospace terminal popup doesn't render them as '?'.
 fn normalize_typographic(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for c in input.chars() {
@@ -1333,10 +1349,8 @@ fn resolve_file_dep(path: &str) -> Option<String> {
     if pkg.is_empty() { None } else { Some(pkg) }
 }
 
-/// Resolve a list of raw dep tokens (after clean_dep_name) to real package names:
-///   - file paths → resolved via pacman -Qo (batched one call per path)
-///   - sonames (.so) → dropped (library ABI virtuals, not package names)
-///   - regular names → kept as-is
+/// Resolve raw dep tokens to package names: file paths via `pacman -Qo`, sonames
+/// dropped, plain names kept.
 fn resolve_dep_list(raw: Vec<String>) -> Vec<String> {
     let mut result = Vec::with_capacity(raw.len());
     for dep in raw {
@@ -1879,6 +1893,9 @@ fn run_in_terminal_impl(
         let _ = tx.send(UiMessage::ProgressAutoExpand);
         let _ = tx.send(UiMessage::ProgressShowClose);
     }
+    if always_input {
+        let _ = tx.send(UiMessage::ProgressShowInput);
+    }
 
     let (master_fd, child_pid) = match spawn_in_pty(cmd, args) {
         Ok(pair) => pair,
@@ -2008,21 +2025,24 @@ fn build_pacman_command(action: &str, names: &[String], backend: i32) -> (String
     match (action, backend) {
         ("install", 1) | ("bulk-install", 1) => {
             ("flatpak".to_string(), {
-                let mut args = vec!["install".to_string(), "-y".to_string()];
+                // --noninteractive uses plain line output instead of the animated
+                // progress bar, whose final spinner frame (| / - \) otherwise leaks
+                // a stray slash/backslash into the captured terminal text.
+                let mut args = vec!["install".to_string(), "--noninteractive".to_string(), "-y".to_string()];
                 args.extend(names.iter().cloned());
                 args
             })
         }
         ("remove", 1) | ("bulk-remove", 1) => {
             ("flatpak".to_string(), {
-                let mut args = vec!["uninstall".to_string(), "-y".to_string()];
+                let mut args = vec!["uninstall".to_string(), "--noninteractive".to_string(), "-y".to_string()];
                 args.extend(names.iter().cloned());
                 args
             })
         }
         ("update", 1) => {
             ("flatpak".to_string(), {
-                let mut args = vec!["update".to_string(), "-y".to_string()];
+                let mut args = vec!["update".to_string(), "--noninteractive".to_string(), "-y".to_string()];
                 args.extend(names.iter().cloned());
                 args
             })
@@ -2035,7 +2055,7 @@ fn build_pacman_command(action: &str, names: &[String], backend: i32) -> (String
             })
         }
         ("update-all", 1) => {
-            ("flatpak".to_string(), vec!["update".to_string(), "-y".to_string()])
+            ("flatpak".to_string(), vec!["update".to_string(), "--noninteractive".to_string(), "-y".to_string()])
         }
         ("update-all", _) => {
             ("pkexec".to_string(), vec!["pacman".to_string(), "-Syu".to_string()])
@@ -2080,6 +2100,7 @@ fn run_managed_operation(
 
     let _ = tx.send(UiMessage::ShowProgressPopup(title.to_string()));
     let _ = tx.send(UiMessage::ProgressAutoExpand);
+    let _ = tx.send(UiMessage::ProgressShowInput);
     let _ = tx.send(UiMessage::ProgressShowClose);
 
     let args_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
@@ -2846,6 +2867,345 @@ fn strip_html(html: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+// ---- Flatpak permission editor ----
+
+const PERM_SHARES: &[(&str, &str)] = &[("network", "Network"), ("ipc", "Inter-process communication")];
+const PERM_SOCKETS: &[(&str, &str)] = &[
+    ("wayland", "Wayland"), ("fallback-x11", "Fallback to X11"), ("x11", "X11 windowing"),
+    ("pulseaudio", "PulseAudio"), ("session-bus", "D-Bus session bus"), ("system-bus", "D-Bus system bus"),
+    ("ssh-auth", "SSH agent"), ("pcsc", "Smart cards"), ("cups", "Printing"), ("gpg-agent", "GPG agent"),
+];
+const PERM_DEVICES: &[(&str, &str)] = &[
+    ("dri", "GPU acceleration"), ("input", "Input devices"), ("usb", "USB devices"),
+    ("kvm", "Virtualization (KVM)"), ("shm", "Shared memory"), ("all", "All devices"),
+];
+const PERM_FEATURES: &[(&str, &str)] = &[
+    ("devel", "Development syscalls"), ("multiarch", "Other architectures"),
+    ("bluetooth", "Bluetooth"), ("canbus", "CAN bus"), ("per-app-dev-shm", "Per-app shared memory"),
+];
+const PERM_FS_FIXED: &[(&str, &str)] = &[
+    ("host", "All system files"), ("host-os", "All OS files"), ("host-etc", "All system config (/etc)"),
+    ("home", "All user files (home)"), ("xdg-download", "Downloads"), ("xdg-documents", "Documents"),
+    ("xdg-pictures", "Pictures"), ("xdg-music", "Music"), ("xdg-videos", "Videos"),
+    ("xdg-desktop", "Desktop"), ("xdg-config", "Config"), ("xdg-cache", "Cache"), ("xdg-data", "Data"),
+];
+
+/// In-memory state for the open permission editor: the selected app, its default
+/// permissions, a working copy (defaults + edits) used to render, and staged
+/// flags awaiting Apply (system scope only).
+#[derive(Default)]
+struct PermCtx {
+    id: String,
+    scope_system: bool,
+    def: fperm::KeyFile,
+    working: fperm::KeyFile,
+    pending: Vec<String>,
+}
+
+/// Read an app's default (metadata) and effective (--show-permissions) keyfiles.
+fn read_app_keyfiles(id: &str) -> (fperm::KeyFile, fperm::KeyFile) {
+    let run = |args: &[&str]| {
+        std::process::Command::new("flatpak")
+            .args(args)
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default()
+    };
+    let meta = run(&["info", "-m", id]);
+    let eff = run(&["info", "--show-permissions", id]);
+    (fperm::parse_keyfile(&meta), fperm::parse_keyfile(&eff))
+}
+
+fn perm_toggles(list: &[(&str, &str)], ctx_key: &str, def: &fperm::KeyFile, eff: &fperm::KeyFile) -> Vec<PermToggle> {
+    list.iter()
+        .map(|(k, l)| {
+            let value = fperm::has_token(eff, ctx_key, k);
+            let overridden = value != fperm::has_token(def, ctx_key, k);
+            PermToggle { key: (*k).into(), label: (*l).into(), value, overridden }
+        })
+        .collect()
+}
+
+fn perm_fs_custom(def: &fperm::KeyFile, eff: &fperm::KeyFile) -> Vec<PermEntry> {
+    let fixed: std::collections::HashSet<&str> = PERM_FS_FIXED.iter().map(|(k, _)| *k).collect();
+    let def_toks = fperm::list_tokens(def, "filesystems");
+    fperm::list_tokens(eff, "filesystems")
+        .into_iter()
+        .filter_map(|tok| {
+            let (path, mode) = match tok.rsplit_once(':') {
+                Some((p, m)) if ["ro", "rw", "create"].contains(&m) => (p.to_string(), m.to_string()),
+                _ => (tok.clone(), String::new()),
+            };
+            if fixed.contains(path.as_str()) {
+                return None;
+            }
+            let overridden = !def_toks.contains(&tok);
+            Some(PermEntry { value: path.into(), mode: mode.into(), overridden })
+        })
+        .collect()
+}
+
+fn perm_bus(section: &str, def: &fperm::KeyFile, eff: &fperm::KeyFile) -> Vec<PermEntry> {
+    let d = fperm::bus_entries(def, section);
+    fperm::bus_entries(eff, section)
+        .into_iter()
+        .map(|(name, policy)| {
+            let overridden = d.get(&name) != Some(&policy);
+            PermEntry { value: name.into(), mode: policy.into(), overridden }
+        })
+        .collect()
+}
+
+fn perm_env(def: &fperm::KeyFile, eff: &fperm::KeyFile) -> Vec<PermEntry> {
+    let d = fperm::env_entries(def);
+    fperm::env_entries(eff)
+        .into_iter()
+        .map(|(k, v)| {
+            let overridden = d.get(&k) != Some(&v);
+            PermEntry { value: k.into(), mode: v.into(), overridden }
+        })
+        .collect()
+}
+
+fn perm_persist(def: &fperm::KeyFile, eff: &fperm::KeyFile) -> Vec<PermEntry> {
+    let d: std::collections::HashSet<String> = fperm::list_tokens(def, "persistent").into_iter().collect();
+    fperm::list_tokens(eff, "persistent")
+        .into_iter()
+        .map(|p| {
+            let overridden = !d.contains(&p);
+            PermEntry { value: p.into(), mode: SharedString::new(), overridden }
+        })
+        .collect()
+}
+
+/// Push all permission models for (def, working) into the window.
+fn set_perm_models(w: &MainWindow, def: &fperm::KeyFile, working: &fperm::KeyFile) {
+    w.set_perm_shares(ModelRc::new(VecModel::from(perm_toggles(PERM_SHARES, "shared", def, working))));
+    w.set_perm_sockets(ModelRc::new(VecModel::from(perm_toggles(PERM_SOCKETS, "sockets", def, working))));
+    w.set_perm_devices(ModelRc::new(VecModel::from(perm_toggles(PERM_DEVICES, "devices", def, working))));
+    w.set_perm_features(ModelRc::new(VecModel::from(perm_toggles(PERM_FEATURES, "features", def, working))));
+    w.set_perm_filesystems(ModelRc::new(VecModel::from(perm_toggles(PERM_FS_FIXED, "filesystems", def, working))));
+    w.set_perm_filesystems_custom(ModelRc::new(VecModel::from(perm_fs_custom(def, working))));
+    w.set_perm_session_bus(ModelRc::new(VecModel::from(perm_bus(fperm::SESSION_BUS, def, working))));
+    w.set_perm_system_bus(ModelRc::new(VecModel::from(perm_bus(fperm::SYSTEM_BUS, def, working))));
+    w.set_perm_env(ModelRc::new(VecModel::from(perm_env(def, working))));
+    w.set_perm_persist(ModelRc::new(VecModel::from(perm_persist(def, working))));
+}
+
+// Working-keyfile mutations (mirror what `flatpak override` does, for instant UI).
+fn kf_ctx_set(kf: &mut fperm::KeyFile, key: &str, token: &str, on: bool) {
+    let mut toks = fperm::list_tokens(kf, key);
+    toks.retain(|t| t != token);
+    if on {
+        toks.push(token.to_string());
+    }
+    kf.entry(fperm::CTX.to_string()).or_default().insert(key.to_string(), toks.join(";"));
+}
+fn kf_fs_add(kf: &mut fperm::KeyFile, path: &str, mode: &str) {
+    let mut toks = fperm::list_tokens(kf, "filesystems");
+    toks.retain(|t| t.rsplit_once(':').map(|(p, _)| p).unwrap_or(t.as_str()) != path);
+    let entry = if mode.is_empty() || mode == "rw" { path.to_string() } else { format!("{path}:{mode}") };
+    toks.push(entry);
+    kf.entry(fperm::CTX.to_string()).or_default().insert("filesystems".into(), toks.join(";"));
+}
+fn kf_fs_remove(kf: &mut fperm::KeyFile, path: &str) {
+    let mut toks = fperm::list_tokens(kf, "filesystems");
+    toks.retain(|t| t.rsplit_once(':').map(|(p, _)| p).unwrap_or(t.as_str()) != path);
+    kf.entry(fperm::CTX.to_string()).or_default().insert("filesystems".into(), toks.join(";"));
+}
+fn kf_bus_set(kf: &mut fperm::KeyFile, section: &str, name: &str, present: bool) {
+    let s = kf.entry(section.to_string()).or_default();
+    if present {
+        s.insert(name.to_string(), "talk".to_string());
+    } else {
+        s.remove(name);
+    }
+}
+fn kf_env_set(kf: &mut fperm::KeyFile, key: &str, val: Option<&str>) {
+    let s = kf.entry(fperm::ENVIRONMENT.to_string()).or_default();
+    match val {
+        Some(v) => { s.insert(key.to_string(), v.to_string()); }
+        None => { s.remove(key); }
+    }
+}
+fn kf_persist_add(kf: &mut fperm::KeyFile, path: &str) {
+    let mut toks = fperm::list_tokens(kf, "persistent");
+    if !toks.iter().any(|t| t == path) {
+        toks.push(path.to_string());
+    }
+    kf.entry(fperm::CTX.to_string()).or_default().insert("persistent".into(), toks.join(";"));
+}
+
+/// Run a user-scope `flatpak override` with one flag (fire-and-forget).
+fn apply_user_override(app_id: &str, flag: &str) {
+    let argv = fperm::override_argv(false, app_id, &[flag.to_string()]);
+    let _ = std::process::Command::new("flatpak").args(&argv).status();
+}
+
+/// Installed flatpaks as left-list rows for the permission editor.
+fn perm_app_list() -> Vec<PermApp> {
+    load_installed_flatpaks()
+        .into_iter()
+        .map(|p| PermApp {
+            id: p.name.clone(),
+            name: p.display_name.clone(),
+            initial: p.required_by.clone(),
+            system: false,
+        })
+        .collect()
+}
+
+/// Read an app's permissions off disk and push them into the editor (background).
+fn perm_load(weak: slint::Weak<MainWindow>, ctx: Arc<Mutex<PermCtx>>, id: String) {
+    thread::spawn(move || {
+        let (def, eff) = read_app_keyfiles(&id);
+        {
+            let mut c = ctx.lock().unwrap();
+            c.id = id.clone();
+            c.def = def.clone();
+            c.working = eff.clone();
+            c.pending.clear();
+        }
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = weak.upgrade() {
+                set_perm_models(&w, &def, &eff);
+                w.set_perm_loading(false);
+                w.set_perm_dirty(false);
+            }
+        });
+    });
+}
+
+/// After an in-memory edit: rebuild models, then stage (system) or apply (user).
+fn perm_after_edit(w: &MainWindow, ctx: &Arc<Mutex<PermCtx>>, flag: String) {
+    let (def, working, system, id) = {
+        let c = ctx.lock().unwrap();
+        (c.def.clone(), c.working.clone(), c.scope_system, c.id.clone())
+    };
+    set_perm_models(w, &def, &working);
+    if system {
+        ctx.lock().unwrap().pending.push(flag);
+        w.set_perm_dirty(true);
+    } else {
+        thread::spawn(move || apply_user_override(&id, &flag));
+    }
+}
+
+// ---- Transaction history ----
+
+/// Prettify a pacman.log timestamp `2026-06-25T10:00:00+0000` -> `2026-06-25 10:00:00`.
+fn pretty_when(raw: &str) -> String {
+    let no_tz = raw.split(['+']).next().unwrap_or(raw);
+    no_tz.replace('T', " ")
+}
+
+fn txn_summary(t: &alpmhist::Transaction) -> String {
+    use alpmhist::ActionKind::*;
+    let mut parts = Vec::new();
+    let u = t.count(Upgraded);
+    let i = t.count(Installed);
+    let d = t.count(Downgraded);
+    let r = t.count(Removed);
+    if u > 0 { parts.push(format!("{u} upgraded")); }
+    if i > 0 { parts.push(format!("{i} installed")); }
+    if d > 0 { parts.push(format!("{d} downgraded")); }
+    if r > 0 { parts.push(format!("{r} removed")); }
+    if parts.is_empty() { "no changes".to_string() } else { parts.join(", ") }
+}
+
+/// Locate a signed package file for an exact old version: local cache first, then
+/// the Arch Linux Archive (downloaded with its .sig). Returns the file path.
+fn resolve_old_pkg(name: &str, ver: &str) -> Option<String> {
+    let cache = "/var/cache/pacman/pkg";
+    for arch in ["x86_64", "any"] {
+        let p = format!("{}/{}", cache, alpmhist::cache_filename(name, ver, arch));
+        if Path::new(&p).exists() {
+            return Some(p);
+        }
+    }
+    // Any-arch glob in the cache.
+    if let Ok(rd) = std::fs::read_dir(cache) {
+        let prefix = format!("{name}-{ver}-");
+        for e in rd.flatten() {
+            let f = e.file_name().to_string_lossy().to_string();
+            if f.starts_with(&prefix) && f.ends_with(".pkg.tar.zst") {
+                return Some(e.path().to_string_lossy().to_string());
+            }
+        }
+    }
+    // Arch Linux Archive (download package + signature for pacman to verify).
+    let tmp = std::env::temp_dir().join("xpm-rollback");
+    let _ = std::fs::create_dir_all(&tmp);
+    for arch in ["x86_64", "any"] {
+        let url = alpmhist::ala_url(name, ver, arch);
+        let file = tmp.join(alpmhist::cache_filename(name, ver, arch));
+        let file_s = file.to_string_lossy().to_string();
+        let ok = std::process::Command::new("curl")
+            .args(["-fsSL", "-o", &file_s, &url])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ok {
+            let _ = std::process::Command::new("curl")
+                .args(["-fsSL", "-o", &format!("{file_s}.sig"), &format!("{url}.sig")])
+                .status();
+            return Some(file_s);
+        }
+    }
+    None
+}
+
+/// Note for the rollback warning dialog reflecting detected snapshot tools.
+fn snapshot_note() -> String {
+    let have = |c: &str| {
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("command -v {c}"))
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+    let mut found = Vec::new();
+    if have("snapper") { found.push("Snapper"); }
+    if have("timeshift") { found.push("Timeshift"); }
+    if found.is_empty() {
+        "No snapshot tool (Snapper/Timeshift) detected - consider taking a manual backup first.".to_string()
+    } else {
+        format!("Detected: {} - take a snapshot before proceeding.", found.join(" + "))
+    }
+}
+
+/// Load pacman.log into the history modal (and show it).
+fn load_history(weak: slint::Weak<MainWindow>, store: Arc<Mutex<Vec<alpmhist::Transaction>>>) {
+    if let Some(w) = weak.upgrade() {
+        w.set_history_loading(true);
+        w.set_history_selected(-1);
+        w.set_history_actions(ModelRc::new(VecModel::from(Vec::<HistAction>::new())));
+        w.set_show_history_modal(true);
+    }
+    thread::spawn(move || {
+        let text = std::fs::read_to_string("/var/log/pacman.log").unwrap_or_default();
+        let mut txns = alpmhist::parse_log(&text);
+        txns.truncate(150);
+        let rows: Vec<HistTxn> = txns
+            .iter()
+            .map(|t| HistTxn {
+                when: pretty_when(&t.when).into(),
+                command: t.command.as_str().into(),
+                summary: txn_summary(t).into(),
+                rollbackable: !t.upgraded_targets().is_empty(),
+            })
+            .collect();
+        *store.lock().unwrap() = txns;
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_history_txns(ModelRc::new(VecModel::from(rows)));
+                w.set_history_loading(false);
+            }
+        });
+    });
+}
+
 fn main() {
     if std::env::var_os("SLINT_BACKEND").is_none() {
         std::env::set_var("SLINT_BACKEND", "qt");
@@ -2922,6 +3282,9 @@ fn main() {
     let terminal_child_pid: Arc<Mutex<Option<u32>>> = Arc::new(Mutex::new(None));
     let conflict_context: Arc<Mutex<Option<(String, Vec<String>, i32)>>> = Arc::new(Mutex::new(None));
     let flatpak_app_store: Arc<Mutex<Vec<CachedRemoteApp>>> = Arc::new(Mutex::new(Vec::new()));
+    // Which remote the in-memory store currently holds, so switching remotes in
+    // the browse dropdown reloads instead of reusing the wrong remote's apps.
+    let flatpak_loaded_remote: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     let flatpak_installed_ids: Arc<Mutex<std::collections::HashSet<String>>> = Arc::new(Mutex::new(std::collections::HashSet::new()));
     let flatpak_filter_serial: Arc<std::sync::atomic::AtomicU64> =
         Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -3103,6 +3466,12 @@ fn main() {
                     }
                     UiMessage::ProgressAutoExpand => {
                         window.set_progress_show_details(true);
+                    }
+                    UiMessage::ProgressShowInput => {
+                        // Show the terminal input field by default (parity with the
+                        // updates flow) even before any interactive prompt arrives.
+                        window.set_progress_popup_show_input(true);
+                        window.set_progress_input_focus_pending(true);
                     }
                     UiMessage::OperationProgress(percent, stage) => {
                         window.set_progress_popup_percent(percent);
@@ -3302,8 +3671,15 @@ fn main() {
                         window.set_flatpak_remotes(ModelRc::new(VecModel::from(
                             remotes.iter().map(|r| SharedString::from(r.as_str())).collect::<Vec<_>>()
                         )));
-                        if let Some(first) = remotes.first() {
-                            window.set_selected_remote(SharedString::from(first.as_str()));
+                        window.set_flatpak_remote_count(remotes.len() as i32);
+                        // Keep the dropdown selection in step with the preload default
+                        // (flathub when present, else the first remote).
+                        if window.get_selected_remote().is_empty() {
+                            let default = remotes.iter().find(|r| r.as_str() == "flathub")
+                                .or_else(|| remotes.first());
+                            if let Some(d) = default {
+                                window.set_selected_remote(SharedString::from(d.as_str()));
+                            }
                         }
                     }
                     UiMessage::RemoteAppsFiltered { serial, apps, total_matches } => {
@@ -3415,6 +3791,7 @@ fn main() {
                         let (cards, total) = filter_catalog(
                             &cat_dispatch.lock().unwrap(),
                             window.get_appimage_search().as_str(),
+                            window.get_selected_appimage_source().as_str(),
                             &installed_github_map(),
                             page,
                         );
@@ -3428,6 +3805,7 @@ fn main() {
                         let (cards, total) = filter_catalog(
                             &cat_dispatch.lock().unwrap(),
                             window.get_appimage_search().as_str(),
+                            window.get_selected_appimage_source().as_str(),
                             &installed_github_map(),
                             page,
                         );
@@ -3589,13 +3967,33 @@ fn main() {
         });
     }
 
+    // Re-add any flatpak remotes xpm recorded in its config that are missing now
+    // (e.g. after a flatpak reset). User-scoped, so no root prompt.
+    thread::spawn(|| {
+        let recorded = load_config().flatpak_remotes;
+        if recorded.is_empty() { return; }
+        let present: std::collections::HashSet<String> =
+            list_user_flatpak_remotes().into_iter().map(|r| r.name).collect();
+        for r in recorded {
+            if !r.name.is_empty() && !r.url.is_empty() && !present.contains(&r.name) {
+                let _ = std::process::Command::new("flatpak")
+                    .args(["remote-add", "--user", "--if-not-exists", &r.name, &r.url])
+                    .status();
+            }
+        }
+    });
+
     {
         let store_preload = flatpak_app_store.clone();
         let ids_preload = flatpak_installed_ids.clone();
+        let loaded_preload = flatpak_loaded_remote.clone();
         let tx_preload = tx.clone();
         thread::spawn(move || {
             let remotes = fetch_flatpak_remotes();
-            let target = remotes.first().cloned().unwrap_or_else(|| "flathub".to_string());
+            // Prefer flathub as the default view when present, else the first remote.
+            let target = remotes.iter().find(|r| r.as_str() == "flathub").cloned()
+                .or_else(|| remotes.first().cloned())
+                .unwrap_or_else(|| "flathub".to_string());
             let _ = tx_preload.send(UiMessage::FlatpakRemotesLoaded(remotes));
             let (all_apps, installed) = load_remote_apps(&target);
             *ids_preload.lock().unwrap() = installed.clone();
@@ -3603,6 +4001,7 @@ fn main() {
             let total = all_pkg.len();
             let page: Vec<PackageData> = all_pkg.into_iter().take(FLATPAK_PAGE_SIZE).collect();
             *store_preload.lock().unwrap() = all_apps;
+            *loaded_preload.lock().unwrap() = target;
             let _ = tx_preload.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
         });
     }
@@ -3625,6 +4024,45 @@ fn main() {
                 let _ = tx.send(UiMessage::SetLoading(true));
                 load_packages_async(&tx, false).await;
             });
+        });
+    });
+
+    let store_rf = flatpak_app_store.clone();
+    let loaded_rf = flatpak_loaded_remote.clone();
+    let ids_rf = flatpak_installed_ids.clone();
+    let tx_load_fp = tx.clone();
+    let window_weak_rf = window.as_weak();
+    window.on_refresh_flatpaks(move || {
+        info!("Refresh flatpaks requested");
+        let remote = window_weak_rf.upgrade()
+            .map(|w| w.get_selected_remote().to_string())
+            .unwrap_or_default();
+        let store = store_rf.clone();
+        let loaded = loaded_rf.clone();
+        let ids = ids_rf.clone();
+        let tx = tx_load_fp.clone();
+        let weak = window_weak_rf.clone();
+        if let Some(w) = weak.upgrade() { w.set_remote_apps_loading(true); }
+        thread::spawn(move || {
+            let target = if remote.is_empty() { "flathub".to_string() } else { remote };
+            // Re-pull the remote's appstream (user installs need no root), drop the
+            // browse cache, then re-parse fresh from disk.
+            let _ = std::process::Command::new("flatpak")
+                .args(["--user", "--noninteractive", "update", "--appstream", &target])
+                .status();
+            let _ = std::fs::remove_file(remote_cache_path(&target));
+            let (all_apps, installed) = load_remote_apps(&target);
+            *ids.lock().unwrap() = installed.clone();
+            let all = apps_to_package_data(&all_apps, &installed, &target, "All", "");
+            *store.lock().unwrap() = all_apps;
+            *loaded.lock().unwrap() = target.clone();
+            let total = all.len();
+            let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = weak.upgrade() { w.set_remote_apps_loading(false); }
+            });
+            // Reuse the standard delivery path for the grid.
+            let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
         });
     });
 
@@ -3816,20 +4254,34 @@ fn main() {
             w.set_flatpak_mgr_remotes_loading(true);
             let weak = w.as_weak();
             thread::spawn(move || {
-                let output = std::process::Command::new("flatpak")
-                    .args(["remote-list", "--columns=name,url"])
-                    .output()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-                    .unwrap_or_default();
-                let remotes: Vec<FlatpakRemote> = output.lines()
-                    .filter(|l| !l.trim().is_empty())
-                    .map(|l| {
-                        let mut parts = l.splitn(2, '\t');
-                        let name = parts.next().unwrap_or("").trim().to_string();
-                        let url = parts.next().unwrap_or("").trim().to_string();
-                        FlatpakRemote { name: SharedString::from(name.as_str()), url: SharedString::from(url.as_str()) }
-                    })
-                    .collect();
+                // Query each installation separately (so we know system vs user) and
+                // include disabled remotes (--show-disabled). The `options` column
+                // carries the "disabled" flag when a remote is turned off.
+                let query = |scope: &str| -> Vec<FlatpakRemote> {
+                    let system = scope == "--system";
+                    std::process::Command::new("flatpak")
+                        .args([scope, "remote-list", "--show-disabled", "--columns=name,url,options"])
+                        .output()
+                        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                        .unwrap_or_default()
+                        .lines()
+                        .filter(|l| !l.trim().is_empty())
+                        .map(|l| {
+                            let mut parts = l.split('\t');
+                            let name = parts.next().unwrap_or("").trim().to_string();
+                            let url = parts.next().unwrap_or("").trim().to_string();
+                            let options = parts.next().unwrap_or("").trim().to_lowercase();
+                            FlatpakRemote {
+                                name: SharedString::from(name.as_str()),
+                                url: SharedString::from(url.as_str()),
+                                enabled: !options.split(',').any(|o| o.trim() == "disabled"),
+                                system,
+                            }
+                        })
+                        .collect()
+                };
+                let mut remotes = query("--system");
+                remotes.extend(query("--user"));
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak.upgrade() {
                         w.set_flatpak_mgr_remotes(ModelRc::new(VecModel::from(remotes)));
@@ -3840,31 +4292,113 @@ fn main() {
         }
     });
 
-    window.on_add_flatpak_remote(move |name, url| {
-        let name = name.to_string();
-        let url = url.to_string();
-        thread::spawn(move || {
-            let _ = std::process::Command::new("flatpak")
-                .args(["remote-add", "--if-not-exists", &name, &url])
-                .status();
-        });
+    let tx_add_remote = tx.clone();
+    window.on_add_flatpak_remote({
+        let window_weak_afr = window.as_weak();
+        move |name, url| {
+            let name = name.to_string();
+            let url = url.to_string();
+            let weak = window_weak_afr.clone();
+            let tx = tx_add_remote.clone();
+            thread::spawn(move || {
+                // Add as a USER remote: no root prompt and it appears instantly.
+                let ok = std::process::Command::new("flatpak")
+                    .args(["remote-add", "--user", "--if-not-exists", &name, &url])
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                // Refresh the modal list + browse dropdown immediately so the new
+                // remote shows without closing/reopening the dialog.
+                let _ = tx.send(UiMessage::FlatpakRemotesLoaded(fetch_flatpak_remotes()));
+                {
+                    let weak = weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(w) = weak.upgrade() { w.invoke_load_flatpak_remotes(); }
+                    });
+                }
+                if ok {
+                    // Record it in xpm's own settings file.
+                    save_xpm_remotes();
+                    // Pull this remote's appstream so it has browsable content, then
+                    // drop any stale browse cache so the next view re-parses it.
+                    let _ = std::process::Command::new("flatpak")
+                        .args(["--user", "--noninteractive", "update", "--appstream", &name])
+                        .status();
+                    let _ = std::fs::remove_file(remote_cache_path(&name));
+                }
+            });
+        }
     });
 
     window.on_remove_flatpak_remote({
         let window_weak_rfr = window.as_weak();
-        move |name| {
+        let tx_rm = tx.clone();
+        move |name, system| {
             let name = name.to_string();
             if name.eq_ignore_ascii_case("flathub") {
                 return;
             }
             let weak = window_weak_rfr.clone();
+            let tx = tx_rm.clone();
             thread::spawn(move || {
-                let _ = std::process::Command::new("flatpak")
-                    .args(["remote-delete", "--force", &name])
-                    .status();
+                let scope = if system { "--system" } else { "--user" };
+                // System remotes need privilege escalation; user remotes do not.
+                let _ = if system {
+                    std::process::Command::new("pkexec")
+                        .args(["flatpak", scope, "remote-delete", "--force", &name])
+                        .status()
+                } else {
+                    std::process::Command::new("flatpak")
+                        .args([scope, "remote-delete", "--force", &name])
+                        .status()
+                };
+                let _ = std::fs::remove_file(remote_cache_path(&name));
+                save_xpm_remotes();
+                let remotes = fetch_flatpak_remotes();
+                let _ = tx.send(UiMessage::FlatpakRemotesLoaded(remotes.clone()));
+                let removed = name.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak.upgrade() {
                         w.invoke_load_flatpak_remotes();
+                        switch_remote_if_gone(&w, &removed, &remotes);
+                    }
+                });
+            });
+        }
+    });
+
+    window.on_set_flatpak_remote_enabled({
+        let window_weak_sre = window.as_weak();
+        let tx_sre = tx.clone();
+        move |name, system, enable| {
+            let name = name.to_string();
+            let weak = window_weak_sre.clone();
+            let tx = tx_sre.clone();
+            thread::spawn(move || {
+                let scope = if system { "--system" } else { "--user" };
+                let flag = if enable { "--enable" } else { "--disable" };
+                // System remotes need privilege escalation; user remotes do not.
+                let status = if system {
+                    std::process::Command::new("pkexec")
+                        .args(["flatpak", scope, "remote-modify", flag, &name])
+                        .status()
+                } else {
+                    std::process::Command::new("flatpak")
+                        .args([scope, "remote-modify", flag, &name])
+                        .status()
+                };
+                let _ = status;
+                // Browse dropdown lists only enabled remotes, so a disable should
+                // drop it from there too.
+                let remotes = fetch_flatpak_remotes();
+                let _ = tx.send(UiMessage::FlatpakRemotesLoaded(remotes.clone()));
+                let toggled = name.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak.upgrade() {
+                        w.invoke_load_flatpak_remotes();
+                        // fetch_flatpak_remotes returns only enabled remotes; if the
+                        // selected one was just disabled it won't be present.
+                        switch_remote_if_gone(&w, &toggled, &remotes);
                     }
                 });
             });
@@ -4272,7 +4806,7 @@ fn main() {
                 "pkexec",
                 &[
                     "bash", "-c",
-                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update -y && echo '' && echo '✓ System fully updated'",
+                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update --noninteractive -y && echo '' && echo '✓ System fully updated'",
                 ],
                 &input,
                 &pid,
@@ -4336,7 +4870,7 @@ fn main() {
                 "pkexec",
                 &[
                     "bash", "-c",
-                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update -y && echo '' && echo '✓ System fully updated'",
+                    "pacman -Syu && echo '' && echo '━━━ Flatpak Updates ━━━' && flatpak update --noninteractive -y && echo '' && echo '✓ System fully updated'",
                 ],
                 &input,
                 &pid,
@@ -5051,11 +5585,11 @@ fn main() {
         }
         let tx = tx_ai_cat.clone();
         let cache = cat_load.clone();
-        let urls: Vec<String> =
-            sources_load.lock().unwrap().iter().map(|f| f.url.clone()).collect();
+        let named: Vec<(String, String)> =
+            sources_load.lock().unwrap().iter().map(|f| (f.name.clone(), f.url.clone())).collect();
         let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
         thread::spawn(move || {
-            let entries = xpm_appimage::catalog::fetch_sources(&urls);
+            let entries = xpm_appimage::catalog::fetch_sources_named(&named);
             *cache.lock().unwrap() = entries;
             let _ = tx.send(UiMessage::AppImageCatalogReady);
         });
@@ -5067,12 +5601,13 @@ fn main() {
     window.on_reload_appimage_catalog(move || {
         let tx = tx_ai_reload.clone();
         let cache = cat_reload.clone();
-        let urls: Vec<String> =
-            sources_reload.lock().unwrap().iter().map(|f| f.url.clone()).collect();
+        let named: Vec<(String, String)> =
+            sources_reload.lock().unwrap().iter().map(|f| (f.name.clone(), f.url.clone())).collect();
+        let urls: Vec<String> = named.iter().map(|(_, u)| u.clone()).collect();
         let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
         thread::spawn(move || {
             xpm_appimage::catalog::clear_feed_cache(&urls);
-            let entries = xpm_appimage::catalog::fetch_sources(&urls);
+            let entries = xpm_appimage::catalog::fetch_sources_named(&named);
             *cache.lock().unwrap() = entries;
             let _ = tx.send(UiMessage::AppImageCatalogReady);
         });
@@ -5086,11 +5621,31 @@ fn main() {
             let (cards, total) = filter_catalog(
                 &cat_filter.lock().unwrap(),
                 query.as_str(),
+                w.get_selected_appimage_source().as_str(),
                 &installed_github_map(),
                 page,
             );
             w.set_appimage_catalog_total(total as i32);
             w.set_appimage_page(clamp_appimage_page(page, total) as i32);
+            w.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
+        }
+    });
+
+    // Switch which AppImage source the catalog shows (mirrors flatpak remotes).
+    let cat_src = appimage_catalog.clone();
+    let win_ai_src = window.as_weak();
+    window.on_browse_appimage_source(move |source| {
+        if let Some(w) = win_ai_src.upgrade() {
+            w.set_selected_appimage_source(source.clone());
+            w.set_appimage_page(0);
+            let (cards, total) = filter_catalog(
+                &cat_src.lock().unwrap(),
+                w.get_appimage_search().as_str(),
+                source.as_str(),
+                &installed_github_map(),
+                0,
+            );
+            w.set_appimage_catalog_total(total as i32);
             w.set_catalog_appimages(ModelRc::new(VecModel::from(cards)));
         }
     });
@@ -5424,20 +5979,20 @@ fn main() {
     let window_weak_remote = window.as_weak();
     let store_remote = flatpak_app_store.clone();
     let ids_remote = flatpak_installed_ids.clone();
+    let loaded_remote = flatpak_loaded_remote.clone();
     window.on_browse_remote(move |remote| {
         let tx = tx_remotes.clone();
         let remote_str = remote.to_string();
         info!("Browse remote: {}", remote_str);
 
+        // Fast path: serve from the in-memory store only when it holds this
+        // remote's apps; otherwise fall through and reload.
         {
             let store = store_remote.lock().unwrap();
-            if !store.is_empty() {
+            let target = if remote_str.is_empty() { "flathub".to_string() } else { remote_str.clone() };
+            let loaded = loaded_remote.lock().unwrap().clone();
+            if !store.is_empty() && loaded == target {
                 let ids = ids_remote.lock().unwrap();
-                let target = if remote_str.is_empty() {
-                    "flathub".to_string()
-                } else {
-                    remote_str.clone()
-                };
                 let all = apps_to_package_data(&store, &ids, &target, "All", "");
                 let total = all.len();
                 let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
@@ -5455,19 +6010,34 @@ fn main() {
         let remote2 = remote_str.clone();
         let store = store_remote.clone();
         let ids = ids_remote.clone();
+        let loaded = loaded_remote.clone();
         thread::spawn(move || {
             let target = if remote2.is_empty() {
                 let remotes = fetch_flatpak_remotes();
-                let first = remotes.first().cloned().unwrap_or_else(|| "flathub".to_string());
+                let first = remotes.iter().find(|r| r.as_str() == "flathub").cloned()
+                    .or_else(|| remotes.first().cloned())
+                    .unwrap_or_else(|| "flathub".to_string());
                 let _ = tx2.send(UiMessage::FlatpakRemotesLoaded(remotes));
                 first
             } else {
                 remote2
             };
-            let (all_apps, installed) = load_remote_apps(&target);
+            let (mut all_apps, mut installed) = load_remote_apps(&target);
+            // First time browsing a remote (e.g. just-added one) its appstream may
+            // not be cached yet, so the list is empty. Pull it once, then reload.
+            if all_apps.is_empty() {
+                let _ = std::process::Command::new("flatpak")
+                    .args(["--user", "--noninteractive", "update", "--appstream", &target])
+                    .status();
+                let _ = std::fs::remove_file(remote_cache_path(&target));
+                let (a, i) = load_remote_apps(&target);
+                all_apps = a;
+                installed = i;
+            }
             *ids.lock().unwrap() = installed.clone();
             let all = apps_to_package_data(&all_apps, &installed, &target, "All", "");
             *store.lock().unwrap() = all_apps;
+            *loaded.lock().unwrap() = target.clone();
             let total = all.len();
             let page: Vec<PackageData> = all.into_iter().take(FLATPAK_PAGE_SIZE).collect();
             let _ = tx.send(UiMessage::RemoteAppsFiltered { serial: u64::MAX, apps: page, total_matches: total });
@@ -5660,6 +6230,7 @@ fn main() {
 
     let store_icon = flatpak_app_store.clone();
     let tx_icon = tx.clone();
+    let loaded_icon = flatpak_loaded_remote.clone();
     window.on_load_flatpak_icon(move |app_id| {
         let id = app_id.to_string();
         let icon_name = {
@@ -5667,9 +6238,15 @@ fn main() {
             store.iter().find(|a| a.app_id == id).map(|a| a.icon_name.clone()).unwrap_or_default()
         };
         if !icon_name.is_empty() {
-            let path = format!("/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/{}", icon_name);
-            if std::path::Path::new(&path).exists() {
-                let _ = tx_icon.send(UiMessage::FlatpakIconReady(path));
+            let remote = loaded_icon.lock().unwrap().clone();
+            // Try the currently-loaded remote's appstream dir (user or system), then flathub.
+            for r in [remote.as_str(), "flathub"] {
+                if r.is_empty() { continue; }
+                let path = format!("{}/icons/128x128/{}", appstream_base(r), icon_name);
+                if std::path::Path::new(&path).exists() {
+                    let _ = tx_icon.send(UiMessage::FlatpakIconReady(path));
+                    break;
+                }
             }
         }
     });
@@ -6061,6 +6638,418 @@ fn main() {
         });
     });
 
+    // ---- Flatpak permission editor callbacks ----
+    let perm_ctx = Arc::new(Mutex::new(PermCtx::default()));
+    let perm_apps_all = Arc::new(Mutex::new(Vec::<PermApp>::new()));
+
+    {
+        let ctx = perm_ctx.clone();
+        let apps_all = perm_apps_all.clone();
+        let weak = window.as_weak();
+        window.on_open_flatpak_perms(move |id, name| {
+            let Some(w) = weak.upgrade() else { return };
+            let apps = perm_app_list();
+            *apps_all.lock().unwrap() = apps.clone();
+            w.set_perm_apps(ModelRc::new(VecModel::from(apps)));
+            w.set_perm_app_filter(SharedString::new());
+            w.set_perm_scope_system(false);
+            w.set_perm_dirty(false);
+            w.set_perm_selected_id(id.clone());
+            w.set_perm_selected_name(name.clone());
+            w.set_perm_loading(true);
+            w.set_show_flatpak_perms_modal(true);
+            ctx.lock().unwrap().scope_system = false;
+            perm_load(weak.clone(), ctx.clone(), id.to_string());
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let apps_all = perm_apps_all.clone();
+        let weak = window.as_weak();
+        window.on_open_flatpak_perms_manager(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let apps = perm_app_list();
+            *apps_all.lock().unwrap() = apps.clone();
+            let first = apps.first().cloned();
+            w.set_perm_apps(ModelRc::new(VecModel::from(apps)));
+            w.set_perm_app_filter(SharedString::new());
+            w.set_perm_scope_system(false);
+            w.set_perm_dirty(false);
+            w.set_show_flatpak_perms_modal(true);
+            ctx.lock().unwrap().scope_system = false;
+            match first {
+                Some(a) => {
+                    w.set_perm_selected_id(a.id.clone());
+                    w.set_perm_selected_name(a.name.clone());
+                    w.set_perm_loading(true);
+                    perm_load(weak.clone(), ctx.clone(), a.id.to_string());
+                }
+                None => {
+                    w.set_perm_selected_id(SharedString::new());
+                    w.set_perm_selected_name(SharedString::new());
+                }
+            }
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let apps_all = perm_apps_all.clone();
+        let weak = window.as_weak();
+        window.on_select_perm_app(move |id| {
+            let Some(w) = weak.upgrade() else { return };
+            let id_s = id.to_string();
+            let name = apps_all.lock().unwrap().iter()
+                .find(|a| a.id == id)
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|| SharedString::from(id_s.as_str()));
+            w.set_perm_selected_id(SharedString::from(id_s.as_str()));
+            w.set_perm_selected_name(name);
+            w.set_perm_loading(true);
+            perm_load(weak.clone(), ctx.clone(), id_s);
+        });
+    }
+
+    {
+        let apps_all = perm_apps_all.clone();
+        let weak = window.as_weak();
+        window.on_filter_perm_apps(move |q| {
+            let Some(w) = weak.upgrade() else { return };
+            let ql = q.to_string().to_lowercase();
+            let filtered: Vec<PermApp> = apps_all.lock().unwrap().iter()
+                .filter(|a| ql.is_empty() || a.name.to_lowercase().contains(&ql) || a.id.to_lowercase().contains(&ql))
+                .cloned()
+                .collect();
+            w.set_perm_apps(ModelRc::new(VecModel::from(filtered)));
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_set_perm_scope(move |system| {
+            let Some(w) = weak.upgrade() else { return };
+            let id = {
+                let mut c = ctx.lock().unwrap();
+                c.scope_system = system;
+                c.pending.clear();
+                c.id.clone()
+            };
+            w.set_perm_scope_system(system);
+            w.set_perm_dirty(false);
+            if id.is_empty() { return; }
+            w.set_perm_loading(true);
+            perm_load(weak.clone(), ctx.clone(), id);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_toggle_perm(move |category, token, on| {
+            let Some(w) = weak.upgrade() else { return };
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                let (cat, key) = match category.as_str() {
+                    "shared" => (fperm::Category::Shared, "shared"),
+                    "socket" => (fperm::Category::Socket, "sockets"),
+                    "device" => (fperm::Category::Device, "devices"),
+                    "feature" => (fperm::Category::Feature, "features"),
+                    "filesystem" => (fperm::Category::Filesystem, "filesystems"),
+                    _ => return,
+                };
+                kf_ctx_set(&mut c.working, key, token.as_str(), on);
+                fperm::toggle_arg(cat, token.as_str(), on, None)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_add_perm_fs(move |path, mode| {
+            let Some(w) = weak.upgrade() else { return };
+            let p = path.to_string();
+            let m = mode.to_string();
+            if p.is_empty() { return; }
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                kf_fs_add(&mut c.working, &p, &m);
+                let mode_opt = if m.is_empty() || m == "rw" { None } else { Some(m.as_str()) };
+                fperm::toggle_arg(fperm::Category::Filesystem, &p, true, mode_opt)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_remove_perm_fs(move |path| {
+            let Some(w) = weak.upgrade() else { return };
+            let p = path.to_string();
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                kf_fs_remove(&mut c.working, &p);
+                fperm::toggle_arg(fperm::Category::Filesystem, &p, false, None)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_add_perm_bus(move |system_bus, name| {
+            let Some(w) = weak.upgrade() else { return };
+            let n = name.to_string();
+            if n.is_empty() { return; }
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                let section = if system_bus { fperm::SYSTEM_BUS } else { fperm::SESSION_BUS };
+                kf_bus_set(&mut c.working, section, &n, true);
+                fperm::bus_arg(system_bus, &n, true)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_remove_perm_bus(move |system_bus, name| {
+            let Some(w) = weak.upgrade() else { return };
+            let n = name.to_string();
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                let section = if system_bus { fperm::SYSTEM_BUS } else { fperm::SESSION_BUS };
+                kf_bus_set(&mut c.working, section, &n, false);
+                fperm::bus_arg(system_bus, &n, false)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_add_perm_env(move |key, value| {
+            let Some(w) = weak.upgrade() else { return };
+            let k = key.to_string();
+            let v = value.to_string();
+            if k.is_empty() { return; }
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                kf_env_set(&mut c.working, &k, Some(&v));
+                fperm::env_arg(&k, Some(&v))
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_remove_perm_env(move |key| {
+            let Some(w) = weak.upgrade() else { return };
+            let k = key.to_string();
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                kf_env_set(&mut c.working, &k, None);
+                fperm::env_arg(&k, None)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_add_perm_persist(move |path| {
+            let Some(w) = weak.upgrade() else { return };
+            let p = path.to_string();
+            if p.is_empty() { return; }
+            let flag = {
+                let mut c = ctx.lock().unwrap();
+                kf_persist_add(&mut c.working, &p);
+                fperm::persist_arg(&p)
+            };
+            perm_after_edit(&w, &ctx, flag);
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_reset_perm(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let (id, system) = {
+                let c = ctx.lock().unwrap();
+                (c.id.clone(), c.scope_system)
+            };
+            if id.is_empty() { return; }
+            w.set_perm_loading(true);
+            let argv = fperm::reset_argv(system, &id);
+            let ctx2 = ctx.clone();
+            let weak2 = weak.clone();
+            let id2 = id.clone();
+            thread::spawn(move || {
+                if system {
+                    let _ = std::process::Command::new("pkexec").arg("flatpak").args(&argv).status();
+                } else {
+                    let _ = std::process::Command::new("flatpak").args(&argv).status();
+                }
+                perm_load(weak2, ctx2, id2);
+            });
+        });
+    }
+
+    {
+        let ctx = perm_ctx.clone();
+        let weak = window.as_weak();
+        window.on_apply_perm_system(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let (id, flags) = {
+                let c = ctx.lock().unwrap();
+                (c.id.clone(), c.pending.clone())
+            };
+            if id.is_empty() || flags.is_empty() { return; }
+            w.set_perm_loading(true);
+            let argv = fperm::override_argv(true, &id, &flags);
+            let ctx2 = ctx.clone();
+            let weak2 = weak.clone();
+            let id2 = id.clone();
+            thread::spawn(move || {
+                let _ = std::process::Command::new("pkexec").arg("flatpak").args(&argv).status();
+                perm_load(weak2, ctx2, id2);
+            });
+        });
+    }
+
+    // ---- Transaction history callbacks ----
+    let history_txns = Arc::new(Mutex::new(Vec::<alpmhist::Transaction>::new()));
+
+    {
+        let store = history_txns.clone();
+        let weak = window.as_weak();
+        window.on_open_transaction_history(move || {
+            let Some(w) = weak.upgrade() else { return };
+            // Gate behind the warning unless the user opted out previously.
+            if load_config().history_warn_dismissed {
+                load_history(weak.clone(), store.clone());
+            } else {
+                w.set_history_snapshot_note(SharedString::from(snapshot_note()));
+                w.set_history_warn_dontshow(false);
+                w.set_history_warn_open(true);
+            }
+        });
+    }
+
+    {
+        let store = history_txns.clone();
+        let weak = window.as_weak();
+        window.on_proceed_history_warning(move |dontshow| {
+            if dontshow {
+                let mut cfg = load_config();
+                cfg.history_warn_dismissed = true;
+                save_config(&cfg);
+            }
+            load_history(weak.clone(), store.clone());
+        });
+    }
+
+    {
+        let store = history_txns.clone();
+        let weak = window.as_weak();
+        window.on_select_transaction(move |idx| {
+            let Some(w) = weak.upgrade() else { return };
+            let i = idx as usize;
+            let txns = store.lock().unwrap();
+            let Some(t) = txns.get(i) else { return };
+            let actions: Vec<HistAction> = t.actions.iter().map(|a| {
+                let change = match a.kind {
+                    alpmhist::ActionKind::Removed => a.old.clone(),
+                    alpmhist::ActionKind::Installed | alpmhist::ActionKind::Reinstalled => a.new.clone(),
+                    _ => format!("{} -> {}", a.old, a.new),
+                };
+                HistAction { kind: a.kind.label().into(), pkg: a.pkg.as_str().into(), change: change.into() }
+            }).collect();
+            w.set_history_selected(idx);
+            w.set_history_detail_title(SharedString::from(format!("{}  -  {}", pretty_when(&t.when), txn_summary(t))));
+            w.set_history_can_rollback(!t.upgraded_targets().is_empty());
+            w.set_history_actions(ModelRc::new(VecModel::from(actions)));
+        });
+    }
+
+    {
+        let store = history_txns.clone();
+        let weak = window.as_weak();
+        let tx = tx.clone();
+        let input = terminal_input_sender.clone();
+        let pid = terminal_child_pid.clone();
+        window.on_confirm_rollback(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let idx = w.get_history_selected();
+            if idx < 0 { return; }
+            let targets = {
+                let txns = store.lock().unwrap();
+                match txns.get(idx as usize) {
+                    Some(t) => t.upgraded_targets(),
+                    None => return,
+                }
+            };
+            if targets.is_empty() { return; }
+            w.set_show_history_modal(false);
+            let tx = tx.clone();
+            let input = input.clone();
+            let pid = pid.clone();
+            thread::spawn(move || {
+                let mut files = Vec::new();
+                let mut missing = Vec::new();
+                for (name, ver) in &targets {
+                    match resolve_old_pkg(name, ver) {
+                        Some(p) => files.push(p),
+                        None => missing.push(format!("{name} {ver}")),
+                    }
+                }
+                if files.is_empty() {
+                    let _ = tx.send(UiMessage::ShowProgressPopup("Rollback".to_string()));
+                    let _ = tx.send(UiMessage::ProgressOutput(
+                        "No previous versions found in cache or the Arch Linux Archive. Nothing to roll back.\n".to_string(),
+                    ));
+                    let _ = tx.send(UiMessage::OperationDone(false));
+                    return;
+                }
+                // Build an interactive pacman -U over the resolved files. No --noconfirm:
+                // pacman shows its plan and the user confirms in the popup. No force flags.
+                let mut script = String::new();
+                if !missing.is_empty() {
+                    script.push_str(&format!(
+                        "echo 'Skipped (no cached/Archive version): {}'; echo; ",
+                        missing.join(", ")
+                    ));
+                }
+                script.push_str("pacman -U");
+                for f in &files {
+                    script.push(' ');
+                    script.push_str(f);
+                }
+                // Remind the user (Option 2): the rollback is not held, so a future
+                // update will bring these versions back.
+                script.push_str(
+                    " && echo '' \
+                     && echo '== Rollback complete ==' \
+                     && echo 'These packages are NOT held. Your next system update will upgrade them again and re-apply this change.' \
+                     && echo 'Do NOT run a full update until you have identified/fixed the cause or taken a Timeshift / Btrfs snapshot.' \
+                     && echo 'If the newer version still breaks things, just roll back again.'",
+                );
+                run_in_terminal_expanded(&tx, "Rolling back update", "pkexec", &["bash", "-c", &script], &input, &pid);
+            });
+        });
+    }
+
 
     let win_toggle = window.as_weak();
     window.on_toggle_addon_selected(move |idx| {
@@ -6191,10 +7180,11 @@ fn main() {
         });
         let tx_ai_cat_init = tx.clone();
         let cat_init = appimage_catalog.clone();
-        let urls_init: Vec<String> = initial_feeds.iter().map(|f| f.url.clone()).collect();
+        let named_init: Vec<(String, String)> =
+            initial_feeds.iter().map(|f| (f.name.clone(), f.url.clone())).collect();
         let _ = tx.send(UiMessage::AppImageCatalogLoading(true));
         thread::spawn(move || {
-            let entries = xpm_appimage::catalog::fetch_sources(&urls_init);
+            let entries = xpm_appimage::catalog::fetch_sources_named(&named_init);
             info!("AppImage startup preload: {} catalog entries", entries.len());
             *cat_init.lock().unwrap() = entries;
             let _ = tx_ai_cat_init.send(UiMessage::AppImageCatalogReady);
@@ -6245,22 +7235,10 @@ fn main() {
     info!("Running application");
     window.show().expect("Failed to show window");
 
-    let activate_weak = window.as_weak();
-    let activate_timer = Rc::new(Timer::default());
-    let activate_self = activate_timer.clone();
-    let activate_count = Rc::new(std::cell::Cell::new(0u32));
-    activate_timer.start(TimerMode::Repeated, std::time::Duration::from_millis(350), move || {
-        if let Some(w) = activate_weak.upgrade() {
-            w.window().request_redraw();
-        }
-        thread::spawn(kde_self_activate);
-        let n = activate_count.get() + 1;
-        activate_count.set(n);
-        if n >= 8 { activate_self.stop(); }
-    });
-
+    // Focus on launch is handled natively: the .desktop sets StartupNotify=true +
+    // StartupWMClass=xpackagemanager, so the compositor hands the xdg-activation
+    // token to our window (no KWin scripting, which triggered window effects).
     slint::run_event_loop_until_quit().expect("Failed to run application");
-    drop(activate_timer);
     std::process::exit(0);
 }
 
@@ -6680,6 +7658,23 @@ fn parse_plasmoid_desktop(path: &std::path::Path) -> PlasmoidInfo {
 }
 
 
+/// Relevance tier for a search hit (lower = better, None = no match). `q` must be
+/// lowercased; `id` is the flatpak app-id (pass name again for native pkgs).
+/// Priority: name > id > description, exact > prefix > substring.
+fn search_rank(q: &str, name: &str, id: &str, desc: &str) -> Option<u8> {
+    let name = name.to_lowercase();
+    let id = id.to_lowercase();
+    let desc = desc.to_lowercase();
+    if name == q { Some(0) }
+    else if name.starts_with(q) { Some(1) }
+    else if id == q { Some(2) }
+    else if name.contains(q) { Some(3) }
+    else if id.starts_with(q) { Some(4) }
+    else if id.contains(q) { Some(5) }
+    else if desc.contains(q) { Some(6) }
+    else { None }
+}
+
 async fn search_packages_async(
     tx: &mpsc::Sender<UiMessage>,
     query: &str,
@@ -6715,10 +7710,14 @@ async fn search_packages_async(
     let pacman_results = alpm_result.unwrap_or_default();
     let (flatpak_apps, flatpak_installed) = fk_result.unwrap_or_default();
 
-    let mut results: Vec<PackageData> = pacman_results
-        .iter()
-        .map(|r| {
-            PackageData {
+    // Score every candidate (native + flatpak) on one scale, then sort by
+    // (relevance, backend) so that at equal relevance native packages rank ahead
+    // of flatpaks. Flatpaks are ranked too (was previously an arbitrary take(50)).
+    let mut scored: Vec<(u8, u8, PackageData)> = Vec::new();
+
+    for r in &pacman_results {
+        if let Some(rank) = search_rank(&q_lower, &r.name, &r.name, &r.description) {
+            scored.push((rank, 0, PackageData {
                 name: SharedString::from(r.name.as_str()),
                 display_name: SharedString::from(r.name.as_str()),
                 version: SharedString::from(r.version.to_string().as_str()),
@@ -6734,46 +7733,34 @@ async fn search_packages_async(
                 required_by: SharedString::from(""),
                 selected: false,
                 explicit: false,
-            }
-        })
-        .collect();
+            }));
+        }
+    }
 
-    let fk: Vec<PackageData> = flatpak_apps.iter()
-        .filter(|a| {
-            a.name.to_lowercase().contains(&q_lower)
-                || a.app_id.to_lowercase().contains(&q_lower)
-                || a.summary.to_lowercase().contains(&q_lower)
-        })
-        .take(50)
-        .map(|a| PackageData {
-            name: SharedString::from(a.app_id.as_str()),
-            display_name: SharedString::from(if a.name.is_empty() { &a.app_id } else { &a.name }),
-            version: SharedString::from(a.version.as_str()),
-            description: SharedString::from(a.summary.as_str()),
-            repository: SharedString::from("Flatpak"),
-            backend: 1,
-            installed: flatpak_installed.contains(&a.app_id),
-            has_update: false,
-            installed_size: SharedString::from(""),
-            licenses: SharedString::from(""),
-            url: SharedString::from(""),
-            dependencies: SharedString::from(""),
-            required_by: SharedString::from(""),
-            selected: false,
-            explicit: false,
-        })
-        .collect();
+    for a in &flatpak_apps {
+        if let Some(rank) = search_rank(&q_lower, &a.name, &a.app_id, &a.summary) {
+            scored.push((rank, 1, PackageData {
+                name: SharedString::from(a.app_id.as_str()),
+                display_name: SharedString::from(if a.name.is_empty() { &a.app_id } else { &a.name }),
+                version: SharedString::from(a.version.as_str()),
+                description: SharedString::from(a.summary.as_str()),
+                repository: SharedString::from("Flatpak"),
+                backend: 1,
+                installed: flatpak_installed.contains(&a.app_id),
+                has_update: false,
+                installed_size: SharedString::from(""),
+                licenses: SharedString::from(""),
+                url: SharedString::from(""),
+                dependencies: SharedString::from(""),
+                required_by: SharedString::from(""),
+                selected: false,
+                explicit: false,
+            }));
+        }
+    }
 
-    results.sort_by_key(|p| {
-        let name = p.name.to_lowercase();
-        if name == q_lower { 0u8 }
-        else if name.starts_with(&q_lower) { 1 }
-        else if name.contains(&q_lower) { 2 }
-        else { 3 }
-    });
-
-    results.extend(fk);
-    results.truncate(200);
+    scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    let results: Vec<PackageData> = scored.into_iter().map(|(_, _, p)| p).take(200).collect();
     let _ = tx.send(UiMessage::SearchResults(results));
 }
 
@@ -6982,11 +7969,28 @@ fn strip_inline_tags(text: &str) -> String {
     result.trim().to_string()
 }
 
+/// Active appstream directory for a remote, preferring the user installation
+/// (~/.local/share/flatpak) over the system one (/var/lib/flatpak). Falls back to
+/// the system path even when nothing is cached yet (so callers get a sane path).
+fn appstream_base(remote: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() {
+        let user = format!("{}/.local/share/flatpak/appstream/{}/x86_64/active", home, remote);
+        if std::path::Path::new(&format!("{}/appstream.xml", user)).exists()
+            || std::path::Path::new(&format!("{}/appstream.xml.gz", user)).exists()
+        {
+            return user;
+        }
+    }
+    format!("/var/lib/flatpak/appstream/{}/x86_64/active", remote)
+}
+
 fn parse_appstream_xml(remote: &str) -> Vec<CachedRemoteApp> {
     use flate2::read::GzDecoder;
     use std::io::Read;
 
-    let xml_path = format!("/var/lib/flatpak/appstream/{}/x86_64/active/appstream.xml", remote);
+    let base = appstream_base(remote);
+    let xml_path = format!("{}/appstream.xml", base);
     let gz_path = format!("{}.gz", xml_path);
 
     let xml_bytes: Vec<u8> = if std::path::Path::new(&xml_path).exists() {
@@ -7426,6 +8430,7 @@ fn apps_to_package_data(
         .collect();
 
     let search_lower = search.to_lowercase();
+    let icon_base = appstream_base(remote);
     apps.iter()
         .filter(|app| {
             if !category_filter.is_empty() && category_filter != "All"
@@ -7447,7 +8452,7 @@ fn apps_to_package_data(
         })
         .map(|app| {
             let icon_path = if !app.icon_name.is_empty() {
-                format!("/var/lib/flatpak/appstream/flathub/x86_64/active/icons/128x128/{}", app.icon_name)
+                format!("{}/icons/128x128/{}", icon_base, app.icon_name)
             } else {
                 String::new()
             };
@@ -7570,3 +8575,35 @@ fn load_repo_packages(repo: &str) -> Vec<PackageData> {
     }
 }
 
+
+#[cfg(test)]
+mod search_tests {
+    use super::search_rank;
+
+    #[test]
+    fn exact_name_beats_prefix_beats_substring() {
+        // q must be lowercase (caller lowercases it).
+        let exact = search_rank("gimp", "gimp", "org.gimp.GIMP", "image editor");
+        let prefix = search_rank("gim", "gimp", "org.gimp.GIMP", "image editor");
+        let substr = search_rank("imp", "gimp", "org.gimp.GIMP", "image editor");
+        assert_eq!(exact, Some(0));
+        assert_eq!(prefix, Some(1));
+        assert!(substr > Some(1));
+    }
+
+    #[test]
+    fn id_and_description_match_rank_lower_than_name() {
+        // Match only via app-id.
+        let id = search_rank("gimp", "Photo Tool", "org.gimp.GIMP", "editor");
+        assert!(id.is_some());
+        // Match only via description ranks worst.
+        let desc = search_rank("editor", "Photo Tool", "org.gimp.GIMP", "an image editor");
+        assert_eq!(desc, Some(6));
+        assert!(id < desc);
+    }
+
+    #[test]
+    fn no_match_is_none() {
+        assert_eq!(search_rank("xyzzy", "gimp", "org.gimp.GIMP", "image editor"), None);
+    }
+}

@@ -6,6 +6,7 @@ Exec=xpackagemanager %f
 Icon=xpackagemanager
 Terminal=false
 Type=Application
+StartupWMClass=xpackagemanager
 Categories=System;PackageManager;
 Keywords=package;manager;pacman;flatpak;install;update;
 MimeType=application/x-alpm-package;application/zstd;
