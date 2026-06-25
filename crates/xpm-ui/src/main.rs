@@ -3967,20 +3967,23 @@ fn main() {
         });
     }
 
-    // Re-add any flatpak remotes xpm recorded in its config that are missing now
-    // (e.g. after a flatpak reset). User-scoped, so no root prompt.
+    // On startup: re-add recorded user remotes that are missing (e.g. after a
+    // flatpak reset), then write the full config back so it always reflects the
+    // current state and materializes every field (incl. flatpak_remotes) on disk.
     thread::spawn(|| {
         let recorded = load_config().flatpak_remotes;
-        if recorded.is_empty() { return; }
         let present: std::collections::HashSet<String> =
             list_user_flatpak_remotes().into_iter().map(|r| r.name).collect();
-        for r in recorded {
+        for r in &recorded {
             if !r.name.is_empty() && !r.url.is_empty() && !present.contains(&r.name) {
                 let _ = std::process::Command::new("flatpak")
                     .args(["remote-add", "--user", "--if-not-exists", &r.name, &r.url])
                     .status();
             }
         }
+        let mut cfg = load_config();
+        cfg.flatpak_remotes = list_user_flatpak_remotes();
+        save_config(&cfg);
     });
 
     {

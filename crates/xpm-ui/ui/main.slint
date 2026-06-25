@@ -6166,8 +6166,8 @@ export component MainWindow inherits Window {
                                             NavIcon { d: "M3 3v5h5M3.05 13a9 9 0 105.5-7.6L3 8M12 7v5l4 2"; icon-color: Cat.mauve; width: 18px; height: 18px; x: 10px; y: 10px; } } }
                                     VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
                                         Text { text: @tr("Transaction History"); font-size: Cat.fs13; font-weight: 700; color: Cat.text; }
-                                        Text { text: @tr("Review past pacman transactions and roll back a bad update"); font-size: Cat.fs14; color: Cat.overlay1; }
-                                        Text { text: @tr("reads /var/log/pacman.log"); font-size: Cat.fs13; color: Cat.mauve.with-alpha(0.7); } }
+                                        Text { text: @tr("Review and roll back past pacman updates"); font-size: Cat.fs14; color: Cat.overlay1; overflow: elide; }
+                                        Text { text: @tr("reads /var/log/pacman.log"); font-size: Cat.fs13; color: Cat.mauve.with-alpha(0.7); overflow: elide; } }
                                     VerticalLayout { alignment: center;
                                         Rectangle { width: 62px; height: 26px; border-radius: 6px; background: ini-btn.has-hover ? Cat.mauve.with-alpha(0.25) : Cat.mauve.with-alpha(0.1); border-width: 1px; border-color: Cat.mauve.with-alpha(0.35); animate background { duration: 70ms; }
                                             Text { text: @tr("OPEN"); font-size: Cat.fs10; font-weight: 700; color: Cat.mauve; horizontal-alignment: center; vertical-alignment: center; }
