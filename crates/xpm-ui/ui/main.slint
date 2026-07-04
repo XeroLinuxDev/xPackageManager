@@ -119,30 +119,6 @@ export struct PermEntry { value: string, mode: string, overridden: bool }
 export struct HistTxn { when: string, command: string, summary: string, rollbackable: bool }
 export struct HistAction { kind: string, pkg: string, change: string }
 
-export struct FwupdDetected {
-    name: string,
-    vendor: string,
-    version: string,
-    plugin: string,
-    summary: string,
-    updatable: bool,
-    flags: string,
-    device-id: string,
-    has-pending-update: bool,
-}
-
-export struct FwupdDevice {
-    name: string,
-    vendor: string,
-    current-version: string,
-    new-version: string,
-    summary: string,
-    description: string,
-    size: string,
-    urgency: string,
-    needs-reboot: bool,
-}
-
 export global Cat {
     out property <color> base: Palette.background;
     out property <color> mantle: Palette.background.darker(0.06);
@@ -1407,21 +1383,7 @@ export component MainWindow inherits Window {
     callback load-pacman-opts;
     callback save-pacman-opts;
 
-    in-out property <[FwupdDevice]> firmware-devices: [];
-    in-out property <bool> firmware-detecting: false;
-    in-out property <bool> firmware-refreshing: false;
-    in-out property <bool> firmware-loading: false;
-    in-out property <int> firmware-update-count: 0;
-    in-out property <int> firmware-detected-count: -1;
-    in-out property <bool> firmware-checked: false;
-    in-out property <[FwupdDetected]> firmware-all-devices: [];
-    in-out property <bool> show-firmware-detail: false;
-    in-out property <bool> show-firmware-devices-detail: false;
-    callback detect-firmware-devices;
-    callback refresh-firmware-db;
-    callback check-firmware-updates;
-    callback apply-firmware-updates;
-    callback update-device( string);
+    callback launch-xsb;
 
     property <string> icon-home: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10";
     property <string> icon-grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z";
@@ -1757,8 +1719,8 @@ export component MainWindow inherits Window {
         }
 
         VerticalLayout {
-            padding: (view == 11 || view == 12 || view == 15) ? 0px : 24px;
-            padding-top: (view == 11 || view == 12 || view == 15) ? 0px : 20px;
+            padding: (view == 11 || view == 12) ? 0px : 24px;
+            padding-top: (view == 11 || view == 12) ? 0px : 20px;
             spacing: 12px;
 
             if view != 11 && view != 12 && view != 15: HorizontalLayout {
@@ -5043,12 +5005,12 @@ export component MainWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: @tr("FIRMWARE UPDATES"); }
+                        SectionLabel { section-title: @tr("LIMINE + SECURE BOOT"); }
 
                         Rectangle {
                             height: 66px;
                             border-radius: 8px;
-                            background: fw-nav-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
+                            background: xsb-nav-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
                             border-width: 1.5px;
                             border-color: Cat.blue.with-alpha(0.5);
                             animate background { duration: 120ms; }
@@ -5059,32 +5021,15 @@ export component MainWindow inherits Window {
                                 spacing: 10px;
 
                                 VerticalLayout { alignment: center;
-                                    NavIcon { d: icon-chip; icon-color: Cat.blue; width: 16px; height: 16px; }
+                                    NavIcon { d: icon-lock; icon-color: Cat.blue; width: 16px; height: 16px; }
                                 }
 
                                 Text {
-                                    text: @tr("Firmware Updates");
+                                    text: @tr("Limine + Secure Boot");
                                     font-size: Cat.fs14; font-weight: 500;
                                     color: Cat.text;
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
-                                }
-
-                                if firmware-update-count > 0: VerticalLayout { alignment: center;
-                                    Rectangle {
-                                        width: fw-upd-badge.preferred-width + 14px;
-                                        height: 20px;
-                                        border-radius: 10px;
-                                        background: Cat.green.with-alpha(0.18);
-
-                                        fw-upd-badge := Text {
-                                            x: 7px;
-                                            text: firmware-update-count + " update" + (firmware-update-count == 1 ? "" : "s");
-                                            font-size: Cat.fs10; font-weight: 700;
-                                            color: Cat.green;
-                                            vertical-alignment: center;
-                                        }
-                                    }
                                 }
 
                                 VerticalLayout { alignment: center;
@@ -5092,14 +5037,9 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            fw-nav-ta := TouchArea {
+                            xsb-nav-ta := TouchArea {
                                 mouse-cursor: pointer;
-                                clicked => {
-                                    root.firmware-detecting = true;
-                                    root.firmware-detected-count = -1;
-                                    root.detect-firmware-devices();
-                                    root.view = 15;
-                                }
+                                clicked => { root.launch-xsb(); }
                             }
                         }
                     }
@@ -5634,262 +5574,6 @@ export component MainWindow inherits Window {
                     }
                 }
               }
-            }
-
-            if view == 15: Rectangle {
-                vertical-stretch: 1;
-                border-radius: 14px;
-                background: Cat.base.with-alpha(0.82);
-                border-width: 1px;
-                border-color: Cat.surface0.with-alpha(0.5);
-                clip: true;
-
-                VerticalLayout {
-                    spacing: 0;
-
-                    Rectangle {
-                        height: 68px;
-                        background: Cat.crust;
-
-                        HorizontalLayout {
-                            padding-left: 14px; padding-right: 14px;
-                            padding-top: 10px; padding-bottom: 10px;
-                            spacing: 12px;
-
-                            VerticalLayout {
-                                alignment: center;
-                                Rectangle {
-                                    width: 90px; height: 30px; border-radius: 8px;
-                                    background: fw15-back-ta.has-hover ? Cat.surface1 : Cat.surface0;
-                                    animate background { duration: 80ms; }
-                                    VerticalLayout {
-                                        alignment: center;
-                                        HorizontalLayout {
-                                            alignment: center; spacing: 6px;
-                                            NavIcon { d: "M19 12H5M12 19l-7-7 7-7"; icon-color: Cat.subtext0; width: 14px; height: 14px; }
-                                            Text { text: @tr("Settings"); font-size: Cat.fs13; font-weight: 600; color: Cat.subtext0; }
-                                        }
-                                    }
-                                    fw15-back-ta := TouchArea { mouse-cursor: pointer; clicked => { view = 5; } }
-                                }
-                            }
-
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                border-radius: 12px;
-                                background: Cat.blue.with-alpha(0.08);
-                                border-width: 1px; border-color: Cat.blue.with-alpha(0.22);
-
-                                HorizontalLayout {
-                                    padding-left: 14px; padding-right: 14px; spacing: 10px;
-
-                                    VerticalLayout {
-                                        alignment: center;
-                                        Rectangle {
-                                            width: 34px; height: 34px; border-radius: 9px;
-                                            background: Cat.blue.with-alpha(0.14);
-                                            NavIcon { d: icon-chip; icon-color: Cat.blue; width: 18px; height: 18px; x: 8px; y: 8px; }
-                                        }
-                                    }
-
-                                    VerticalLayout {
-                                        alignment: center; horizontal-stretch: 1; spacing: 2px;
-                                        Text { text: @tr("Firmware Updates"); font-size: Cat.fs16; font-weight: 700; color: Cat.blue; }
-                                        Text {
-                                            text: firmware-detecting ? "Detecting devices…"
-                                                : (firmware-detected-count < 0 ? "Detecting devices…"
-                                                    : (firmware-detected-count == 0 ? "No supported devices found"
-                                                        : firmware-detected-count + (firmware-detected-count == 1 ? " device detected" : " devices detected")));
-                                            font-size: Cat.fs12; color: Cat.overlay1;
-                                        }
-                                    }
-
-                                    VerticalLayout { alignment: center;
-                                        Rectangle {
-                                            width: fw-check-lbl.preferred-width + 42px; height: 30px; border-radius: 7px;
-                                            background: fw15-check-ta.has-hover
-                                                ? Cat.mauve.with-alpha(0.22) : Cat.mauve.with-alpha(0.12);
-                                            border-width: 1px;
-                                            border-color: fw15-check-ta.has-hover
-                                                ? Cat.mauve.with-alpha(0.5) : Cat.mauve.with-alpha(0.28);
-                                            animate background { duration: 100ms; }
-
-                                            HorizontalLayout {
-                                                alignment: center; spacing: 7px;
-                                                padding-left: 10px; padding-right: 10px;
-
-                                                if firmware-loading: VerticalLayout { alignment: center;
-                                                    LoadingCircle { diameter: 12px; }
-                                                }
-                                                if !firmware-loading: VerticalLayout { alignment: center;
-                                                    NavIcon { d: icon-search; icon-color: Cat.mauve; width: 12px; height: 12px; }
-                                                }
-                                                fw-check-lbl := Text {
-                                                    text: firmware-loading ? @tr("Checking…") : @tr("Check for Updates");
-                                                    font-size: Cat.fs12; font-weight: 600;
-                                                    color: Cat.mauve;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-
-                                            fw15-check-ta := TouchArea {
-                                                mouse-cursor: firmware-loading ? default : pointer;
-                                                enabled: !firmware-loading;
-                                                clicked => { root.check-firmware-updates(); }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle { height: 1px; background: Cat.surface0; }
-
-                    HorizontalLayout {
-                        alignment: center;
-                        padding-top: 14px; padding-bottom: 2px;
-                        padding-left: 20px; padding-right: 20px;
-
-                        Rectangle {
-                            height: 36px;
-                            border-radius: 18px;
-                            background: Cat.yellow.with-alpha(0.10);
-                            border-width: 1px;
-                            border-color: Cat.yellow.with-alpha(0.30);
-
-                            HorizontalLayout {
-                                padding-left: 14px; padding-right: 14px;
-                                spacing: 8px; alignment: center;
-
-                                VerticalLayout { alignment: center;
-                                    WarnBadge { size: 15px; }
-                                }
-                                Text {
-                                    text: @tr("Use at your own risk - if it ain't broke, don't mess with it. Firmware updates can brick hardware.");
-                                    font-size: Cat.fs11; color: Cat.yellow;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-                            }
-                        }
-                    }
-
-                    if firmware-detecting || firmware-detected-count < 0: VerticalLayout {
-                        vertical-stretch: 1;
-                        alignment: center; spacing: 12px;
-                        HorizontalLayout { alignment: center; LoadingCircle { diameter: 28px; } }
-                        Text { text: @tr("Detecting firmware devices…"); font-size: Cat.fs14; color: Cat.overlay1; horizontal-alignment: center; }
-                    }
-
-                    if !firmware-detecting && firmware-detected-count == 0: VerticalLayout {
-                        vertical-stretch: 1;
-                        alignment: center; spacing: 10px;
-                        NavIcon { d: icon-chip; icon-color: Cat.overlay0; width: 36px; height: 36px; }
-                        Text { text: @tr("No supported firmware devices found"); font-size: Cat.fs15; font-weight: 600; color: Cat.text; horizontal-alignment: center; }
-                        Text { text: @tr("fwupd could not detect any updatable hardware on this system."); font-size: Cat.fs13; color: Cat.overlay1; horizontal-alignment: center; }
-                    }
-
-                    if !firmware-detecting && firmware-detected-count > 0: ScrollView {
-                        vertical-stretch: 1;
-
-                        VerticalLayout {
-                            padding: 16px;
-                            spacing: 10px;
-                            alignment: start;
-
-                            for device[i] in firmware-all-devices: Rectangle {
-                                border-radius: 10px;
-                                background: Math.mod(i, 2) == 0 ? Cat.mantle : Cat.surface0.with-alpha(0.3);
-                                border-width: 1px;
-                                border-color: device.has-pending-update
-                                    ? Cat.green.with-alpha(0.35) : Cat.surface1;
-
-                                HorizontalLayout {
-                                    padding-left: 16px; padding-right: 12px;
-                                    padding-top: 12px; padding-bottom: 12px;
-                                    spacing: 12px;
-
-                                    VerticalLayout {
-                                        horizontal-stretch: 1;
-                                        alignment: center;
-                                        spacing: 4px;
-
-                                        HorizontalLayout {
-                                            spacing: 8px; alignment: start;
-
-                                            Text {
-                                                text: device.name;
-                                                font-size: Cat.fs14; font-weight: 700;
-                                                color: Cat.text;
-                                                overflow: elide;
-                                                vertical-alignment: center;
-                                            }
-
-                                        }
-
-                                        if device.vendor != "": Text {
-                                            text: device.vendor;
-                                            font-size: Cat.fs12; color: Cat.subtext0;
-                                            overflow: elide;
-                                        }
-
-                                        HorizontalLayout {
-                                            spacing: 10px; alignment: start;
-
-                                            if device.version != "": Text {
-                                                text: "v" + device.version;
-                                                font-size: Cat.fs11; color: Cat.overlay1;
-                                                vertical-alignment: center;
-                                            }
-
-                                            if device.plugin != "": Text {
-                                                text: "·  " + device.plugin;
-                                                font-size: Cat.fs11; color: Cat.overlay0;
-                                                vertical-alignment: center;
-                                            }
-                                        }
-
-                                        if device.flags != "": Text {
-                                            text: device.flags;
-                                            font-size: Cat.fs10; color: Cat.overlay0;
-                                            wrap: word-wrap;
-                                        }
-                                    }
-
-                                    if device.has-pending-update: VerticalLayout {
-                                        alignment: center;
-                                        Rectangle {
-                                            width: 88px; height: 32px; border-radius: 7px;
-                                            background: fw15-upd-ta.has-hover
-                                                ? Cat.green.with-alpha(0.28) : Cat.green.with-alpha(0.14);
-                                            border-width: 1px;
-                                            border-color: fw15-upd-ta.has-hover
-                                                ? Cat.green.with-alpha(0.6) : Cat.green.with-alpha(0.35);
-                                            animate background { duration: 100ms; }
-
-                                            HorizontalLayout {
-                                                alignment: center; spacing: 6px;
-                                                NavIcon { d: icon-zap; icon-color: Cat.green; width: 12px; height: 12px; }
-                                                Text {
-                                                    text: @tr("Update");
-                                                    font-size: Cat.fs13; font-weight: 700;
-                                                    color: Cat.green;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-
-                                            fw15-upd-ta := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.update-device(device.device-id); }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             if view == 13: VerticalLayout {

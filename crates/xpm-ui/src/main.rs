@@ -145,10 +145,6 @@ enum UiMessage {
     ProgressShowClose,
     RepoListLoaded(Vec<(String, bool, String)>),
     PacmanOptsLoaded(PacmanOpts),
-    FirmwareDevicesDetected(Vec<FwupdDetectedData>),
-    FirmwareUpdatesLoaded(Vec<FwupdDeviceData>),
-    FirmwareCheckFailed(String),
-    FirmwareRefreshDone(bool),
     UpdateCacheSize(String),
     PkgInfoLoaded(String),
     InstalledAppImagesLoaded(Vec<AppImageEntry>),
@@ -158,31 +154,6 @@ enum UiMessage {
     AppImageCatalogLoading(bool),
     AppImageIconReady { github: String, path: String },
     AppImageCardsRefresh,
-}
-
-#[derive(Clone)]
-struct FwupdDetectedData {
-    name: String,
-    vendor: String,
-    version: String,
-    plugin: String,
-    summary: String,
-    updatable: bool,
-    flags: String,
-    device_id: String,
-}
-
-#[derive(Clone)]
-struct FwupdDeviceData {
-    name: String,
-    vendor: String,
-    current_version: String,
-    new_version: String,
-    summary: String,
-    description: String,
-    size: String,
-    urgency: String,
-    needs_reboot: bool,
 }
 
 #[derive(Clone)]
@@ -382,82 +353,6 @@ fn write_pacman_conf(content: &str) -> bool {
         .unwrap_or(false);
     let _ = std::fs::remove_file(&tmp);
     ok
-}
-
-fn format_fw_size(bytes: u64) -> String {
-    if bytes >= 1_048_576 {
-        format!("{:.1} MiB", bytes as f64 / 1_048_576.0)
-    } else if bytes >= 1024 {
-        format!("{:.1} KiB", bytes as f64 / 1024.0)
-    } else if bytes > 0 {
-        format!("{} B", bytes)
-    } else {
-        String::new()
-    }
-}
-
-fn parse_fwupd_updates(json: &str) -> (Vec<FwupdDeviceData>, i32) {
-    #[derive(serde::Deserialize)]
-    struct Root {
-        #[serde(rename = "Devices", default)]
-        devices: Vec<RawDevice>,
-    }
-    #[derive(serde::Deserialize)]
-    struct RawDevice {
-        #[serde(rename = "Name", default)]
-        name: String,
-        #[serde(rename = "Vendor", default)]
-        vendor: String,
-        #[serde(rename = "Version", default)]
-        version: String,
-        #[serde(rename = "Flags", default)]
-        flags: Vec<String>,
-        #[serde(rename = "Releases", default)]
-        releases: Vec<RawRelease>,
-    }
-    #[derive(serde::Deserialize)]
-    struct RawRelease {
-        #[serde(rename = "Version", default)]
-        version: String,
-        #[serde(rename = "Summary", default)]
-        summary: String,
-        #[serde(rename = "Description", default)]
-        description: String,
-        #[serde(rename = "Urgency", default)]
-        urgency: Option<u32>,
-        #[serde(rename = "Size", default)]
-        size: Option<u64>,
-    }
-
-    let root: Root = match serde_json::from_str(json) {
-        Ok(r) => r,
-        Err(_) => return (vec![], 0),
-    };
-
-    let mut devices: Vec<FwupdDeviceData> = Vec::new();
-    for d in &root.devices {
-        let Some(release) = d.releases.first() else { continue };
-        let urgency = match release.urgency.unwrap_or(0) {
-            4 => "critical",
-            3 => "high",
-            2 => "medium",
-            _ => "low",
-        };
-        let needs_reboot = d.flags.iter().any(|f| f == "needs-reboot" || f == "needs-shutdown");
-        devices.push(FwupdDeviceData {
-            name: d.name.clone(),
-            vendor: d.vendor.clone(),
-            current_version: d.version.clone(),
-            new_version: release.version.clone(),
-            summary: release.summary.clone(),
-            description: strip_html(&release.description),
-            size: release.size.map(format_fw_size).unwrap_or_default(),
-            urgency: urgency.to_string(),
-            needs_reboot,
-        });
-    }
-    let count = devices.len() as i32;
-    (devices, count)
 }
 
 fn parse_pacman_opts(content: &str) -> PacmanOpts {
@@ -3882,64 +3777,6 @@ fn main() {
                         window.set_opt_use_syslog(opts.use_syslog);
                         window.set_opt_clean_method(opts.clean_method);
                     }
-                    UiMessage::FirmwareUpdatesLoaded(devices) => {
-                        let ui_devices: Vec<FwupdDevice> = devices.iter().map(|d| FwupdDevice {
-                            name: SharedString::from(&d.name),
-                            vendor: SharedString::from(&d.vendor),
-                            current_version: SharedString::from(&d.current_version),
-                            new_version: SharedString::from(&d.new_version),
-                            summary: SharedString::from(&d.summary),
-                            description: SharedString::from(&d.description),
-                            size: SharedString::from(&d.size),
-                            urgency: SharedString::from(&d.urgency),
-                            needs_reboot: d.needs_reboot,
-                        }).collect();
-                        let count = ui_devices.len() as i32;
-                        window.set_firmware_devices(ModelRc::new(VecModel::from(ui_devices)));
-                        window.set_firmware_update_count(count);
-                        let update_names: std::collections::HashSet<String> = devices.iter()
-                            .map(|d| d.name.clone())
-                            .collect();
-                        let all_model = window.get_firmware_all_devices();
-                        let updated: Vec<FwupdDetected> = (0..all_model.row_count())
-                            .filter_map(|i| all_model.row_data(i))
-                            .map(|mut dev| {
-                                dev.has_pending_update = update_names.contains(dev.name.as_str());
-                                dev
-                            })
-                            .collect();
-                        window.set_firmware_all_devices(ModelRc::new(VecModel::from(updated)));
-                        window.set_firmware_loading(false);
-                        window.set_firmware_checked(true);
-                    }
-                    UiMessage::FirmwareCheckFailed(msg) => {
-                        error!("fwupd check failed: {}", msg);
-                        window.set_firmware_loading(false);
-                        window.set_firmware_checked(true);
-                    }
-                    UiMessage::FirmwareDevicesDetected(devs) => {
-                        let count = devs.len() as i32;
-                        let ui_devs: Vec<FwupdDetected> = devs.iter().map(|d| FwupdDetected {
-                            name: SharedString::from(&d.name),
-                            vendor: SharedString::from(&d.vendor),
-                            version: SharedString::from(&d.version),
-                            plugin: SharedString::from(&d.plugin),
-                            summary: SharedString::from(&d.summary),
-                            updatable: d.updatable,
-                            flags: SharedString::from(&d.flags),
-                            device_id: SharedString::from(&d.device_id),
-                            has_pending_update: false,
-                        }).collect();
-                        window.set_firmware_all_devices(ModelRc::new(VecModel::from(ui_devs)));
-                        window.set_firmware_detected_count(count);
-                        window.set_firmware_detecting(false);
-                    }
-                    UiMessage::FirmwareRefreshDone(success) => {
-                        window.set_firmware_refreshing(false);
-                        if !success {
-                            error!("fwupd refresh failed");
-                        }
-                    }
                     UiMessage::UpdateCacheSize(size) => {
                         let mut s = window.get_stats();
                         s.cache_size = SharedString::from(&size);
@@ -4603,147 +4440,18 @@ fn main() {
     });
 
 
-    let tx_fw_detect = tx.clone();
-    let win_fw_detect = window.as_weak();
-    window.on_detect_firmware_devices(move || {
-        if let Some(win) = win_fw_detect.upgrade() {
-            win.set_firmware_detecting(true);
-        }
-        let tx = tx_fw_detect.clone();
+    window.on_launch_xsb(move || {
         thread::spawn(move || {
-            #[derive(serde::Deserialize)]
-            struct Root {
-                #[serde(rename = "Devices", default)]
-                devices: Vec<RawDev>,
-            }
-            #[derive(serde::Deserialize)]
-            struct RawDev {
-                #[serde(rename = "Name", default)]      name: String,
-                #[serde(rename = "Vendor", default)]    vendor: String,
-                #[serde(rename = "Version", default)]   version: String,
-                #[serde(rename = "Plugin", default)]    plugin: String,
-                #[serde(rename = "Summary", default)]   summary: String,
-                #[serde(rename = "Flags", default)]     flags: Vec<String>,
-                #[serde(rename = "DeviceId", default)]  device_id: String,
-            }
-
-            const SKIP_FLAGS: &[&str] = &[
-                "registered", "supported", "trusted-payload", "trusted-metadata",
-                "only-offline", "require-ac",
-            ];
-
-            let devs = match std::process::Command::new("fwupdmgr")
-                .args(["get-devices", "--json"])
-                .output()
-            {
-                Ok(out) => {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    serde_json::from_str::<Root>(&stdout)
-                        .map(|r| r.devices.into_iter().filter_map(|d| {
-                            let updatable = d.flags.iter().any(|f| f == "updatable" || f == "updatable-hidden");
-                            if !updatable { return None; }
-                            let display_flags: Vec<&str> = d.flags.iter()
-                                .filter(|f| !SKIP_FLAGS.contains(&f.as_str())
-                                    && *f != "updatable" && *f != "updatable-hidden")
-                                .map(|f| f.as_str())
-                                .collect();
-                            Some(FwupdDetectedData {
-                                name: d.name,
-                                vendor: d.vendor,
-                                version: d.version,
-                                plugin: d.plugin,
-                                summary: d.summary,
-                                updatable: true,
-                                flags: display_flags.join(" · "),
-                                device_id: d.device_id,
-                            })
-                        }).collect::<Vec<_>>())
-                        .unwrap_or_default()
-                }
-                Err(_) => vec![],
-            };
-            let _ = tx.send(UiMessage::FirmwareDevicesDetected(devs));
-        });
-    });
-
-    let tx_fw_refresh = tx.clone();
-    let win_fw_refresh = window.as_weak();
-    window.on_refresh_firmware_db(move || {
-        if let Some(win) = win_fw_refresh.upgrade() {
-            win.set_firmware_refreshing(true);
-        }
-        let tx = tx_fw_refresh.clone();
-        thread::spawn(move || {
-            let out = std::process::Command::new("fwupdmgr")
-                .args(["refresh", "--force"])
-                .output();
-            let success = out.map(|o| o.status.success()).unwrap_or(false);
-            let _ = tx.send(UiMessage::FirmwareRefreshDone(success));
-        });
-    });
-
-    let tx_fw_check = tx.clone();
-    let win_fw_check = window.as_weak();
-    window.on_check_firmware_updates(move || {
-        if let Some(win) = win_fw_check.upgrade() {
-            win.set_firmware_loading(true);
-        }
-        let tx = tx_fw_check.clone();
-        thread::spawn(move || {
-            let refresh_ok = std::process::Command::new("fwupdmgr")
-                .args(["refresh"])
-                .output()
-                .map(|o| o.status.success())
+            let installed = std::process::Command::new("pkexec")
+                .args(["pacman", "-Syy", "--noconfirm", "xsb-gui"])
+                .status()
+                .map(|s| s.success())
                 .unwrap_or(false);
-            if !refresh_ok {
-                let _ = tx.send(UiMessage::FirmwareCheckFailed("fwupdmgr refresh failed".into()));
-                return;
-            }
-            match std::process::Command::new("fwupdmgr")
-                .args(["get-updates", "--json"])
-                .output()
-            {
-                Ok(out) => {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    let (devices, _) = parse_fwupd_updates(&stdout);
-                    let _ = tx.send(UiMessage::FirmwareUpdatesLoaded(devices));
-                }
-                Err(e) => {
-                    let _ = tx.send(UiMessage::FirmwareCheckFailed(e.to_string()));
-                }
+            if installed {
+                let _ = std::process::Command::new("xsb-gui").spawn();
             }
         });
     });
-
-    let tx_fw_apply = tx.clone();
-    let fw_apply_input = terminal_input_sender.clone();
-    let fw_apply_pid = terminal_child_pid.clone();
-    window.on_apply_firmware_updates(move || {
-        let tx = tx_fw_apply.clone();
-        let input = fw_apply_input.clone();
-        let pid = fw_apply_pid.clone();
-        thread::spawn(move || {
-            run_in_terminal_expanded(&tx, "Firmware Update", "fwupdmgr", &["update"], &input, &pid);
-        });
-    });
-
-    let tx_fw_dev = tx.clone();
-    let fw_dev_input = terminal_input_sender.clone();
-    let fw_dev_pid = terminal_child_pid.clone();
-    window.on_update_device(move |device_id| {
-        let tx = tx_fw_dev.clone();
-        let input = fw_dev_input.clone();
-        let pid = fw_dev_pid.clone();
-        let id = device_id.to_string();
-        thread::spawn(move || {
-            run_in_terminal_expanded(
-                &tx, "Firmware Update", "fwupdmgr",
-                &["update", &id],
-                &input, &pid,
-            );
-        });
-    });
-
 
     let tx_install = tx.clone();
     let install_input = terminal_input_sender.clone();
