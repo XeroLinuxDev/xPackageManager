@@ -119,6 +119,10 @@ export struct PermEntry { value: string, mode: string, overridden: bool }
 export struct HistTxn { when: string, command: string, summary: string, rollbackable: bool }
 export struct HistAction { kind: string, pkg: string, change: string }
 
+export struct HealthSvc { name: string, description: string, scope: string }
+export struct HealthErr { when: string, unit: string, message: string }
+export struct HealthFile { pkg: string, issue: string }
+
 export global Cat {
     out property <color> base: Palette.background;
     out property <color> mantle: Palette.background.darker(0.06);
@@ -1383,7 +1387,19 @@ export component MainWindow inherits Window {
     callback load-pacman-opts;
     callback save-pacman-opts;
 
-    callback launch-xsb;
+    // --- System health ---
+    in-out property <bool> show-health-modal: false;
+    in-out property <bool> health-loading: false;
+    in-out property <bool> health-checked: false;
+    in-out property <int> health-failed-count: 0;
+    in-out property <int> health-error-count: 0;
+    in-out property <[HealthSvc]> health-services: [];
+    in-out property <[HealthErr]> health-errors: [];
+    in-out property <[HealthFile]> health-files: [];
+    in-out property <bool> health-files-loading: false;
+    in-out property <bool> health-files-checked: false;
+    callback open-system-health;
+    callback check-package-integrity;
 
     property <string> icon-home: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10";
     property <string> icon-grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z";
@@ -5005,12 +5021,12 @@ export component MainWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 8px;
-                        SectionLabel { section-title: @tr("LIMINE + SECURE BOOT"); }
+                        SectionLabel { section-title: @tr("SYSTEM HEALTH"); }
 
                         Rectangle {
                             height: 66px;
                             border-radius: 8px;
-                            background: xsb-nav-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
+                            background: sh-nav-ta.has-hover ? Cat.blue.with-alpha(0.14) : Cat.blue.with-alpha(0.07);
                             border-width: 1.5px;
                             border-color: Cat.blue.with-alpha(0.5);
                             animate background { duration: 120ms; }
@@ -5021,15 +5037,34 @@ export component MainWindow inherits Window {
                                 spacing: 10px;
 
                                 VerticalLayout { alignment: center;
-                                    NavIcon { d: icon-lock; icon-color: Cat.blue; width: 16px; height: 16px; }
+                                    NavIcon { d: "M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 000-7.8z"; icon-color: Cat.blue; width: 16px; height: 16px; }
                                 }
 
                                 Text {
-                                    text: @tr("Limine + Secure Boot");
+                                    text: @tr("System Health");
                                     font-size: Cat.fs14; font-weight: 500;
                                     color: Cat.text;
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
+                                }
+
+                                if health-checked: VerticalLayout { alignment: center;
+                                    Rectangle {
+                                        width: sh-badge.preferred-width + 16px;
+                                        height: 20px;
+                                        border-radius: 10px;
+                                        background: health-failed-count > 0 ? Cat.red.with-alpha(0.18) : Cat.green.with-alpha(0.18);
+
+                                        sh-badge := Text {
+                                            x: 8px;
+                                            text: health-failed-count > 0
+                                                ? (health-failed-count + (health-failed-count == 1 ? " issue" : " issues"))
+                                                : "healthy";
+                                            font-size: Cat.fs10; font-weight: 700;
+                                            color: health-failed-count > 0 ? Cat.red : Cat.green;
+                                            vertical-alignment: center;
+                                        }
+                                    }
                                 }
 
                                 VerticalLayout { alignment: center;
@@ -5037,9 +5072,9 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            xsb-nav-ta := TouchArea {
+                            sh-nav-ta := TouchArea {
                                 mouse-cursor: pointer;
-                                clicked => { root.launch-xsb(); }
+                                clicked => { root.open-system-health(); }
                             }
                         }
                     }
@@ -9976,6 +10011,151 @@ export component MainWindow inherits Window {
                 }
             }
 
+        }
+    }
+
+    // System-health diagnostics (read-only: failed services, journal errors, package integrity).
+    if show-health-modal: Rectangle {
+        width: 100%; height: 100%;
+        background: Cat.crust.with-alpha(0.75);
+        TouchArea {}
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(880px, parent.width - 40px);
+            height: min(680px, parent.height - 40px);
+            background: Cat.base;
+            border-radius: 12px;
+            clip: true;
+            border-width: 1px;
+            border-color: Cat.blue.with-alpha(0.4);
+            drop-shadow-blur: 36px;
+            drop-shadow-color: Cat.crust.with-alpha(0.8);
+            drop-shadow-offset-y: 12px;
+
+            VerticalLayout {
+                spacing: 0;
+
+                Rectangle {
+                    height: 56px;
+                    background: Cat.blue.with-alpha(0.1);
+                    Rectangle { y: parent.height - 1px; width: 100%; height: 1px; background: Cat.blue.with-alpha(0.25); }
+                    HorizontalLayout {
+                        padding-left: 18px; padding-right: 18px; spacing: 12px;
+                        VerticalLayout { alignment: center;
+                            NavIcon { d: "M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 000-7.8z"; icon-color: Cat.blue; width: 20px; height: 20px; }
+                        }
+                        VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px;
+                            Text { text: @tr("System Health"); font-size: Cat.fs15; font-weight: 700; color: Cat.text; }
+                            Text { text: @tr("Failed services, recent errors and package integrity"); font-size: Cat.fs11; color: Cat.subtext0; }
+                        }
+                        VerticalLayout { alignment: center;
+                            Rectangle {
+                                width: 28px; height: 25px; border-radius: 8px;
+                                background: sh-close-ta.has-hover ? Cat.surface1 : transparent;
+                                NavIcon { d: "M18 6L6 18M6 6l12 12"; icon-color: Cat.overlay1; width: 14px; height: 14px; x: 7px; y: 7px; }
+                                sh-close-ta := TouchArea { mouse-cursor: pointer; clicked => { root.show-health-modal = false; } }
+                            }
+                        }
+                    }
+                }
+
+                if health-loading: VerticalLayout { alignment: center; LoadingCircle { diameter: 26px; } }
+
+                if !health-loading: ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 16px; spacing: 18px; alignment: start;
+
+                        // Failed services
+                        VerticalLayout {
+                            spacing: 8px;
+                            HorizontalLayout { spacing: 8px;
+                                Text { text: @tr("FAILED SERVICES"); font-size: Cat.fs11; font-weight: 800; color: health-failed-count > 0 ? Cat.red : Cat.green; horizontal-stretch: 1; }
+                                Text { text: health-failed-count; font-size: Cat.fs11; font-weight: 700; color: Cat.overlay1; }
+                            }
+                            if health-services.length == 0: Text { text: @tr("No failed units. All services healthy."); font-size: Cat.fs13; color: Cat.overlay1; }
+                            for s in health-services: Rectangle {
+                                border-radius: 8px;
+                                background: Cat.red.with-alpha(0.07);
+                                border-width: 1px; border-color: Cat.red.with-alpha(0.3);
+                                VerticalLayout {
+                                    padding-left: 12px; padding-right: 12px; padding-top: 8px; padding-bottom: 8px; spacing: 2px;
+                                    HorizontalLayout { spacing: 8px;
+                                        Text { text: s.name; font-size: Cat.fs13; font-weight: 700; color: Cat.text; overflow: elide; horizontal-stretch: 1; }
+                                        Rectangle {
+                                            width: sh-scope.preferred-width + 12px; height: 18px; border-radius: 9px;
+                                            background: Cat.overlay0.with-alpha(0.18);
+                                            sh-scope := Text { x: 6px; text: s.scope; font-size: Cat.fs9; font-weight: 700; color: Cat.subtext0; vertical-alignment: center; }
+                                        }
+                                    }
+                                    if s.description != "": Text { text: s.description; font-size: Cat.fs11; color: Cat.subtext0; overflow: elide; }
+                                }
+                            }
+                        }
+
+                        // Recent errors
+                        VerticalLayout {
+                            spacing: 8px;
+                            HorizontalLayout { spacing: 8px;
+                                Text { text: @tr("RECENT ERRORS (THIS BOOT)"); font-size: Cat.fs11; font-weight: 800; color: Cat.peach; horizontal-stretch: 1; }
+                                Text { text: health-error-count; font-size: Cat.fs11; font-weight: 700; color: Cat.overlay1; }
+                            }
+                            if health-errors.length == 0: Text { text: @tr("No priority errors logged this boot."); font-size: Cat.fs13; color: Cat.overlay1; }
+                            for e in health-errors: Rectangle {
+                                border-radius: 8px;
+                                background: Cat.surface0.with-alpha(0.4);
+                                VerticalLayout {
+                                    padding-left: 12px; padding-right: 12px; padding-top: 7px; padding-bottom: 7px; spacing: 2px;
+                                    HorizontalLayout { spacing: 8px;
+                                        Text { text: e.unit; font-size: Cat.fs12; font-weight: 700; color: Cat.peach; overflow: elide; horizontal-stretch: 1; }
+                                        Text { text: e.when; font-size: Cat.fs10; color: Cat.overlay0; }
+                                    }
+                                    Text { text: e.message; font-size: Cat.fs12; color: Cat.subtext0; wrap: word-wrap; }
+                                }
+                            }
+                        }
+
+                        // Package integrity (on-demand)
+                        VerticalLayout {
+                            spacing: 8px;
+                            HorizontalLayout { spacing: 8px; alignment: start;
+                                Text { text: @tr("PACKAGE INTEGRITY"); font-size: Cat.fs11; font-weight: 800; color: Cat.mauve; vertical-alignment: center; horizontal-stretch: 1; }
+                                Rectangle {
+                                    width: sh-int-lbl.preferred-width + 34px; height: 28px; border-radius: 7px;
+                                    background: sh-int-ta.has-hover ? Cat.mauve.with-alpha(0.22) : Cat.mauve.with-alpha(0.12);
+                                    border-width: 1px; border-color: Cat.mauve.with-alpha(0.32);
+                                    HorizontalLayout { alignment: center; spacing: 6px; padding-left: 10px; padding-right: 10px;
+                                        if health-files-loading: VerticalLayout { alignment: center; LoadingCircle { diameter: 11px; } }
+                                        sh-int-lbl := Text {
+                                            text: health-files-loading ? @tr("Checking…") : @tr("Run check");
+                                            font-size: Cat.fs12; font-weight: 600; color: Cat.mauve; vertical-alignment: center;
+                                        }
+                                    }
+                                    sh-int-ta := TouchArea {
+                                        mouse-cursor: health-files-loading ? default : pointer;
+                                        enabled: !health-files-loading;
+                                        clicked => { root.check-package-integrity(); }
+                                    }
+                                }
+                            }
+                            Text { text: @tr("Verifies installed files against the package database (pacman -Qkk). May take a minute."); font-size: Cat.fs10; color: Cat.overlay0; wrap: word-wrap; }
+                            if health-files-checked && health-files.length == 0: Text { text: @tr("No integrity problems found."); font-size: Cat.fs13; color: Cat.green; }
+                            for f in health-files: Rectangle {
+                                border-radius: 8px;
+                                background: Cat.mauve.with-alpha(0.07);
+                                border-width: 1px; border-color: Cat.mauve.with-alpha(0.28);
+                                VerticalLayout {
+                                    padding-left: 12px; padding-right: 12px; padding-top: 7px; padding-bottom: 7px; spacing: 2px;
+                                    Text { text: f.pkg; font-size: Cat.fs12; font-weight: 700; color: Cat.text; overflow: elide; }
+                                    Text { text: f.issue; font-size: Cat.fs11; color: Cat.subtext0; wrap: word-wrap; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

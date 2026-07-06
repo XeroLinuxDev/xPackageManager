@@ -3110,6 +3110,97 @@ fn load_history(weak: slint::Weak<MainWindow>, store: Arc<Mutex<Vec<alpmhist::Tr
     });
 }
 
+/// Failed systemd units (system + user scope). Read-only, no privilege.
+fn failed_services() -> Vec<HealthSvc> {
+    let mut out = Vec::new();
+    let scopes: [(&str, &[&str]); 2] = [
+        ("system", &["--failed", "--no-legend", "--plain"]),
+        ("user", &["--user", "--failed", "--no-legend", "--plain"]),
+    ];
+    for (scope, args) in scopes {
+        let Ok(o) = std::process::Command::new("systemctl").args(args).output() else { continue };
+        if !o.status.success() { continue; }
+        for line in String::from_utf8_lossy(&o.stdout).lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            let Some(name) = parts.first() else { continue };
+            if !name.contains('.') { continue; }
+            let desc = if parts.len() > 4 { parts[4..].join(" ") } else { String::new() };
+            out.push(HealthSvc { name: (*name).into(), description: desc.into(), scope: scope.into() });
+        }
+    }
+    out
+}
+
+/// Priority-error journal lines for the current boot (newest first).
+fn journal_errors() -> Vec<HealthErr> {
+    let Ok(o) = std::process::Command::new("journalctl")
+        .args(["-p", "3", "-b", "--no-pager", "-o", "short-iso", "-n", "80"])
+        .output() else { return Vec::new() };
+    if !o.status.success() { return Vec::new(); }
+    let mut out = Vec::new();
+    for line in String::from_utf8_lossy(&o.stdout).lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("-- ") { continue; }
+        let Some((ts, rest)) = line.split_once(' ') else { continue };
+        let when = ts.split('T').nth(1)
+            .map(|t| t.split(|c| c == '+' || c == '-').next().unwrap_or(t).to_string())
+            .unwrap_or_default();
+        let (unit, message) = match rest.split_once(": ") {
+            Some((head, msg)) => {
+                let u = head.split_whitespace().last().unwrap_or("")
+                    .split('[').next().unwrap_or("").to_string();
+                (u, msg.to_string())
+            }
+            None => (String::new(), rest.to_string()),
+        };
+        let unit = if unit.is_empty() { "system".to_string() } else { unit };
+        out.push(HealthErr { when: when.into(), unit: unit.into(), message: message.into() });
+    }
+    out.reverse();
+    out
+}
+
+/// Verify installed files against the package DB (pacman -Qkk). Slow; on-demand.
+fn check_package_integrity() -> Vec<HealthFile> {
+    let Ok(o) = std::process::Command::new("pacman").args(["-Qkk"]).output() else { return Vec::new() };
+    let mut text = String::from_utf8_lossy(&o.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&o.stderr));
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some(rest) = line.strip_prefix("warning: ") else { continue };
+        let (pkg, issue) = rest.split_once(": ").unwrap_or(("", rest));
+        out.push(HealthFile { pkg: pkg.into(), issue: issue.trim().into() });
+        if out.len() >= 200 { break; }
+    }
+    out
+}
+
+/// Open the System Health modal and load services + journal errors in the background.
+fn load_health(weak: slint::Weak<MainWindow>) {
+    if let Some(w) = weak.upgrade() {
+        w.set_health_loading(true);
+        w.set_health_files(ModelRc::new(VecModel::from(Vec::<HealthFile>::new())));
+        w.set_health_files_checked(false);
+        w.set_show_health_modal(true);
+    }
+    thread::spawn(move || {
+        let services = failed_services();
+        let errors = journal_errors();
+        let failed = services.len() as i32;
+        let errc = errors.len() as i32;
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_health_services(ModelRc::new(VecModel::from(services)));
+                w.set_health_errors(ModelRc::new(VecModel::from(errors)));
+                w.set_health_failed_count(failed);
+                w.set_health_error_count(errc);
+                w.set_health_checked(true);
+                w.set_health_loading(false);
+            }
+        });
+    });
+}
+
 fn main() {
     if std::env::var_os("SLINT_BACKEND").is_none() {
         std::env::set_var("SLINT_BACKEND", "qt");
@@ -4440,18 +4531,30 @@ fn main() {
     });
 
 
-    window.on_launch_xsb(move || {
-        thread::spawn(move || {
-            let installed = std::process::Command::new("pkexec")
-                .args(["pacman", "-Syy", "--noconfirm", "xsb-gui"])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if installed {
-                let _ = std::process::Command::new("xsb-gui").spawn();
-            }
+    {
+        let weak = window.as_weak();
+        window.on_open_system_health(move || {
+            load_health(weak.clone());
         });
-    });
+    }
+
+    {
+        let weak = window.as_weak();
+        window.on_check_package_integrity(move || {
+            if let Some(w) = weak.upgrade() { w.set_health_files_loading(true); }
+            let weak = weak.clone();
+            thread::spawn(move || {
+                let files = check_package_integrity();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak.upgrade() {
+                        w.set_health_files(ModelRc::new(VecModel::from(files)));
+                        w.set_health_files_loading(false);
+                        w.set_health_files_checked(true);
+                    }
+                });
+            });
+        });
+    }
 
     let tx_install = tx.clone();
     let install_input = terminal_input_sender.clone();
@@ -6906,6 +7009,18 @@ fn main() {
         });
     } else {
         info!("AppImage startup preload skipped (feature disabled in config)");
+    }
+    {
+        let weak = window.as_weak();
+        thread::spawn(move || {
+            let failed = failed_services().len() as i32;
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = weak.upgrade() {
+                    w.set_health_failed_count(failed);
+                    w.set_health_checked(true);
+                }
+            });
+        });
     }
     window.set_setting_notify_on_updates(config.notify_on_updates);
     window.set_setting_auto_clean_cache(config.auto_clean_cache);
